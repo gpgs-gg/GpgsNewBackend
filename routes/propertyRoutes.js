@@ -10,7 +10,12 @@ const {
   updateProperty,
   deleteProperty,
   addWorklog,
-} = require("../controllers/Properties/propertyController");
+  getPropertyDropdown
+} = require("../controllers/propertyController");
+
+
+router.get("/dropdown", getPropertyDropdown);
+
 
 router.post("/", upload.fields([
     { name: "owner[photo]", maxCount: 10 },
@@ -29,5 +34,10 @@ router.put(
 );
 router.delete("/:id", deleteProperty);
 router.post("/:id/worklog", addWorklog);
+
+
+
+// ............
+
 
 module.exports = router;

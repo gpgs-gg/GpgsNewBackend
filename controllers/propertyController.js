@@ -1,9 +1,9 @@
-const Property = require("../../models/Property");
-const asyncHandler = require("../../middleware/asyncHandler");
-const ApiError = require("../../utils/ApiError");
+const Property = require("../models/property.model");
+const asyncHandler = require("../middleware/asyncHandler");
+const ApiError = require("../utils/ApiError");
 // CREATE
-const safeParse = require("../../utils/safeParse");
-const uploadFile = require("../../services/uploadFile");
+const safeParse = require("../utils/safeParse");
+const uploadFile = require("../services/uploadFile");
 
 // const createProperty = asyncHandler(async (req, res) => {
 //   const files = req.files;
@@ -66,7 +66,6 @@ const createProperty = asyncHandler(async (req, res) => {
 
   const getFiles = (key) => req.files?.[key] || [];
   getFiles("owner[aadharCard]").forEach((file) => {
-    console.log("AADHAR FILE =>", file.mimetype, file.originalname);
   });
   const aadharUploads = await Promise.all(
     getFiles("owner[aadharCard]").map((file) =>
@@ -251,6 +250,32 @@ const addWorklog = asyncHandler(async (req, res) => {
   });
 });
 
+
+// Property Dropdown List
+const getPropertyDropdown = asyncHandler(async (req, res) => {
+  try {
+    const properties = await Property.find(
+      { status: "Active" }, // optional
+      {
+        _id: 1,
+        propertyCode: 1,
+        bedCount: 1,    
+      }
+    ).sort({ propertyCode: 1 });
+    res.status(200).json({
+      success: true,
+      data: properties,
+    });
+     
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+});
+
+
 module.exports = {
   createProperty,
   getAllProperties,
@@ -258,4 +283,5 @@ module.exports = {
   updateProperty,
   deleteProperty,
   addWorklog,
+  getPropertyDropdown
 };
