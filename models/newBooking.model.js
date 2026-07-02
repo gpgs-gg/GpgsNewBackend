@@ -45,12 +45,18 @@ const bookingSchema = new mongoose.Schema(
         monthlyRent: Number,
 
         depositAmount: Number,
-        bookingAmout : Number,
+        bookingAmout: Number,
         clientCalculatedRent: Number,
 
-        clientDoj: Date,
+        clientDoj: {
+            type: String,
+            default: null,
+        },
 
-        clientLastDate: Date,
+        clientLastDate: {
+            type: String,
+            default: null,
+        },
 
         comments: String,
 
@@ -79,9 +85,16 @@ const bookingSchema = new mongoose.Schema(
 
         temporaryClientCalculatedRent: Number,
 
-        temporaryClientDoj: Date,
+        temporaryClientDoj: {
+            type: String,
+            default: null,
+        },
 
-        temporaryClientLastDate: Date,
+        temporaryClientLastDate: {
+            type: String,
+            default: null,
+        },
+
 
         temporaryComments: String,
 
@@ -116,7 +129,10 @@ const bookingSchema = new mongoose.Schema(
             default: false,
         },
 
-        cancelledDate: Date,
+        cancelledDate: {
+            type: String,
+            default: null,
+        },
         // Status
         status: {
             type: String,

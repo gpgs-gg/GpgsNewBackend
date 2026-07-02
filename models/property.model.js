@@ -25,22 +25,37 @@ const PropertySchema = new mongoose.Schema(
       mainRouterPropertyCode: String,
       gpgsRegisteredNoWithInternetVendor: String,
     },
-
     // ---------------- UTILITY DETAILS ----------------
     utility: {
       ebConsumerNo: String,
       ebBillingUnit: String,
-      ebStartDate: Date,
-      ebEndDate: Date,
+      ebStartDate: {
+        type: String,
+        default: null,
+      },
+      ebEndDate: {
+        type: String,
+        default: null,
+      },
       ebPcWebLink: String,
-
       gasConsumerNo: String,
-      gasBillStartDate: Date,
-      gasBillEndDate: Date,
-
+      gasBillStartDate: {
+        type: String,
+        default: null,
+      },
+      gasBillEndDate: {
+        type: String,
+        default: null,
+      },
       waterBillConsumerNo: String,
-      waterBillStartDate: Date,
-      waterBillEndDate: Date,
+        waterBillStartDate: {
+        type: String,
+        default: null,
+      },
+      waterBillEndDate: {
+        type: String,
+        default: null,
+      },
     },
 
     // ---------------- OWNER DETAILS ----------------
@@ -56,10 +71,23 @@ const PropertySchema = new mongoose.Schema(
 
     // ---------------- AGREEMENT ----------------
     agreement: {
-      propertyStartDate: Date,
-      propertyEndDate: Date,
-      agreementStartDate: Date,
-      agreementEndDate: Date,
+
+        propertyStartDate: {
+        type: String,
+        default: null,
+      },
+        propertyEndDate: {
+        type: String,
+        default: null,
+      },
+        propertyEndDate: {
+        type: String,
+        default: null,
+      },
+        agreementEndDate: {
+        type: String,
+        default: null,
+      },
       agreementStatus: String,
       policeNocNo: String,
       policeNocStatus: String,

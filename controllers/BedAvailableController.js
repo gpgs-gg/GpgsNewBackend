@@ -61,7 +61,7 @@ exports.getAllAvailableBeds = async (req, res) => {
             noticeStartDate: client.noticeStartDate,
             noticeLastDate: client.noticeLastDate,
             clientVacatingDate: client.clientVacatingDate,
-            rentStartDate: client.rentStartDate,
+            clientDoj: client.clientDoj,
             isBookingCancelled: client.isBookingCancelled,
           }
           : null,

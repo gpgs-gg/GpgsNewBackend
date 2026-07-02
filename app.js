@@ -6,6 +6,7 @@ const clientRoutes = require("./routes/clientRoutes");
 const bedAvailableRoutes = require("./routes/bedAvailableRoutes");
 const bedTransferRoutes = require("./routes/bedTransferRoutes");
 const newBookingRoutes = require("./routes/newBookingRoutes");
+const RentHistoryRoutes = require("./routes/clientRentHistoryRoutes");
 const errorHandler = require("./middleware/errorHandler");
 const ApiError = require("./utils/ApiError");
 const cors = require("cors");
@@ -39,6 +40,7 @@ app.use("/api/beds", bedRoutes);
 app.use("/api/clients", clientRoutes);
 app.use("/api", bedTransferRoutes);
 app.use("/api/new-bookings", newBookingRoutes);
+app.use("/api/rent-history",RentHistoryRoutes);
 
 app.use((req, res, next) => {
   next(new ApiError(404, `Route Not Found - ${req.originalUrl}`));

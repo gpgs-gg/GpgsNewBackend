@@ -3,7 +3,11 @@ const Client = require("../models/client.model");
 const Bed = require("../models/bed.model");
 const Property = require("../models/property.model");
 const Booking = require("../models/newBooking.model");
+const { recalculateRentHistory } = require("../services/rentHistory.service");
 
+const {
+  createClientRentHistory,
+} = require("../services/rentHistory.service");
 
 exports.createClientFromBooking = async (
   req,
@@ -115,15 +119,17 @@ exports.createClientFromBooking = async (
 
         propertyId: booking.propertyId,
         bedId: booking.bedId,
-
+         processingFees : booking.processingFees,
+         parkingCharges : booking.parkingCharges,
         monthlyRent:
           booking.monthlyRent,
 
         depositAmount:
           booking.depositAmount,
 
-        rentStartDate:
+        clientDoj:
           booking.clientDoj,
+          
         stayType: "P. Booked",
 
         comments: booking.comments,
@@ -188,7 +194,7 @@ exports.createClientFromBooking = async (
         monthlyRent:
           booking.temporaryMonthlyRent,
 
-        rentStartDate:
+        clientDoj:
           booking.temporaryClientDoj,
 
         clientVacatingDate:
@@ -213,6 +219,9 @@ exports.createClientFromBooking = async (
       await Client.insertMany(
         clientsToCreate
       );
+    for (const client of clients) {
+      await createClientRentHistory(client);
+    }
 
     booking.status = "Booked";
     booking.isCancelled = false;
@@ -247,7 +256,7 @@ exports.createClient = async (req, res) => {
       temporaryPropertyId,
       temporaryBedId,
 
-      rentStartDate,
+      clientDoj,
       temporaryClientDoj,
       temporaryClientLastDate,
     } = req.body;
@@ -290,7 +299,7 @@ exports.createClient = async (req, res) => {
         ...req.body,
         propertyId,
         bedId,
-        rentStartDate: rentStartDate || new Date(),
+        clientDoj: clientDoj || new Date(),
         isBookingStatus: false,
       });
     }
@@ -332,10 +341,10 @@ exports.createClient = async (req, res) => {
         propertyId: temporaryPropertyId,
         bedId: temporaryBedId,
 
-        rentStartDate:
+        clientDoj:
           temporaryClientDoj,
 
-        vacatingDate:
+        clientVacatingDate:
           temporaryClientLastDate,
 
         isBookingStatus: false,
@@ -354,6 +363,12 @@ exports.createClient = async (req, res) => {
       await Client.insertMany(
         clientsToCreate
       );
+
+    // Create current month rent history
+    for (const client of clients) {
+      await createClientRentHistory(client);
+    }
+
 
     res.status(201).json({
       success: true,
@@ -375,24 +390,24 @@ exports.createClient = async (req, res) => {
 
 exports.getClients = async (req, res) => {
   try {
-   const clients = await Client.find()
-  .populate(
-    "propertyId",
-    "propertyCode propertyName"
-  )
-  .populate(
-    "bedId",
-    "bedCode roomNo bedNo monthlyRent depositAmount"
-  )
-  .populate(
-    "bedHistory.propertyId",
-    "propertyCode propertyName"
-  )
-  .populate(
-    "bedHistory.bedId",
-    "bedCode roomNo bedNo"
-  )
-  .sort({ createdAt: -1 });
+    const clients = await Client.find()
+      .populate(
+        "propertyId",
+        "propertyCode propertyName"
+      )
+      .populate(
+        "bedId",
+        "bedCode roomNo bedNo monthlyRent depositAmount"
+      )
+      .populate(
+        "bedHistory.propertyId",
+        "propertyCode propertyName"
+      )
+      .populate(
+        "bedHistory.bedId",
+        "bedCode roomNo bedNo"
+      )
+      .sort({ createdAt: -1 });
 
     res.status(200).json({
       success: true,
@@ -440,6 +455,68 @@ exports.getClientById = async (req, res) => {
 // UPDATE CLIENT
 // ======================================
 
+// exports.updateClient = async (req, res) => {
+//   try {
+//     const client = await Client.findById(req.params.id);
+
+//     if (!client) {
+//       return res.status(404).json({
+//         success: false,
+//         message: "Client not found",
+//       });
+//     }
+
+//     // Temporary -> Permanent
+//     if (
+//       client.stayType === "T. Booked" &&
+//       req.body.stayType === "P. Booked"
+//     ) {
+//       // Same booking ka existing permanent client release karo
+//       await Client.updateMany(
+//         {
+//           bookingId: client.bookingId,
+//           stayType: "P. Booked",
+//           isBookingCancelled: false,
+//           _id: { $ne: client._id },
+//         },
+//         {
+//           $set: {
+//             isBookingCancelled: true,
+//           },
+//         }
+//       );
+
+//       // Notice fields clear karo
+//       req.body.noticeStartDate = null;
+//       req.body.noticeLastDate = null;
+//       req.body.clientVacatedDate = null;
+//     }
+
+//     // Simple Update
+//     Object.keys(req.body).forEach((key) => {
+//       client[key] = req.body[key];
+//     });
+
+//     await client.save();
+
+//     return res.status(200).json({
+//       success: true,
+//       message: "Client updated successfully",
+//       data: client,
+//     });
+//   } catch (error) {
+//     return res.status(500).json({
+//       success: false,
+//       message: error.message,
+//     });
+//   }
+// };
+
+
+
+
+
+
 exports.updateClient = async (req, res) => {
   try {
     const client = await Client.findById(req.params.id);
@@ -451,12 +528,22 @@ exports.updateClient = async (req, res) => {
       });
     }
 
+    // Old Values
+    const oldData = {
+      clientDoj: client.clientDoj,
+      noticeLastDate: client.noticeLastDate,
+      clientVacatingDate: client.clientVacatingDate,
+      bedId: client.bedId?.toString(),
+      monthlyRent: client.monthlyRent,
+      depositAmount: client.depositAmount,
+      stayType: client.stayType,
+    };
+
     // Temporary -> Permanent
     if (
       client.stayType === "T. Booked" &&
       req.body.stayType === "P. Booked"
     ) {
-      // Same booking ka existing permanent client release karo
       await Client.updateMany(
         {
           bookingId: client.bookingId,
@@ -471,18 +558,30 @@ exports.updateClient = async (req, res) => {
         }
       );
 
-      // Notice fields clear karo
       req.body.noticeStartDate = null;
       req.body.noticeLastDate = null;
       req.body.clientVacatedDate = null;
     }
 
-    // Simple Update
+    // Update Client
     Object.keys(req.body).forEach((key) => {
       client[key] = req.body[key];
     });
 
     await client.save();
+
+    // Check if Rent History Recalculation Needed
+    const shouldRecalculate =
+      oldData.clientDoj !== client.clientDoj||
+      oldData.noticeLastDate !== client.noticeLastDate ||
+      oldData.clientVacatingDate !== client.clientVacatingDate ||
+      oldData.bedId !== client.bedId?.toString() ||
+      oldData.monthlyRent !== client.monthlyRent ||
+      oldData.depositAmount !== client.depositAmount;
+      
+    if (shouldRecalculate) {
+      await recalculateRentHistory(client._id);
+    }
 
     return res.status(200).json({
       success: true,
@@ -490,12 +589,16 @@ exports.updateClient = async (req, res) => {
       data: client,
     });
   } catch (error) {
+    console.error("Update Client Error:", error);
+
     return res.status(500).json({
       success: false,
       message: error.message,
     });
   }
 };
+
+
 // ======================================
 // DELETE CLIENT
 // ======================================

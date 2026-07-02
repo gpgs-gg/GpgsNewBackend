@@ -1,15 +1,26 @@
 require("dotenv").config();
-// const clientStatusCron =  require("./cron/clientStatusCron");
 
 const app = require("./app");
 const connectDB = require("./config/db");
 
-// MongoDB Connect
-connectDB();
-
 const PORT = process.env.PORT || 5000;
 
-app.listen(PORT, () => {
-  // clientStatusCron()
-  console.log(`🚀 Server running on port ${PORT}`);
-});
+const startServer = async () => {
+  try {
+    // MongoDB Connect
+    await connectDB();
+
+    // Load Cron Jobs
+    require("./cron/generateMonthlyRent");
+    // require("./cron/clientStatusCron");
+
+    app.listen(PORT, () => {
+      console.log(`🚀 Server running on port ${PORT}`);
+    });
+  } catch (err) {
+    console.error("❌ Failed to start server:", err);
+    process.exit(1);
+  }
+};
+
+startServer();

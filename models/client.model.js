@@ -13,14 +13,15 @@ const BedHistorySchema = new mongoose.Schema(
             type: mongoose.Schema.Types.ObjectId,
             ref: "Bed",
         },
-
         bedNo: String,
-
         stayType: String,
-
-        fromDate: Date,
-        toDate: Date,
-
+        fromDate: {
+            type: String,
+            trim: true
+        }, toDate: {
+            type: String,
+            trim: true
+        },
         remarks: String,
     },
     { _id: false }
@@ -31,7 +32,6 @@ const ClientSchema = new mongoose.Schema(
         // ===================================
         // PROPERTY & BED
         // ===================================
-
         propertyId: {
             type: mongoose.Schema.Types.ObjectId,
             ref: "Property",
@@ -99,7 +99,10 @@ const ClientSchema = new mongoose.Schema(
 
         parkingCharges: {
             type: Number,
-            enum: [0, 250, 500],
+            default: 0,
+        },
+        processingFees: {
+            type: Number,
             default: 0,
         },
         isBookingCancelled: {
@@ -107,13 +110,37 @@ const ClientSchema = new mongoose.Schema(
             default: false
         },
 
-        bookingDate: Date,
+        bookingDate: {
+            type: String,
+            trim: true
+        },
 
-        rentStartDate: Date,
-
-        noticeStartDate: Date,
-        noticeLastDate: Date,
-        clientVacatingDate: Date,
+        clientDoj: {
+            type: String,
+            trim: true
+        },
+        
+        ebDoj: {
+            type: String,
+            trim: true
+        },
+        
+        clientLastDate: {
+            type: String,
+            trim: true
+        },
+        noticeStartDate: {
+            type: String,
+            trim: true
+        },
+        noticeLastDate: {
+            type: String,
+            trim: true
+        },
+        clientVacatingDate: {
+            type: String,
+            trim: true
+        },
 
         // ===================================
         // DOCUMENTS
