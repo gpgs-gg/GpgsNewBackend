@@ -1,4 +1,7 @@
 
+
+
+
 const Client = require("../models/client.model");
 const Bed = require("../models/bed.model");
 const Property = require("../models/property.model");
@@ -8,6 +11,7 @@ const { recalculateRentHistory } = require("../services/rentHistory.service");
 const {
   createClientRentHistory,
 } = require("../services/rentHistory.service");
+const uploadFile = require("../services/uploadFile");
 
 exports.createClientFromBooking = async (
   req,
@@ -119,8 +123,8 @@ exports.createClientFromBooking = async (
 
         propertyId: booking.propertyId,
         bedId: booking.bedId,
-         processingFees : booking.processingFees,
-         parkingCharges : booking.parkingCharges,
+        processingFees: booking.processingFees,
+        parkingCharges: booking.parkingCharges,
         monthlyRent:
           booking.monthlyRent,
 
@@ -129,7 +133,7 @@ exports.createClientFromBooking = async (
 
         clientDoj:
           booking.clientDoj,
-          
+
         stayType: "P. Booked",
 
         comments: booking.comments,
@@ -249,13 +253,10 @@ exports.createClient = async (req, res) => {
     const {
       fullName,
       callingNo,
-
       propertyId,
       bedId,
-
       temporaryPropertyId,
       temporaryBedId,
-
       clientDoj,
       temporaryClientDoj,
       temporaryClientLastDate,
@@ -514,12 +515,10 @@ exports.getClientById = async (req, res) => {
 
 
 
-
-
-
 exports.updateClient = async (req, res) => {
   try {
-    const client = await Client.findById(req.params.id);
+    const client = await Client.findById(req.params.id).populate("propertyId", "propertyCode")
+      .populate("bedId", "roomNo bedNo");;
 
     if (!client) {
       return res.status(404).json({
@@ -563,22 +562,166 @@ exports.updateClient = async (req, res) => {
       req.body.clientVacatedDate = null;
     }
 
-    // Update Client
+    // ================= FILE UPLOAD =================
+
+    const getFiles = (key) => req.files?.[key] || [];
+    const existingPhoto = req.body.photoExisting
+      ? (Array.isArray(req.body.photoExisting)
+        ? req.body.photoExisting
+        : [req.body.photoExisting])
+      : [];
+
+    const existingAadhaarCard = req.body.aadhaarCardExisting
+      ? (Array.isArray(req.body.aadhaarCardExisting)
+        ? req.body.aadhaarCardExisting
+        : [req.body.aadhaarCardExisting])
+      :[];
+
+    const existingPan = req.body.panExisting
+      ? (Array.isArray(req.body.panExisting)
+        ? req.body.panExisting
+        : [req.body.panExisting])
+      :  [];
+
+    const existingCollegeIdentification = req.body.collegeIdentificationExisting
+      ? (Array.isArray(req.body.collegeIdentificationExisting)
+        ? req.body.collegeIdentificationExisting
+        : [req.body.collegeIdentificationExisting])
+      :  [];
+
+    const existingCompanyIdentification = req.body.companyIdentificationExisting
+      ? (Array.isArray(req.body.companyIdentificationExisting)
+        ? req.body.companyIdentificationExisting
+        : [req.body.companyIdentificationExisting])
+      :  [];
+
+    const existingClientRentalAgreement = req.body.clientRentalAgreementExisting
+      ? (Array.isArray(req.body.clientRentalAgreementExisting)
+        ? req.body.clientRentalAgreementExisting
+        : [req.body.clientRentalAgreementExisting])
+      : [];
+
+    const existingClientPoliceNOC = req.body.clientPoliceNOCExisting
+      ? (Array.isArray(req.body.clientPoliceNOCExisting)
+        ? req.body.clientPoliceNOCExisting
+        : [req.body.clientPoliceNOCExisting])
+      :[];
+
+    // PHOTO
+    if (getFiles("photo").length > 0) {
+      const uploads = await Promise.all(
+        getFiles("photo").map((file) =>
+          uploadFile(file, `Clients Docs/${client?.propertyId?.propertyCode}/${client?.fullName}`)
+        )
+      );
+      client.photo = [...existingPhoto, ...uploads];
+    } else {
+      client.photo = existingPhoto;
+    }
+
+    // AADHAAR
+    if (getFiles("aadhaarCard").length > 0) {
+      const uploads = await Promise.all(
+        getFiles("aadhaarCard").map((file) =>
+         uploadFile(file, `Clients Docs/${client?.propertyId?.propertyCode}/${client?.fullName}`)
+        )
+      );
+      client.aadhaarCard = [...existingAadhaarCard, ...uploads];
+    } else {
+      client.aadhaarCard = existingAadhaarCard;
+    }
+
+    // PAN
+    if (getFiles("pan").length > 0) {
+      const uploads = await Promise.all(
+        getFiles("pan").map((file) =>
+         uploadFile(file, `Clients Docs/${client?.propertyId?.propertyCode}/${client?.fullName}`)
+        )
+      );
+      client.pan = [...existingPan, ...uploads];
+    } else {
+      client.pan = existingPan;
+    }
+
+    // COLLEGE ID
+    if (getFiles("collegeIdentification").length > 0) {
+      const uploads = await Promise.all(
+        getFiles("collegeIdentification").map((file) =>
+       uploadFile(file, `Clients Docs/${client?.propertyId?.propertyCode}/${client?.fullName}`)
+        )
+      );
+      client.collegeIdentification = [
+        ...existingCollegeIdentification,
+        ...uploads,
+      ];
+    } else {
+      client.collegeIdentification = existingCollegeIdentification;
+    }
+
+    // COMPANY ID
+    if (getFiles("companyIdentification").length > 0) {
+      const uploads = await Promise.all(
+        getFiles("companyIdentification").map((file) =>
+         uploadFile(file, `Clients Docs/${client?.propertyId?.propertyCode}/${client?.fullName}`)
+        )
+      );
+      client.companyIdentification = [
+        ...existingCompanyIdentification,
+        ...uploads,
+      ];
+    } else {
+      client.companyIdentification = existingCompanyIdentification;
+    }
+
+    // RENTAL AGREEMENT
+    if (getFiles("clientRentalAgreement").length > 0) {
+      const uploads = await Promise.all(
+        getFiles("clientRentalAgreement").map((file) =>
+         uploadFile(file, `Clients Docs/${client?.propertyId?.propertyCode}/${client?.fullName}`)
+        )
+      );
+      client.clientRentalAgreement = [
+        ...existingClientRentalAgreement,
+        ...uploads,
+      ];
+    } else {
+      client.clientRentalAgreement = existingClientRentalAgreement;
+    }
+
+    // POLICE NOC
+    if (getFiles("clientPoliceNOC").length > 0) {
+      const uploads = await Promise.all(
+        getFiles("clientPoliceNOC").map((file) =>
+         uploadFile(file, `Clients Docs/${client?.propertyId?.propertyCode}/${client?.fullName}`)
+        )
+      );
+      client.clientPoliceNOC = [
+        ...existingClientPoliceNOC,
+        ...uploads,
+      ];
+    } else {
+      client.clientPoliceNOC = existingClientPoliceNOC;
+    }
+
+    // ===============================================
+
+    // Update Other Fields
     Object.keys(req.body).forEach((key) => {
-      client[key] = req.body[key];
+      if (!key.endsWith("Existing")) {
+        client[key] = req.body[key];
+      }
     });
 
     await client.save();
 
-    // Check if Rent History Recalculation Needed
     const shouldRecalculate =
-      oldData.clientDoj !== client.clientDoj||
+      oldData.clientDoj !== client.clientDoj ||
       oldData.noticeLastDate !== client.noticeLastDate ||
       oldData.clientVacatingDate !== client.clientVacatingDate ||
       oldData.bedId !== client.bedId?.toString() ||
       oldData.monthlyRent !== client.monthlyRent ||
       oldData.depositAmount !== client.depositAmount;
-      
+
     if (shouldRecalculate) {
       await recalculateRentHistory(client._id);
     }
@@ -597,6 +740,88 @@ exports.updateClient = async (req, res) => {
     });
   }
 };
+
+// exports.updateClient = async (req, res) => {
+
+//   try {
+//     const client = await Client.findById(req.params.id);
+
+//     if (!client) {
+//       return res.status(404).json({
+//         success: false,
+//         message: "Client not found",
+//       });
+//     }
+
+//     // Old Values
+//     const oldData = {
+//       clientDoj: client.clientDoj,
+//       noticeLastDate: client.noticeLastDate,
+//       clientVacatingDate: client.clientVacatingDate,
+//       bedId: client.bedId?.toString(),
+//       monthlyRent: client.monthlyRent,
+//       depositAmount: client.depositAmount,
+//       stayType: client.stayType,
+//     };
+
+//     // Temporary -> Permanent
+//     if (
+//       client.stayType === "T. Booked" &&
+//       req.body.stayType === "P. Booked"
+//     ) {
+//       await Client.updateMany(
+//         {
+//           bookingId: client.bookingId,
+//           stayType: "P. Booked",
+//           isBookingCancelled: false,
+//           _id: { $ne: client._id },
+//         },
+//         {
+//           $set: {
+//             isBookingCancelled: true,
+//           },
+//         }
+//       );
+
+//       req.body.noticeStartDate = null;
+//       req.body.noticeLastDate = null;
+//       req.body.clientVacatedDate = null;
+//     }
+
+//     // Update Client
+//     Object.keys(req.body).forEach((key) => {
+//       client[key] = req.body[key];
+//     });
+
+//     await client.save();
+
+//     // Check if Rent History Recalculation Needed
+//     const shouldRecalculate =
+//       oldData.clientDoj !== client.clientDoj||
+//       oldData.noticeLastDate !== client.noticeLastDate ||
+//       oldData.clientVacatingDate !== client.clientVacatingDate ||
+//       oldData.bedId !== client.bedId?.toString() ||
+//       oldData.monthlyRent !== client.monthlyRent ||
+//       oldData.depositAmount !== client.depositAmount;
+
+//     if (shouldRecalculate) {
+//       await recalculateRentHistory(client._id);
+//     }
+
+//     return res.status(200).json({
+//       success: true,
+//       message: "Client updated successfully",
+//       data: client,
+//     });
+//   } catch (error) {
+//     console.error("Update Client Error:", error);
+
+//     return res.status(500).json({
+//       success: false,
+//       message: error.message,
+//     });
+//   }
+// };
 
 
 // ======================================

@@ -5,8 +5,6 @@ const calculateRentHistory = require("../utils/calculateRentHistory");
 const getDaysCount = require("../utils/getDaysCount");
 
 
-
-
 // exports.getClientCompleteRentHistory = async (req, res) => {
 //   try {
 //     const { clientId } = req.params;
@@ -28,7 +26,7 @@ const getDaysCount = require("../utils/getDaysCount");
 //         message: "No rent history found.",
 //       });
 //     }
-  
+
 //     return res.status(200).json({
 //       success: true,
 //       totalRecords: history.length,
@@ -44,35 +42,24 @@ const getDaysCount = require("../utils/getDaysCount");
 //   }
 // };
 
-
 exports.getClientRentHistory = async (req, res) => {
   try {
-    console.time("RentHistory");
-
     const { clientId, month, year } = req.query;
-
     const filter = {};
     if (clientId) filter.clientId = clientId;
     if (month) filter.month = Number(month);
     if (year) filter.year = Number(year);
 
-    console.time("Mongo Query");
-
     const rentHistory = await ClientRentHistory.find(filter)
       .populate("clientId", "fullName callingNo clientDoj")
       .populate("propertyId", "propertyCode")
-      .populate("bedId", "bedNo roomNo")  
+      .populate("bedId", "bedNo roomNo")
       .sort({
         year: -1,
         month: -1,
         createdAt: -1,
       })
       .lean();
-
-    console.timeEnd("Mongo Query");
-
-    console.timeEnd("RentHistory");
-
     return res.status(200).json({
       success: true,
       count: rentHistory.length,
@@ -89,8 +76,8 @@ exports.getClientRentHistoryById = async (req, res) => {
     const { id } = req.params;
 
     const history = await ClientRentHistory.findById(id)
-      .populate("clientId", "clientName mobileNo")
-      .populate("propertyId", "propertyName")
+      .populate("clientId", "fullName callingNo clientDoj")
+      .populate("propertyId", "propertyCode")
       .populate("bedId", "bedNo roomNo");
 
     if (!history) {
@@ -241,6 +228,10 @@ exports.createClientRentHistory = async (client) => {
   }
 };
 
+
+
+
+
 exports.updateClientRentHistory = async (req, res) => {
   try {
     const { id } = req.params;
@@ -250,18 +241,17 @@ exports.updateClientRentHistory = async (req, res) => {
       flatEB = 0,
       adjEB = 0,
       adjAmt = 0,
-
-      processingFeesReceived = 0,
-      depositAmountReceived = 0,
-
+      processingFees = 0,
+      parkingCharges = 0,
+      depositAmount = 0,
       totalReceived = 0,
-
+      monthlyRent = 0,
       paymentComments = "",
       remarks = "",
     } = req.body;
 
     const history = await ClientRentHistory.findById(id);
-       console.log(history)
+    console.log(history)
     if (!history) {
       return res.status(404).json({
         success: false,
@@ -289,17 +279,19 @@ exports.updateClientRentHistory = async (req, res) => {
       history.year
     );
 
-     console.log(1212121, daysCount, client.clientDoj,
-      client.noticeLastDate,
-      history.month,
-      history.year)
 
-
+    const receivedAmount = Number(totalReceived || 0);
+    const cumulativeReceived =
+      (history.totalReceived || 0) + receivedAmount;
     // Recalculate Complete Rent
-    const calculation = calculateRentHistory({
-      monthlyRent: history.monthlyRent,
 
-      depositAmount: history.depositAmount,
+    const calculation = calculateRentHistory({
+      // monthlyRent: history.monthlyRent,
+      // depositAmount: history.depositAmount,
+
+      monthlyRent: Number(monthlyRent),
+
+      depositAmount: Number(depositAmount),
 
       daysCount,
 
@@ -315,14 +307,23 @@ exports.updateClientRentHistory = async (req, res) => {
 
       processingFees: history.processingFees,
 
-      processingFeesReceived: Number(processingFeesReceived),
+      processingFees: Number(processingFees),
+      parkingCharges: Number(parkingCharges),
+      depositAmount: Number(depositAmount),
 
-      depositAmountReceived: Number(depositAmountReceived),
-
-      rentReceived: Number(totalReceived),
+      rentReceived: cumulativeReceived,
     });
 
+
+
     Object.assign(history, calculation);
+
+    if (!isNaN(receivedAmount) && receivedAmount !== 0) {
+      history.totalReceivedHistory.push({
+        amount: receivedAmount,
+        date: new Date(),
+      });
+    }
 
     history.daysCount = daysCount;
 

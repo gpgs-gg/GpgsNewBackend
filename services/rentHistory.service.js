@@ -158,10 +158,8 @@ const createClientRentHistory = async (client) => {
 
 const generateMonthlyRent = async () => {
   const today = new Date();
-  const month = 7;
-  const year = 2026;
-  // const month = new Date().getMonth() + 1;
-  // const year = new Date().getFullYear();
+  const month = new Date().getMonth() + 1;
+  const year = new Date().getFullYear();
 
   const clients = await Client.find({
     isBookingCancelled: false,

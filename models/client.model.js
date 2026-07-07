@@ -119,12 +119,12 @@ const ClientSchema = new mongoose.Schema(
             type: String,
             trim: true
         },
-        
+
         ebDoj: {
             type: String,
             trim: true
         },
-        
+
         clientLastDate: {
             type: String,
             trim: true
@@ -137,10 +137,39 @@ const ClientSchema = new mongoose.Schema(
             type: String,
             trim: true
         },
+
         clientVacatingDate: {
             type: String,
             trim: true
         },
+
+
+        vacationStartDate1: {
+            type: String,
+            trim: true
+        },
+        vacationLastDate1: {
+            type: String,
+            trim: true
+        },
+
+        vacationStartDate2: {
+            type: String,
+            trim: true
+        },
+        vacationLastDate2: {
+            type: String,
+            trim: true
+        },
+        agreementStartDate: {
+            type: String,
+            trim: true
+        },
+        agreementLastDate: {
+            type: String,
+            trim: true
+        },
+
 
         // ===================================
         // DOCUMENTS

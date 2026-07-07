@@ -26,6 +26,8 @@ const transferBed = async (req, res) => {
       clientId,
       newPropertyId,
       newBedId,
+      endDate,
+      startDate
     } = req.body;
 
     if (!clientId || !newPropertyId || !newBedId) {
@@ -85,7 +87,7 @@ const transferBed = async (req, res) => {
       });
     }
 
-    const now = new Date();
+    const now = new Date(endDate);
 
     // First Time History
     if (!client.bedHistory) {
@@ -122,7 +124,7 @@ const transferBed = async (req, res) => {
       depositAmount: newBed.depositAmount,
       processingFees: client.processingFees,
       parkingCharges: client.parkingCharges,
-      fromDate: now,
+      fromDate: new Date(startDate),
       toDate: null,
     });
 
@@ -153,30 +155,35 @@ const transferBed = async (req, res) => {
         : currentDate;
 
     const month = doj.getMonth() + 1;
-    const year = doj.getFullYear(); 
+    const year = doj.getFullYear();
 
-    const lastHistory = await ClientRentHistory.findOne({
-      clientId: client._id,
-    }).sort({
-      year: -1,
-      month: -1,
-      createdAt: -1,
-    });
+    // const lastHistory = await ClientRentHistory.findOne({
+    //   clientId: client._id,
+    // }).sort({
+    //   year: -1,
+    //   month: -1,
+    //   createdAt: -1,
+    // });
+
+    // let previousDue = 0;
+    // let extraReceived = 0;
+
+    // if (lastHistory) {
+    //   if (lastHistory.currentDue < 0) {
+    //     extraReceived = Math.abs(lastHistory.currentDue); // 500
+    //     previousDue = 0;
+    //   } else {
+    //     previousDue = lastHistory.currentDue;
+    //   }
+    // }
+
+    // extraReceived +=
+    //   Number(lastHistory.previousDue || 0) + Number(lastHistory.depositAmount || 0)
+
 
     let previousDue = 0;
     let extraReceived = 0;
 
-    if (lastHistory) {
-      if (lastHistory.currentDue < 0) {
-        extraReceived = Math.abs(lastHistory.currentDue); // 500
-        previousDue = 0;
-      } else {
-        previousDue = lastHistory.currentDue;
-      }
-    }
-
-    extraReceived +=
-      Number(lastHistory.previousDue || 0) + Number(lastHistory.depositAmount || 0)
 
     // New Bed Charges
     const monthlyRent = Number(newBed.monthlyRent || 0);
@@ -189,17 +196,136 @@ const transferBed = async (req, res) => {
       year,
     }).sort({ createdAt: -1 });
 
+
+const firstHistory = await ClientRentHistory.findOne({
+  clientId: client._id,
+  bedId: oldBedId,
+})
+  .sort({
+    year: 1,
+    month: 1,
+    createdAt: 1,
+  });
+
+const carryDeposit = Number(firstHistory?.depositAmount || 0);
+
+
+
     let daysCount;
-
     if (oldHistory) {
-      daysCount = 30 - oldHistory.daysCount;
+      // 1 month = 30 days business rule
+      const currentBedHistory = client.bedHistory
+        .filter(
+          (h) =>
+            String(h.bedId) === String(oldBedId) &&
+            new Date(h.fromDate).getMonth() + 1 === month &&
+            new Date(h.fromDate).getFullYear() === year
+        )
+        .sort((a, b) => new Date(b.fromDate) - new Date(a.fromDate))[0];
 
+      const calculationStartDate = currentBedHistory
+        ? new Date(currentBedHistory.fromDate)
+        : new Date(year, month - 1, 1);
+
+      const shiftedDays = getDaysCount(
+        calculationStartDate,
+        new Date(endDate),
+        month,
+        year
+      );
+
+      // Old history recalculate
+      const oldCalculation = calculateRentHistory({
+        monthlyRent: oldHistory.monthlyRent,
+        depositAmount: oldHistory.depositAmount,
+
+        daysCount: shiftedDays,
+
+        previousDue: oldHistory.previousDue,
+
+        rentReceived: oldHistory.totalReceived,
+
+        ebAmt: oldHistory.ebAmt,
+        flatEB: oldHistory.flatEB,
+        adjEB: oldHistory.adjEB,
+        adjAmt: oldHistory.adjAmt,
+
+        processingFees: oldHistory.processingFees,
+        parkingCharges: oldHistory.parkingCharges,
+
+        processingFeesReceived: oldHistory.processingFeesReceived,
+        depositAmountReceived: oldHistory.depositAmountReceived,
+      });
+
+      Object.assign(oldHistory, oldCalculation);
+
+      oldHistory.daysCount = shiftedDays;
       oldHistory.paymentStatus = "Shifted";
-      await oldHistory.save();
-    } else {
-      daysCount = getDaysCount(now, null, month, year);
-    }
 
+      await oldHistory.save();
+
+
+      if (oldHistory.currentDue < 0) {
+        previousDue = 0;
+
+        extraReceived =
+          Math.abs(oldHistory.currentDue) +
+          carryDeposit;
+      } else {
+        previousDue = oldHistory.currentDue;
+
+        extraReceived = carryDeposit;
+      }
+
+
+      const monthHistories = await ClientRentHistory.find({
+        clientId: client._id,
+        month,
+        year,
+        paymentStatus: "Shifted",
+      });
+
+      const consumedDays = monthHistories.reduce(
+        (sum, item) => sum + Number(item.daysCount || 0),
+        0
+      );
+
+      daysCount = 30 - consumedDays;
+    } else {
+
+      const lastHistory = await ClientRentHistory.findOne({
+        clientId: client._id,
+      }).sort({
+        year: -1,
+        month: -1,
+        createdAt: -1,
+      });
+
+      if (lastHistory) {
+
+        if (lastHistory.currentDue < 0) {
+          previousDue = 0;
+
+          extraReceived =
+            Math.abs(lastHistory.currentDue) +
+            Number(lastHistory.depositAmount || 0);
+
+        } else {
+
+          previousDue = lastHistory.currentDue;
+
+          extraReceived =
+            Number(lastHistory.depositAmount || 0);
+        }
+      }
+
+      daysCount = getDaysCount(
+        new Date(startDate),
+        null,
+        month,
+        year
+      );
+    }
 
     const calculation = calculateRentHistory({
       monthlyRent,

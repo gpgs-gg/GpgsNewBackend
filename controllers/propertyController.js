@@ -46,7 +46,7 @@ const isPdfFile = (file) => {
     file.mimetype === "application/pdf" ||
     file.originalname?.toLowerCase().endsWith(".pdf")
   );
-};
+};    
 
 const createProperty = asyncHandler(async (req, res) => {
    const propertyCode = req.body.propertyCode;
@@ -67,6 +67,7 @@ const createProperty = asyncHandler(async (req, res) => {
   const getFiles = (key) => req.files?.[key] || [];
   getFiles("owner[aadharCard]").forEach((file) => {
   });
+
   const aadharUploads = await Promise.all(
     getFiles("owner[aadharCard]").map((file) =>
       uploadFile(file, `properties/${propertyCode}`)
@@ -152,6 +153,7 @@ const updateProperty = asyncHandler(async (req, res) => {
       ? req.body.owner.photoExisting
       : [req.body.owner.photoExisting])
     : [];
+    
   // 📸 PHOTO UPDATE
   if (getFiles("owner[photo]").length > 0) {
     const photoUploads = await Promise.all(
@@ -181,7 +183,6 @@ const updateProperty = asyncHandler(async (req, res) => {
     // ✅ ADD
     owner.aadharCard = existingAadhar;
   }
-
   // UPDATE FINAL DATA
   const updatedProperty = await Property.findByIdAndUpdate(
     req.params.id,
@@ -197,7 +198,7 @@ const updateProperty = asyncHandler(async (req, res) => {
       runValidators: true,
     }
   );
-
+console.timeEnd("Total Update");
   res.status(200).json({
     success: true,
     message: "Property updated successfully",

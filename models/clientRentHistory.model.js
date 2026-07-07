@@ -92,29 +92,29 @@ const clientRentHistorySchema = new mongoose.Schema(
       type: Number,
       default: 0,
     },
- 
-    processingFeesReceived : {
+
+    processingFeesReceived: {
       type: Number,
       default: 0,
     },
- 
+
     processingFeesDue: {
       type: Number,
       default: 0,
     },
-   depositAmount : {
-    type : Number , default : 0
-   } , 
-   depositAmountReceived : {
-    type : Number , default : 0
-   } , 
-   depositAmountDue : {
-    type : Number , default : 0
-   } , 
+    depositAmount: {
+      type: Number, default: 0
+    },
+    depositAmountReceived: {
+      type: Number, default: 0
+    },
+    depositAmountDue: {
+      type: Number, default: 0
+    },
 
-   daysCount : {
-    type : Number , default : 0
-   } , 
+    daysCount: {
+      type: Number, default: 0
+    },
 
 
     previousDue: {
@@ -132,6 +132,19 @@ const clientRentHistorySchema = new mongoose.Schema(
       default: 0,
     },
 
+    totalReceivedHistory: [
+      {
+        amount: {
+          type: Number,
+          required: true,
+        },
+        date: {
+          type: Date,
+          default: Date.now,
+        }
+      },
+    ],
+
     currentDue: {
       type: Number,
       default: 0,
@@ -139,7 +152,7 @@ const clientRentHistorySchema = new mongoose.Schema(
 
     paymentStatus: {
       type: String,
-      enum: ["Pending", "Partial", "Paid" , "Shifted"],
+      enum: ["Pending", "Partial", "Paid", "Shifted"],
       default: "Pending",
     },
 
