@@ -1,17 +1,78 @@
 
-
-
-
 const Client = require("../models/client.model");
 const Bed = require("../models/bed.model");
+const User = require("../models/user.model");
 const Property = require("../models/property.model");
 const Booking = require("../models/newBooking.model");
 const { recalculateRentHistory } = require("../services/rentHistory.service");
-
+const { enableClientLogin } = require("../services/clientLogin.service");
 const {
   createClientRentHistory,
 } = require("../services/rentHistory.service");
 const uploadFile = require("../services/uploadFile");
+
+
+
+exports.createDummyClients = async (req, res) => {
+  try {
+    const clients = [];
+
+    for (let i = 1; i <= 2000; i++) {
+      clients.push({
+        propertyId: "6a40c37f1b3149860bf45ae6",
+        bedId: "6a40c54d1b3149860bf45ae7",
+        bookingId: "6a4f785416d15e9afa6e829e",
+
+        stayType: "P. Booked",
+        status: "Booked",
+        isBookingCancelled: false,
+
+        fullName: `Dummy Client ${i}`,
+        whatsappNo: `9000${String(i).padStart(6, "0")}`,
+        callingNo: `9000${String(i).padStart(6, "0")}`,
+        emailId: `dummy${i}@gmail.com`,
+
+        monthlyRent: 8000,
+        depositAmount: 16000,
+        parkingCharges: 100,
+        processingFees: 500,
+
+        clientDoj: new Date("2026-06-15"),
+
+        totalAmount: 24600,
+        bookingAmount: 2000,
+        balanceAmount: 22600,
+
+        photo: [],
+        aadhaarCard: [],
+        pan: [],
+        collegeIdentification: [],
+        companyIdentification: [],
+        clientRentalAgreement: [],
+        clientPoliceNOC: [],
+        attachments: [],
+        bedHistory: [],
+        worklogs: [],
+      });
+    }
+
+    const result = await Client.insertMany(clients);
+
+    return res.status(200).json({
+      success: true,
+      message: `${result.length} Dummy Clients Created`,
+    });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({
+      success: false,
+      message: err.message,
+    });
+  }
+};
+
+
+
 
 exports.createClientFromBooking = async (
   req,
@@ -44,12 +105,20 @@ exports.createClientFromBooking = async (
         { bookingId },
         {
           $set: {
+            loginEnabled: true,
             isBookingCancelled: false,
           },
         }
       );
-
-      booking.status = "Booked";
+      await User.findOneAndUpdate(
+        { bookingId },
+        {
+          $set: {
+            isActive: true,
+          },
+        }
+      );
+      booking.loginEnabled = true;
       booking.isCancelled = false;
       booking.cancelledDate = null;
 
@@ -67,7 +136,7 @@ exports.createClientFromBooking = async (
     // =========================
 
     if (
-      booking.status === "Booked" &&
+      booking.loginEnabled &&
       !booking.isCancelled
     ) {
       return res.status(400).json({
@@ -114,32 +183,25 @@ exports.createClientFromBooking = async (
       }
 
       clientsToCreate.push({
+        stayType: "P. Booked",
         bookingId: booking._id,
-
         fullName: booking.fullName,
         emailId: booking.emailId,
         callingNo: booking.callingNo,
         whatsappNo: booking.whatsappNo,
-
         propertyId: booking.propertyId,
         bedId: booking.bedId,
         processingFees: booking.processingFees,
         parkingCharges: booking.parkingCharges,
-        monthlyRent:
-          booking.monthlyRent,
-
-        depositAmount:
-          booking.depositAmount,
-
-        clientDoj:
-          booking.clientDoj,
-
-        stayType: "P. Booked",
-
+        monthlyRent: booking.monthlyRent,
+        depositAmount: booking.depositAmount,
+        totalAmount: booking.totalAmount,
+        bookingAmount: booking.bookingAmount,
+        balanceAmount: booking.balanceAmount,
+        temporaryTotalAmount: booking.temporaryTotalAmount,
+        clientDoj: booking.clientDoj,
         comments: booking.comments,
-
-        status: "Booked",
-
+        loginEnabled: true,
         isBookingCancelled: false,
       });
     }
@@ -182,35 +244,24 @@ exports.createClientFromBooking = async (
       }
 
       clientsToCreate.push({
+        stayType: "T. Booked",
         bookingId: booking._id,
-
         fullName: booking.fullName,
         emailId: booking.emailId,
         callingNo: booking.callingNo,
         whatsappNo: booking.whatsappNo,
-
-        propertyId:
-          booking.temporaryPropertyId,
-
-        bedId:
-          booking.temporaryBedId,
-
-        monthlyRent:
-          booking.temporaryMonthlyRent,
-
-        clientDoj:
-          booking.temporaryClientDoj,
-
-        clientVacatingDate:
-          booking.temporaryClientLastDate,
-        stayType: "T. Booked",
+        propertyId: booking.temporaryPropertyId,
+        bedId: booking.temporaryBedId,
+        monthlyRent: booking.temporaryMonthlyRent,
+        temporaryParkingCharges: booking.temporaryParkingCharges,
+        temporaryTotalAmount: booking.temporaryTotalAmount,
+        clientDoj: booking.temporaryClientDoj,
+        clientVacatingDate: booking.temporaryClientLastDate,
         noticeStartDate: booking.temporaryClientDoj,
         noticeLastDate: booking.temporaryClientLastDate,
         comments:
           booking.temporaryComments,
-
-        status: "Booked",
-
+        loginEnabled: true,
         isBookingCancelled: false,
       });
     }
@@ -227,11 +278,14 @@ exports.createClientFromBooking = async (
       await createClientRentHistory(client);
     }
 
-    booking.status = "Booked";
-    booking.isCancelled = false;
-    booking.cancelledDate = null;
+    // booking.status = "Booked";
+    // booking.isCancelled = false;
+    // booking.cancelledDate = null;
 
     await booking.save();
+
+    // 👇 Direct service call
+    await enableClientLogin(booking._id);
 
     return res.status(201).json({
       success: true,
@@ -539,10 +593,12 @@ exports.updateClient = async (req, res) => {
     };
 
     // Temporary -> Permanent
+    // Temporary -> Permanent
     if (
       client.stayType === "T. Booked" &&
       req.body.stayType === "P. Booked"
     ) {
+      // Cancel future permanent booking
       await Client.updateMany(
         {
           bookingId: client.bookingId,
@@ -559,9 +615,29 @@ exports.updateClient = async (req, res) => {
 
       req.body.noticeStartDate = null;
       req.body.noticeLastDate = null;
-      req.body.clientVacatedDate = null;
+      req.body.clientVacatingDate = null;
     }
 
+    // Permanent -> Temporary
+    if (
+      client.stayType === "P. Booked" &&
+      req.body.stayType === "T. Booked"
+    ) {
+      // Re-activate the cancelled permanent booking
+      await Client.updateMany(
+        {
+          bookingId: client.bookingId,
+          stayType: "P. Booked", // <-- yahi change hai
+          isBookingCancelled: true,
+          _id: { $ne: client._id },
+        },
+        {
+          $set: {
+            isBookingCancelled: false,
+          },
+        }
+      );
+    }
     // ================= FILE UPLOAD =================
 
     const getFiles = (key) => req.files?.[key] || [];
@@ -575,25 +651,25 @@ exports.updateClient = async (req, res) => {
       ? (Array.isArray(req.body.aadhaarCardExisting)
         ? req.body.aadhaarCardExisting
         : [req.body.aadhaarCardExisting])
-      :[];
+      : [];
 
     const existingPan = req.body.panExisting
       ? (Array.isArray(req.body.panExisting)
         ? req.body.panExisting
         : [req.body.panExisting])
-      :  [];
+      : [];
 
     const existingCollegeIdentification = req.body.collegeIdentificationExisting
       ? (Array.isArray(req.body.collegeIdentificationExisting)
         ? req.body.collegeIdentificationExisting
         : [req.body.collegeIdentificationExisting])
-      :  [];
+      : [];
 
     const existingCompanyIdentification = req.body.companyIdentificationExisting
       ? (Array.isArray(req.body.companyIdentificationExisting)
         ? req.body.companyIdentificationExisting
         : [req.body.companyIdentificationExisting])
-      :  [];
+      : [];
 
     const existingClientRentalAgreement = req.body.clientRentalAgreementExisting
       ? (Array.isArray(req.body.clientRentalAgreementExisting)
@@ -605,7 +681,7 @@ exports.updateClient = async (req, res) => {
       ? (Array.isArray(req.body.clientPoliceNOCExisting)
         ? req.body.clientPoliceNOCExisting
         : [req.body.clientPoliceNOCExisting])
-      :[];
+      : [];
 
     // PHOTO
     if (getFiles("photo").length > 0) {
@@ -623,7 +699,7 @@ exports.updateClient = async (req, res) => {
     if (getFiles("aadhaarCard").length > 0) {
       const uploads = await Promise.all(
         getFiles("aadhaarCard").map((file) =>
-         uploadFile(file, `Clients Docs/${client?.propertyId?.propertyCode}/${client?.fullName}`)
+          uploadFile(file, `Clients Docs/${client?.propertyId?.propertyCode}/${client?.fullName}`)
         )
       );
       client.aadhaarCard = [...existingAadhaarCard, ...uploads];
@@ -635,7 +711,7 @@ exports.updateClient = async (req, res) => {
     if (getFiles("pan").length > 0) {
       const uploads = await Promise.all(
         getFiles("pan").map((file) =>
-         uploadFile(file, `Clients Docs/${client?.propertyId?.propertyCode}/${client?.fullName}`)
+          uploadFile(file, `Clients Docs/${client?.propertyId?.propertyCode}/${client?.fullName}`)
         )
       );
       client.pan = [...existingPan, ...uploads];
@@ -647,7 +723,7 @@ exports.updateClient = async (req, res) => {
     if (getFiles("collegeIdentification").length > 0) {
       const uploads = await Promise.all(
         getFiles("collegeIdentification").map((file) =>
-       uploadFile(file, `Clients Docs/${client?.propertyId?.propertyCode}/${client?.fullName}`)
+          uploadFile(file, `Clients Docs/${client?.propertyId?.propertyCode}/${client?.fullName}`)
         )
       );
       client.collegeIdentification = [
@@ -662,7 +738,7 @@ exports.updateClient = async (req, res) => {
     if (getFiles("companyIdentification").length > 0) {
       const uploads = await Promise.all(
         getFiles("companyIdentification").map((file) =>
-         uploadFile(file, `Clients Docs/${client?.propertyId?.propertyCode}/${client?.fullName}`)
+          uploadFile(file, `Clients Docs/${client?.propertyId?.propertyCode}/${client?.fullName}`)
         )
       );
       client.companyIdentification = [
@@ -677,7 +753,7 @@ exports.updateClient = async (req, res) => {
     if (getFiles("clientRentalAgreement").length > 0) {
       const uploads = await Promise.all(
         getFiles("clientRentalAgreement").map((file) =>
-         uploadFile(file, `Clients Docs/${client?.propertyId?.propertyCode}/${client?.fullName}`)
+          uploadFile(file, `Clients Docs/${client?.propertyId?.propertyCode}/${client?.fullName}`)
         )
       );
       client.clientRentalAgreement = [
@@ -692,7 +768,7 @@ exports.updateClient = async (req, res) => {
     if (getFiles("clientPoliceNOC").length > 0) {
       const uploads = await Promise.all(
         getFiles("clientPoliceNOC").map((file) =>
-         uploadFile(file, `Clients Docs/${client?.propertyId?.propertyCode}/${client?.fullName}`)
+          uploadFile(file, `Clients Docs/${client?.propertyId?.propertyCode}/${client?.fullName}`)
         )
       );
       client.clientPoliceNOC = [
@@ -722,8 +798,13 @@ exports.updateClient = async (req, res) => {
       oldData.monthlyRent !== client.monthlyRent ||
       oldData.depositAmount !== client.depositAmount;
 
+
+    const isTempToPermanent =
+      oldData.stayType === "T. Booked" &&
+      req.body.stayType === "P. Booked";
+
     if (shouldRecalculate) {
-      await recalculateRentHistory(client._id);
+      await recalculateRentHistory(client._id, isTempToPermanent);
     }
 
     return res.status(200).json({

@@ -161,14 +161,14 @@ const clientRentHistorySchema = new mongoose.Schema(
       default: "",
     },
 
-    rentDOJ: {
-      type: Date,
-      default: null,
+    startDate: {
+      type: String,
+      default: "",
     },
 
-    ebDOJ: {
-      type: Date,
-      default: null,
+    endDate: {
+      type: String,
+      default: "",
     },
 
     generatedAt: {

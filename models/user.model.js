@@ -24,10 +24,21 @@ const userSchema = new mongoose.Schema(
       minlength: 6,
     },
 
+ bookingId: {
+  type: mongoose.Schema.Types.ObjectId,
+  ref: "Booking",
+  default: null,
+},
+
+employeeId: {
+  type: mongoose.Schema.Types.ObjectId,
+  ref: "Employee",
+  default: null,
+},
+
     role: {
       type: String,
-      enum: ["user", "admin"],
-      default: "user",
+      enum: ["Admin", "Employee", "Client"],
     },
     refreshToken: {
       type: String,

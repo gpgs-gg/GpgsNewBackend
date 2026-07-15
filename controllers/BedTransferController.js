@@ -58,6 +58,26 @@ const transferBed = async (req, res) => {
       });
     }
 
+    const shiftDate = new Date(endDate);
+    shiftDate.setHours(0, 0, 0, 0);
+    const nextDate = new Date(shiftDate);
+    nextDate.setDate(nextDate.getDate() + 1);
+
+    const alreadyShifted = await ClientRentHistory.findOne({
+      clientId,
+      paymentStatus: "Shifted",
+      createdAt: {
+        $gte: shiftDate,
+        $lt: nextDate,
+      },
+    });
+
+    if (alreadyShifted) {
+      return res.status(400).json({
+        success: false,
+        message: "Client has already been shifted on this date.",
+      });
+    }
     // New Bed
     const newBed = await Bed.findById(newBedId);
 
@@ -197,19 +217,15 @@ const transferBed = async (req, res) => {
     }).sort({ createdAt: -1 });
 
 
-const firstHistory = await ClientRentHistory.findOne({
+   const histories = await ClientRentHistory.find({
   clientId: client._id,
-  bedId: oldBedId,
-})
-  .sort({
-    year: 1,
-    month: 1,
-    createdAt: 1,
-  });
+  depositAmount: { $gt: 0 },
+}).select("depositAmount");
 
-const carryDeposit = Number(firstHistory?.depositAmount || 0);
-
-
+const carryDeposit = histories.reduce(
+  (sum, history) => sum + Number(history.depositAmount || 0),
+  0
+);
 
     let daysCount;
     if (oldHistory) {
@@ -260,23 +276,16 @@ const carryDeposit = Number(firstHistory?.depositAmount || 0);
       Object.assign(oldHistory, oldCalculation);
 
       oldHistory.daysCount = shiftedDays;
+      oldHistory.endDate = new Date(endDate);
       oldHistory.paymentStatus = "Shifted";
 
       await oldHistory.save();
 
 
-      if (oldHistory.currentDue < 0) {
-        previousDue = 0;
+      // let carriedDeposit = Math.min(carryDeposit, depositAmount);
+      let carriedDeposit = carryDeposit
 
-        extraReceived =
-          Math.abs(oldHistory.currentDue) +
-          carryDeposit;
-      } else {
-        previousDue = oldHistory.currentDue;
-
-        extraReceived = carryDeposit;
-      }
-
+      previousDue = oldHistory.currentDue;
 
       const monthHistories = await ClientRentHistory.find({
         clientId: client._id,
@@ -290,7 +299,17 @@ const carryDeposit = Number(firstHistory?.depositAmount || 0);
         0
       );
 
-      daysCount = 30 - consumedDays;
+      // Total days from DOJ till month end
+      const totalEligibleDays = getDaysCount(
+        client.clientDoj,
+        null,
+        month,
+        year
+      );
+
+      daysCount = Math.max(totalEligibleDays - consumedDays, 0);
+
+
     } else {
 
       const lastHistory = await ClientRentHistory.findOne({
@@ -302,20 +321,22 @@ const carryDeposit = Number(firstHistory?.depositAmount || 0);
       });
 
       if (lastHistory) {
+        const carriedDeposit = Math.min(
+          Number(lastHistory.depositAmount || 0),
+          depositAmount
+        );
 
         if (lastHistory.currentDue < 0) {
           previousDue = 0;
 
           extraReceived =
-            Math.abs(lastHistory.currentDue) +
-            Number(lastHistory.depositAmount || 0);
+            Math.abs(lastHistory.currentDue) + carriedDeposit;
 
         } else {
 
           previousDue = lastHistory.currentDue;
 
-          extraReceived =
-            Number(lastHistory.depositAmount || 0);
+          extraReceived = carriedDeposit;
         }
       }
 
@@ -327,9 +348,13 @@ const carryDeposit = Number(firstHistory?.depositAmount || 0);
       );
     }
 
+    const newBedDeposit = Number(newBed.depositAmount || 0);
+    const carriedDeposit = carryDeposit;
+    const remainingDeposit = newBedDeposit - carriedDeposit
+
     const calculation = calculateRentHistory({
       monthlyRent,
-      depositAmount,
+      depositAmount: remainingDeposit,
       daysCount,
       previousDue,
       rentReceived: extraReceived,
@@ -342,6 +367,7 @@ const carryDeposit = Number(firstHistory?.depositAmount || 0);
       processingFeesReceived: 0,
       depositAmountReceived: 0,
     });
+
 
 
     await ClientRentHistory.create({
@@ -357,9 +383,9 @@ const carryDeposit = Number(firstHistory?.depositAmount || 0);
 
       month,
       year,
-
       monthName: monthNames[month - 1],
-
+      startDate: startDate,
+      endDate: new Date(year, month - 1, 30),
       ...calculation,
       paymentComments: "",
       remarks: "",
@@ -391,7 +417,6 @@ const carryDeposit = Number(firstHistory?.depositAmount || 0);
       data: updatedClient,
     });
   } catch (error) {
-    console.error("Transfer Bed Error:", error);
 
     return res.status(500).json({
       success: false,

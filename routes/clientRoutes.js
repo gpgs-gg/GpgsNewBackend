@@ -10,7 +10,8 @@ const {
   getClientById,
   deleteClient,
   getAvailableBeds,
-  createClientFromBooking
+  createClientFromBooking,
+  createDummyClients
 } = require("../controllers/ClientController");
 const upload = require("../middleware/uploadMiddleware");
 
@@ -40,6 +41,7 @@ router.post(
   "/create-from-booking",
   createClientFromBooking
 );
+router.post("/dummy-clients", createDummyClients);
 
 module.exports = router;
 

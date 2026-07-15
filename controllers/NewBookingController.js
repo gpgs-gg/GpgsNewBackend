@@ -1,5 +1,6 @@
 const Booking = require("../models/newBooking.model");
 const Client = require("../models/client.model");
+const User = require("../models/user.model");
 
 // CREATE BOOKING
 exports.createBooking = async (req, res) => {
@@ -26,9 +27,9 @@ exports.getAllBookings = async (req, res) => {
   try {
     const bookings = await Booking.find()
       .populate("propertyId", "propertyCode")
-      .populate("bedId", "bedNo")
+      .populate("bedId", "bedNo roomNo")
       .populate("temporaryPropertyId", "propertyCode")
-      .populate("temporaryBedId", "bedNo")
+      .populate("temporaryBedId", "bedNo roomNo")
       .sort({ createdAt: -1 });
 
     res.status(200).json({
@@ -106,10 +107,10 @@ exports.updateBooking = async (req, res) => {
 
 
 exports.cancelBooking = async (req, res) => {
-
   try {
     const booking = await Booking.findById(req.params.id);
-      if (!booking) {
+
+    if (!booking) {
       return res.status(404).json({
         success: false,
         message: "Booking not found",
@@ -118,24 +119,36 @@ exports.cancelBooking = async (req, res) => {
 
     booking.isCancelled = true;
     booking.cancelledDate = new Date();
-    booking.status = "Not Booked";
+    booking.loginEnabled = false;
+
     await booking.save();
 
     await Client.updateMany(
       { bookingId: booking._id },
       {
         $set: {
+          loginEnabled: false,
           isBookingCancelled: true,
         },
       }
     );
 
-    res.status(200).json({
+    // 👇 User ko bhi inactive karo
+    await User.findOneAndUpdate(
+      { bookingId: booking._id },
+      {
+        $set: {
+          isActive: false,
+        },
+      }
+    );
+
+    return res.status(200).json({
       success: true,
       message: "Booking cancelled successfully",
     });
   } catch (error) {
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: error.message,
     });

@@ -271,14 +271,8 @@ exports.updateClientRentHistory = async (req, res) => {
       });
     }
 
-    // Recalculate Days
-    const daysCount = getDaysCount(
-      client.clientDoj,
-      client.noticeLastDate,
-      history.month,
-      history.year
-    );
-
+   
+  const daysCount = history.daysCount;
 
     const receivedAmount = Number(totalReceived || 0);
     const cumulativeReceived =

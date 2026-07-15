@@ -124,7 +124,6 @@ const ClientSchema = new mongoose.Schema(
             type: String,
             trim: true
         },
-
         clientLastDate: {
             type: String,
             trim: true
@@ -170,7 +169,32 @@ const ClientSchema = new mongoose.Schema(
             trim: true
         },
 
+        totalAmount: {
+            type: Number,
+            default: 0,
+        },
+        bookingAmount: {
+            type: Number,
+            default: 0,
+        },
+        balanceAmount: {
+            type: Number,
+            default: 0,
+        },
+        
+        temporaryParkingCharges: {
+            type: Number,
+            default: 0,
+        },
+        temporaryTotalAmount: {
+            type: Number,
+            default: 0,
+        },
 
+        loginEnabled: {
+            type: Boolean,
+            default: false
+        },
         // ===================================
         // DOCUMENTS
         // ===================================

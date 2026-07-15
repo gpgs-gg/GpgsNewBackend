@@ -70,6 +70,20 @@ const bookingSchema = new mongoose.Schema(
             default: 0,
         },
 
+        totalAmount: {
+            type: Number,
+            default: 0,
+        },
+        bookingAmount: {
+            type: Number,
+            default: 0,
+        },
+        balanceAmount: {
+            type: Number,
+            default: 0,
+        },
+
+
         // Temporary Booking
         temporaryPropertyId: {
             type: mongoose.Schema.Types.ObjectId,
@@ -102,7 +116,15 @@ const bookingSchema = new mongoose.Schema(
             type: Number,
             default: 0,
         },
-
+        temporaryTotalAmount: {
+            type: Number,
+            default: 0,
+        },
+        PartialAmount: {
+            type: Number,
+            default: 0,
+        },
+        
         // Advance / Hold
         URHA: {
             type: Number,
@@ -110,7 +132,10 @@ const bookingSchema = new mongoose.Schema(
         },
 
         URHD: String,
-
+        loginEnabled: {
+            type: Boolean,
+            default: false
+        },
         // Payment Proof
         paymentAttachment: [String],
 
