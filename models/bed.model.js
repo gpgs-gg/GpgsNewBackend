@@ -24,7 +24,7 @@ const BedSchema = new mongoose.Schema(
       required: true,
       trim: true,
     },
-
+   propertyLocation: String,
     // Configuration
     gender: {
       type: String,
@@ -58,7 +58,7 @@ const BedSchema = new mongoose.Schema(
 
     securityDepositMultiplicationFactor: {
       type: Number,
-      default: 1,
+      default: 0,
     },
 
     depositAmount: {

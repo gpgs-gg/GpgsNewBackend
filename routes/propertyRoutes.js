@@ -16,7 +16,6 @@ const {
 
 router.get("/dropdown", getPropertyDropdown);
 
-
 router.post("/", upload.fields([
     { name: "owner[photo]", maxCount: 10 },
     { name: "owner[aadharCard]", maxCount: 10 },

@@ -100,14 +100,67 @@ const createProperty = asyncHandler(async (req, res) => {
 });
 
 const getAllProperties = asyncHandler(async (req, res) => {
-  const properties = await Property.find().sort({ createdAt: -1 }); // Latest records first
+  // Pagination
+  const page = Math.max(parseInt(req.query.page) || 1, 1);
+  const limit = Math.max(parseInt(req.query.limit) || 10, 1);
+  const skip = (page - 1) * limit;
+  // Build filter query
+  const query = {};
+  // Search
+  if (req.query.search) {
+    query.$or = [
+      {
+        propertyCode: {
+          $regex: req.query.search,
+          $options: "i",
+        },
+      },
+      {
+        propertyLocation: {
+          $regex: req.query.search,
+          $options: "i",
+        },
+      },
+    ];
+  }
+  // Filters
+  if (req.query.propertyId) {
+    query._id = req.query.propertyId;
+  }
+  if (req.query.propertyLocation) {
+    query.propertyLocation = req.query.propertyLocation;
+  }
+  if (req.query.bedCount) {
+    query.bedCount = Number(req.query.bedCount);
+  }
+  if (req.query.status) {
+    query.status = req.query.status;
+  }
+  // Count only filtered records
+  const totalRecords = await Property.countDocuments(query);
+
+  // Fetch filtered + paginated data
+  const properties = await Property.find(query)
+    .sort({ createdAt: -1 })
+    .skip(skip)
+    .limit(limit);
 
   res.status(200).json({
     success: true,
+    page,
+    limit,
+    totalRecords,
+    totalPages: Math.ceil(totalRecords / limit),
+    hasNextPage: page < Math.ceil(totalRecords / limit),
+    hasPrevPage: page > 1,
     count: properties.length,
     data: properties,
   });
 });
+
+
+
+
 
 // READ SINGLE
 const getPropertyById = asyncHandler(async (req, res) => {
@@ -251,30 +304,59 @@ const addWorklog = asyncHandler(async (req, res) => {
   });
 });
 
-
 // Property Dropdown List
-const getPropertyDropdown = asyncHandler(async (req, res) => {
+const getPropertyDropdown = async (req, res) => {
   try {
-    const properties = await Property.find(
-      { status: "Active" }, // optional
-      {
-        _id: 1,
-        propertyCode: 1,
-        bedCount: 1,    
-      }
-    ).sort({ propertyCode: 1 });
-    res.status(200).json({
+    const page = Number(req.query.page) || 1;
+    const limit = Number(req.query.limit) || 10;
+    const search = req.query.search?.trim() || "";
+
+    const query = {};
+
+    if (search) {
+      query.propertyCode = {
+        $regex: search,
+        $options: "i",
+      };
+    }
+    const [locations, bedCounts, totalRecords, statuses, properties] =
+      await Promise.all([
+        Property.distinct("propertyLocation"),
+        Property.distinct("bedCount"),
+        Property.countDocuments(query),
+        Property.distinct("status"),
+        Property.find(query)
+          .select("_id propertyCode propertyLocation bedCount status")
+          .sort({ propertyCode: 1 })
+          .skip((page - 1) * limit)
+          .limit(limit)
+          .lean(),
+      ]);
+    locations.sort();
+    bedCounts.sort((a, b) => a - b);
+    return res.status(200).json({
       success: true,
       data: properties,
+      locations,
+      bedCounts,
+      statuses,
+      page,
+      limit,
+      totalRecords,
+      totalPages: Math.ceil(totalRecords / limit),
+      hasMore: page * limit < totalRecords,
     });
-     
   } catch (error) {
-    res.status(500).json({
+    console.error(error);
+
+    return res.status(500).json({
       success: false,
-      message: error.message,
+      message: "Failed to fetch properties.",
     });
   }
-});
+};
+
+
 
 
 module.exports = {
