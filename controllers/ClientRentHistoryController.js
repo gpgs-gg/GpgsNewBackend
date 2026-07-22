@@ -251,7 +251,6 @@ exports.updateClientRentHistory = async (req, res) => {
     } = req.body;
 
     const history = await ClientRentHistory.findById(id);
-    console.log(history)
     if (!history) {
       return res.status(404).json({
         success: false,

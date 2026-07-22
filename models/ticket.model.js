@@ -6,6 +6,7 @@ const TicketSchema = new mongoose.Schema(
       type: String,
       required: true,
       unique: true,
+      index: true, // <-- Add this
     },
 
     dateCreated: String,
@@ -26,6 +27,7 @@ const TicketSchema = new mongoose.Schema(
     department: String,
 
     manager: String,
+    ticketManager: String,
     assignee: String,
 
     createdBy: String,
@@ -52,7 +54,7 @@ const TicketSchema = new mongoose.Schema(
           default: Date.now,
         },
       },
-    ], 
+    ],
 
     internalComments: String,
 
@@ -60,15 +62,15 @@ const TicketSchema = new mongoose.Schema(
     actualTimeSpent: String,
 
     auditorLogs: [
-  {
-    message: String,
-    createdBy: String,
-    createdAt: {
-      type: Date,
-      default: Date.now,
-    },
-  },
-],
+      {
+        message: String,
+        createdBy: String,
+        createdAt: {
+          type: Date,
+          default: Date.now,
+        },
+      },
+    ],
 
     teamCode: String,
     propertyLocation: String,
@@ -77,5 +79,13 @@ const TicketSchema = new mongoose.Schema(
     timestamps: true,
   }
 );
+
+// Explicit indexes
+TicketSchema.index({ ticketId: 1 }, { unique: true });
+TicketSchema.index({ createdAt: -1 });
+TicketSchema.index({ propertyCode: 1 });
+TicketSchema.index({ status: 1 });
+TicketSchema.index({ priority: 1 });
+TicketSchema.index({ department: 1 });
 
 module.exports = mongoose.model("Ticket", TicketSchema);

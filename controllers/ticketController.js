@@ -3,6 +3,7 @@ const asyncHandler = require("../middleware/asyncHandler");
 const uploadFile = require("../services/uploadFile");
 const ApiError = require("../utils/ApiError");
 const  { convertStringFormatDateTime,convertStringToDateTime}  = require("../utils/dateFormatter");
+
 const createTicket = asyncHandler(async (req, res) => {
   // Generate Ticket ID
   const lastTicket = await Ticket.findOne().sort({ createdAt: -1 });
@@ -37,17 +38,126 @@ if (lastTicket) {
   });
 });
 
+// const getAllTickets = asyncHandler(async (req, res) => {
+//   const tickets = await Ticket.find().sort({
+//     createdAt: -1,
+//   });
+
+//   res.status(200).json({
+//     success: true,
+//     count: tickets.length,
+//     data: tickets,
+//   });
+// });
+
+
 const getAllTickets = asyncHandler(async (req, res) => {
-  const tickets = await Ticket.find().sort({
-    createdAt: -1,
-  });
+  const page = Math.max(Number(req.query.page) || 1, 1);
+  const limit = Math.max(Number(req.query.limit) || 10, 1);
+  const skip = (page - 1) * limit;
+
+  const query = {};
+
+  // ================= Search =================
+  if (req.query.search) {
+    query.$or = [
+      {
+        ticketId: {
+          $regex: req.query.search,
+          $options: "i",
+        },
+      },
+      {
+        title: {
+          $regex: req.query.search,
+          $options: "i",
+        },
+      },
+      {
+        description: {
+          $regex: req.query.search,
+          $options: "i",
+        },
+      },
+      {
+        propertyCode: {
+          $regex: req.query.search,
+          $options: "i",
+        },
+      },
+    ];
+  }
+
+  // ================= Filters =================
+
+  if (req.query.status) {
+    query.status = req.query.status;
+  }
+
+  if (req.query.priority) {
+    query.priority = req.query.priority;
+  }
+
+  if (req.query.category) {
+    query.category = req.query.category;
+  }
+
+  if (req.query.department) {
+    query.department = req.query.department;
+  }
+
+  if (req.query.assignee) {
+    query.assignee = req.query.assignee;
+  }
+
+  if (req.query.propertyLocation) {
+    query.propertyLocation = req.query.propertyLocation;
+  }
+
+  if (req.query.propertyCode) {
+    query.propertyCode = req.query.propertyCode;
+  }
+
+  if (req.query.customerImpacted) {
+    query.customerImpacted = req.query.customerImpacted;
+  }
+
+  if (req.query.escalated) {
+    query.escalated = req.query.escalated;
+  }
+
+  if (req.query.manager) {
+  query.manager = req.query.manager;
+}
+
+if (req.query.lateStatus === "LateAcknowledged") {
+  query.lateAcknowledged = "Yes";
+}
+
+if (req.query.lateStatus === "LateResolved") {
+  query.lateResolved = "Yes";
+}
+
+  const totalRecords = await Ticket.countDocuments(query);
+
+  const tickets = await Ticket.find(query)
+    .sort({ createdAt: -1 })
+    .skip(skip)
+    .limit(limit);
 
   res.status(200).json({
     success: true,
+    page,
+    limit,
+    totalRecords,
+    totalPages: Math.ceil(totalRecords / limit),
+    hasNextPage: page < Math.ceil(totalRecords / limit),
+    hasPrevPage: page > 1,
     count: tickets.length,
     data: tickets,
   });
 });
+
 
 const getTicketById = asyncHandler(async (req, res) => {
   const ticket = await Ticket.findById(req.params.id);
@@ -299,6 +409,183 @@ const addWorkLog = asyncHandler(async (req, res) => {
   });
 });
 
+const getTicketDropdown = asyncHandler(async (req, res) => {
+  const page = Number(req.query.page) || 1;
+  const limit = Number(req.query.limit) || 10;
+  const search = req.query.search?.trim() || "";
+
+  const query = {};
+
+  if (search) {
+    query.ticketId = {
+      $regex: search,
+      $options: "i",
+    };
+  }
+
+  const [
+    statuses,
+    priorities,
+    departments,
+    categories,
+    assignees,
+    managers,
+    propertyLocations,
+    propertyCodes,
+    totalRecords,
+    tickets,
+  ] = await Promise.all([
+    Ticket.distinct("status"),
+    Ticket.distinct("priority"),
+    Ticket.distinct("department"),
+    Ticket.distinct("category"),
+    Ticket.distinct("assignee"),
+    Ticket.distinct("manager"),
+    Ticket.distinct("propertyLocation"),
+    Ticket.distinct("propertyCode"),
+
+    Ticket.countDocuments(query),
+
+    Ticket.find(query)
+      .select(
+        "_id ticketId propertyCode propertyLocation status priority department category assignee manager"
+      )
+      .sort({ createdAt: -1 })
+      .skip((page - 1) * limit)
+      .limit(limit)
+      .lean(),
+  ]);
+
+  res.status(200).json({
+    success: true,
+
+    data: tickets,
+
+    propertyCodes,
+    propertyLocations,
+    statuses,
+    priorities,
+    departments,
+    categories,
+    assignees,
+    managers,
+
+    customerImpacted: ["Yes", "No"],
+    escalated: ["Yes", "No"],
+
+    lateStatus: [
+      {
+        value: "LateAcknowledged",
+        label: "Late Acknowledged",
+      },
+      {
+        value: "LateResolved",
+        label: "Late Resolved",
+      },
+    ],
+
+    page,
+    limit,
+    totalRecords,
+    totalPages: Math.ceil(totalRecords / limit),
+    hasMore: page * limit < totalRecords,
+  });
+});
+
+const insertBulkTickets = async (req, res) => {
+  try {
+    const totalRecords = 20000;
+
+    // Get last inserted ticket
+    const lastTicket = await Ticket.findOne()
+      .sort({ ticketId: -1 })
+      .select("ticketId");
+
+    let startNumber = 1;
+
+    if (lastTicket && lastTicket.ticketId) {
+      startNumber =
+        parseInt(lastTicket.ticketId.replace("TKT", ""), 10) + 1;
+    }
+
+    const tickets = [];
+
+    for (
+      let ticketNumber = startNumber;
+      ticketNumber < startNumber + totalRecords;
+      ticketNumber++
+    ) {
+      tickets.push({
+        ticketId: `TKT${String(ticketNumber).padStart(6, "0")}`,
+
+        title: `Test Ticket ${ticketNumber}`,
+        description: `This is dummy ticket ${ticketNumber}`,
+
+        priority: ["Low", "Medium", "High", "Critical"][
+          Math.floor(Math.random() * 4)
+        ],
+
+        status: ["Open", "In Progress", "Closed"][
+          Math.floor(Math.random() * 3)
+        ],
+
+        department: ["Maintenance", "Accounts", "Support"][
+          Math.floor(Math.random() * 3)
+        ],
+
+        category: ["Electricity", "Cleaning", "Plumbing", "Other"][
+          Math.floor(Math.random() * 4)
+        ],
+
+        propertyCode: `RH${1000 + Math.floor(Math.random() * 500)}`,
+
+        propertyLocation: `Location ${Math.floor(Math.random() * 50) + 1}`,
+
+        customerName: `Customer ${ticketNumber}`,
+
+        mobile:
+          "9" + Math.floor(100000000 + Math.random() * 900000000),
+
+        customerImpacted: ["Yes", "No"][
+          Math.floor(Math.random() * 2)
+        ],
+
+        lateStatus: ["On Time", "Late"][
+          Math.floor(Math.random() * 2)
+        ],
+
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+    }
+
+    // Insert in batches
+    const batchSize = 1000;
+
+    for (let i = 0; i < tickets.length; i += batchSize) {
+      const batch = tickets.slice(i, i + batchSize);
+      await Ticket.insertMany(batch, { ordered: false });
+    }
+
+    return res.status(200).json({
+      success: true,
+      inserted: tickets.length,
+      startTicket: `TKT${String(startNumber).padStart(6, "0")}`,
+      endTicket: `TKT${String(startNumber + totalRecords - 1).padStart(
+        6,
+        "0"
+      )}`,
+    });
+  } catch (err) {
+    console.error(err);
+
+    return res.status(500).json({
+      success: false,
+      message: err.message,
+    });
+  }
+};
+
 module.exports = {
   createTicket,
   getAllTickets,
@@ -306,4 +593,6 @@ module.exports = {
   updateTicket,
   deleteTicket,
   addWorkLog,
+  getTicketDropdown,
+  insertBulkTickets,
 };

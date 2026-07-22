@@ -10,7 +10,8 @@ const {
   updateProperty,
   deleteProperty,
   addWorklog,
-  getPropertyDropdown
+  getPropertyDropdown,
+  deleteMultipleProperties
 } = require("../controllers/propertyController");
 
 
@@ -32,6 +33,7 @@ router.put(
   updateProperty
 );
 router.delete("/:id", deleteProperty);
+router.delete("/", deleteMultipleProperties);
 router.post("/:id/worklog", addWorklog);
 
 

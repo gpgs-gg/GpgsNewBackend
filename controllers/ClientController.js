@@ -71,9 +71,6 @@ exports.createDummyClients = async (req, res) => {
   }
 };
 
-
-
-
 exports.createClientFromBooking = async (
   req,
   res
@@ -94,22 +91,90 @@ exports.createClientFromBooking = async (
     // =========================
     // REACTIVATE OLD CLIENTS
     // =========================
-
-    const existingClients =
-      await Client.find({
-        bookingId,
-      });
+    const existingClients = await Client.find({
+      bookingId,
+    });
 
     if (existingClients.length > 0) {
-      await Client.updateMany(
-        { bookingId },
-        {
-          $set: {
-            loginEnabled: true,
-            isBookingCancelled: false,
-          },
+
+      // Booking ki latest values client me update karo
+      for (const client of existingClients) {
+
+        if (client.stayType === "P. Booked") {
+
+          client.bookingId = booking._id;
+
+          client.fullName = booking.fullName;
+          client.emailId = booking.emailId;
+          client.callingNo = booking.callingNo;
+          client.whatsappNo = booking.whatsappNo;
+
+          client.propertyId = booking.propertyId;
+          client.bedId = booking.bedId;
+
+          client.processingFees = booking.processingFees;
+          client.parkingCharges = booking.parkingCharges;
+
+          client.monthlyRent = booking.monthlyRent;
+          client.depositAmount = booking.depositAmount;
+
+          client.totalAmount = booking.totalAmount;
+          client.bookingAmount = booking.bookingAmount;
+          client.balanceAmount = booking.balanceAmount;
+          client.temporaryTotalAmount = booking.temporaryTotalAmount;
+          client.clientDoj = booking.clientDoj;
+          // client.clientVacatingDate = booking.clientLastDate;
+          // client.noticeStartDate = booking.clientDoj;
+          // client.noticeLastDate = booking.clientLastDate;
+          client.comments = booking.comments;
+          client.loginEnabled = true;
+          client.isBookingCancelled = false;
         }
-      );
+
+        if (client.stayType === "T. Booked") {
+
+          client.bookingId = booking._id;
+
+          client.fullName = booking.fullName;
+          client.emailId = booking.emailId;
+          client.callingNo = booking.callingNo;
+          client.whatsappNo = booking.whatsappNo;
+
+          client.propertyId = booking.temporaryPropertyId;
+          client.bedId = booking.temporaryBedId;
+
+          client.monthlyRent = booking.temporaryMonthlyRent;
+
+          client.temporaryParkingCharges =
+            booking.temporaryParkingCharges;
+
+          client.temporaryTotalAmount =
+            booking.temporaryTotalAmount;
+
+          client.clientDoj =
+            booking.temporaryClientDoj;
+
+          client.clientVacatingDate =
+            booking.temporaryClientLastDate;
+
+          client.noticeStartDate =
+            booking.temporaryClientDoj;
+
+          client.noticeLastDate =
+            booking.temporaryClientLastDate;
+
+          client.comments =
+            booking.temporaryComments;
+
+          client.loginEnabled = true;
+          client.isBookingCancelled = false;
+        }
+
+        await client.save();
+
+        await createClientRentHistory(client, true);
+      }
+
       await User.findOneAndUpdate(
         { bookingId },
         {
@@ -118,6 +183,7 @@ exports.createClientFromBooking = async (
           },
         }
       );
+
       booking.loginEnabled = true;
       booking.isCancelled = false;
       booking.cancelledDate = null;
@@ -126,8 +192,7 @@ exports.createClientFromBooking = async (
 
       return res.status(200).json({
         success: true,
-        message:
-          "Existing clients reactivated successfully",
+        message: "Client & Rent History updated successfully",
       });
     }
 
@@ -200,6 +265,9 @@ exports.createClientFromBooking = async (
         balanceAmount: booking.balanceAmount,
         temporaryTotalAmount: booking.temporaryTotalAmount,
         clientDoj: booking.clientDoj,
+        // clientVacatingDate: booking.clientLastDate,
+        // noticeStartDate: booking.clientDoj,
+        // noticeLastDate: booking.clientLastDate,
         comments: booking.comments,
         loginEnabled: true,
         isBookingCancelled: false,
@@ -300,6 +368,237 @@ exports.createClientFromBooking = async (
     });
   }
 };
+
+
+// exports.createClientFromBooking = async (
+//   req,
+//   res
+// ) => {
+//   try {
+//     const { bookingId } = req.body;
+
+//     const booking =
+//       await Booking.findById(bookingId);
+
+//     if (!booking) {
+//       return res.status(404).json({
+//         success: false,
+//         message: "Booking not found",
+//       });
+//     }
+
+//     // =========================
+//     // REACTIVATE OLD CLIENTS
+//     // =========================
+
+//     const existingClients =
+//       await Client.find({
+//         bookingId,
+//       });
+
+//     if (existingClients.length > 0) {
+//       await Client.updateMany(
+//         { bookingId },
+//         {
+//           $set: {
+//             loginEnabled: true,
+//             isBookingCancelled: false,
+//           },
+//         }
+//       );
+//       await User.findOneAndUpdate(
+//         { bookingId },
+//         {
+//           $set: {
+//             isActive: true,
+//           },
+//         }
+//       );
+//       booking.loginEnabled = true;
+//       booking.isCancelled = false;
+//       booking.cancelledDate = null;
+
+//       await booking.save();
+
+//       return res.status(200).json({
+//         success: true,
+//         message:
+//           "Existing clients reactivated successfully",
+//       });
+//     }
+
+//     // =========================
+//     // ALREADY BOOKED CHECK
+//     // =========================
+
+//     if (
+//       booking.loginEnabled &&
+//       !booking.isCancelled
+//     ) {
+//       return res.status(400).json({
+//         success: false,
+//         message:
+//           "This booking is already converted to client",
+//       });
+//     }
+
+//     const clientsToCreate = [];
+
+//     // =========================
+//     // PERMANENT BED CHECK
+//     // =========================
+
+//     if (
+//       booking.propertyId &&
+//       booking.bedId
+//     ) {
+//       const occupiedPermanentBed =
+//         await Client.findOne({
+//           propertyId: booking.propertyId,
+//           bedId: booking.bedId,
+//           isBookingCancelled: false,
+
+//           $or: [
+//             {
+//               noticeStartDate: {
+//                 $exists: false,
+//               },
+//             },
+//             {
+//               noticeStartDate: null,
+//             },
+//           ],
+//         });
+
+//       if (occupiedPermanentBed) {
+//         return res.status(400).json({
+//           success: false,
+//           message:
+//             "Permanent bed is already occupied",
+//         });
+//       }
+
+//       clientsToCreate.push({
+//         stayType: "P. Booked",
+//         bookingId: booking._id,
+//         fullName: booking.fullName,
+//         emailId: booking.emailId,
+//         callingNo: booking.callingNo,
+//         whatsappNo: booking.whatsappNo,
+//         propertyId: booking.propertyId,
+//         bedId: booking.bedId,
+//         processingFees: booking.processingFees,
+//         parkingCharges: booking.parkingCharges,
+//         monthlyRent: booking.monthlyRent,
+//         depositAmount: booking.depositAmount,
+//         totalAmount: booking.totalAmount,
+//         bookingAmount: booking.bookingAmount,
+//         balanceAmount: booking.balanceAmount,
+//         temporaryTotalAmount: booking.temporaryTotalAmount,
+//         clientDoj: booking.clientDoj,
+//         clientVacatingDate: booking.clientLastDate,
+//         noticeStartDate: booking.clientDoj,
+//         noticeLastDate: booking.clientLastDate,
+//         comments: booking.comments,
+//         loginEnabled: true,
+//         isBookingCancelled: false,
+//       });
+//     }
+
+//     // =========================
+//     // TEMPORARY BED CHECK
+//     // =========================
+
+//     if (
+//       booking.temporaryPropertyId &&
+//       booking.temporaryBedId
+//     ) {
+//       const occupiedTemporaryBed =
+//         await Client.findOne({
+//           propertyId:
+//             booking.temporaryPropertyId,
+//           bedId:
+//             booking.temporaryBedId,
+
+//           isBookingCancelled: false,
+
+//           $or: [
+//             {
+//               noticeStartDate: {
+//                 $exists: false,
+//               },
+//             },
+//             {
+//               noticeStartDate: null,
+//             },
+//           ],
+//         });
+
+//       if (occupiedTemporaryBed) {
+//         return res.status(400).json({
+//           success: false,
+//           message:
+//             "Temporary bed is already occupied",
+//         });
+//       }
+
+//       clientsToCreate.push({
+//         stayType: "T. Booked",
+//         bookingId: booking._id,
+//         fullName: booking.fullName,
+//         emailId: booking.emailId,
+//         callingNo: booking.callingNo,
+//         whatsappNo: booking.whatsappNo,
+//         propertyId: booking.temporaryPropertyId,
+//         bedId: booking.temporaryBedId,
+//         monthlyRent: booking.temporaryMonthlyRent,
+//         temporaryParkingCharges: booking.temporaryParkingCharges,
+//         temporaryTotalAmount: booking.temporaryTotalAmount,
+//         clientDoj: booking.temporaryClientDoj,
+//         clientVacatingDate: booking.temporaryClientLastDate,
+//         noticeStartDate: booking.temporaryClientDoj,
+//         noticeLastDate: booking.temporaryClientLastDate,
+//         comments:
+//           booking.temporaryComments,
+//         loginEnabled: true,
+//         isBookingCancelled: false,
+//       });
+//     }
+
+//     // =========================
+//     // CREATE CLIENTS
+//     // =========================
+
+//     const clients =
+//       await Client.insertMany(
+//         clientsToCreate
+//       );
+//     for (const client of clients) {
+//       await createClientRentHistory(client);
+//     }
+
+//     // booking.status = "Booked";
+//     // booking.isCancelled = false;
+//     // booking.cancelledDate = null;
+
+//     await booking.save();
+
+//     // 👇 Direct service call
+//     await enableClientLogin(booking._id);
+
+//     return res.status(201).json({
+//       success: true,
+//       message:
+//         "Client created successfully",
+//       data: clients,
+//     });
+//   } catch (error) {
+//     return res.status(500).json({
+//       success: false,
+//       message: error.message,
+//     });
+//   }
+// };
 
 
 exports.createClient = async (req, res) => {

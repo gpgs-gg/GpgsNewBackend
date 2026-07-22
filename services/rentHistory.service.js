@@ -20,7 +20,10 @@ const monthNames = [
   "December",
 ];
 
+
+
 const createClientRentHistory = async (client) => {
+
   try {
     // Bed Details
     const bed = await Bed.findById(client.bedId).lean();
@@ -34,21 +37,22 @@ const createClientRentHistory = async (client) => {
     const month = doj.getMonth() + 1; // 1-12
     const year = doj.getFullYear();
 
-    // Duplicate Check
-    const alreadyExists =
-      await ClientRentHistory.findOne({
-        clientId: client._id,
-        month,
-        year,
-      });
-
-    if (alreadyExists) {
-      return alreadyExists;
-    }
-
+    // Current Month History
+    let history = await ClientRentHistory.findOne({
+      clientId: client._id,
+      stayType: client.stayType,
+      month,
+      year,
+    });
     // Previous Due
-    const lastHistory =
-      await ClientRentHistory.findOne({
+    let previousDue;
+
+    if (history) {
+      // UPDATE
+      previousDue = history.previousDue;
+    } else {
+      // CREATE
+      const lastHistory = await ClientRentHistory.findOne({
         clientId: client._id,
       }).sort({
         year: -1,
@@ -56,8 +60,8 @@ const createClientRentHistory = async (client) => {
         createdAt: -1,
       });
 
-    const previousDue =
-      lastHistory?.currentDue || 0;
+      previousDue = lastHistory?.currentDue || 0;
+    }
 
     const monthlyRent = Number(
       bed.monthlyRent || 0
@@ -86,6 +90,8 @@ const createClientRentHistory = async (client) => {
       rentReceived = Number(client.temporaryTotalAmount || 0);
       // rentReceived = 0;
     }
+
+
 
     const noticeLastDate = client.noticeLastDate
       ? new Date(client.noticeLastDate)
@@ -134,28 +140,43 @@ const createClientRentHistory = async (client) => {
         rentReceived,
       });
 
-    const history =
-      await ClientRentHistory.create({
-        clientId: client._id,
+    if (history) {
+      Object.assign(history, {
         bookingId: client.bookingId || null,
         propertyId: client.propertyId,
         bedId: client.bedId,
         stayType: client.stayType,
-        month,
-        year,
         startDate: client.clientDoj,
         endDate,
-        monthName:
-          doj.toLocaleString(
-            "default",
-            {
-              month: "long",
-            }
-          ),
+        monthName: doj.toLocaleString("default", {
+          month: "long",
+        }),
         ...calculation,
-        paymentComments: "",
-        remarks: "",
       });
+
+      await history.save();
+      return history;
+    }
+
+    // Create New
+    history = await ClientRentHistory.create({
+      clientId: client._id,
+      bookingId: client.bookingId || null,
+      propertyId: client.propertyId,
+      bedId: client.bedId,
+      stayType: client.stayType,
+      month,
+      year,
+      startDate: client.clientDoj,
+      endDate,
+      monthName: doj.toLocaleString("default", {
+        month: "long",
+      }),
+      ...calculation,
+      paymentComments: "",
+      remarks: "",
+    });
+
     return history;
   } catch (err) {
     console.error(
@@ -165,6 +186,153 @@ const createClientRentHistory = async (client) => {
     throw err;
   }
 };
+
+
+// const createClientRentHistory = async (client) => {
+//   try {
+//     // Bed Details
+//     const bed = await Bed.findById(client.bedId).lean();
+
+//     if (!bed) {
+//       throw new Error("Bed not found.");
+//     }
+
+//     const doj = new Date(client.clientDoj);
+
+//     const month = doj.getMonth() + 1; // 1-12
+//     const year = doj.getFullYear();
+
+//     // Duplicate Check
+//     const alreadyExists =
+//       await ClientRentHistory.findOne({
+//         clientId: client._id,
+//         month,
+//         year,
+//       });
+
+//     if (alreadyExists) {
+//       return alreadyExists;
+//     }
+
+//     // Previous Due
+//     const lastHistory =
+//       await ClientRentHistory.findOne({
+//         clientId: client._id,
+//       }).sort({
+//         year: -1,
+//         month: -1,
+//         createdAt: -1,
+//       });
+
+//     const previousDue =
+//       lastHistory?.currentDue || 0;
+
+//     const monthlyRent = Number(
+//       bed.monthlyRent || 0
+//     );
+
+//     let depositAmount = 0;
+
+//     if (client.stayType === "P. Booked") {
+//       depositAmount = Number(bed.depositAmount || 0);
+//     }
+
+//     const processingFees = Number(
+//       client.processingFees || 0
+//     );
+
+//     const parkingCharges = Number(
+//       client.stayType === "T. Booked"
+//         ? client.temporaryParkingCharges || 0
+//         : client.parkingCharges || 0
+//     );
+
+//     let rentReceived = 0;
+//     if (client.stayType === "P. Booked") {
+//       rentReceived = Number(client.bookingAmount || 0) - Number(client.temporaryTotalAmount || 0);
+//     } else if (client.stayType === "T. Booked") {
+//       rentReceived = Number(client.temporaryTotalAmount || 0);
+//       // rentReceived = 0;
+//     }
+
+//     const noticeLastDate = client.noticeLastDate
+//       ? new Date(client.noticeLastDate)
+//       : null;
+//     // Business rule: month ka end (31 ko 30 treat karna)
+//     const lastDay = new Date(year, month, 0).getDate();
+
+//     const monthEndDate = new Date(
+//       year,
+//       month - 1,
+//       lastDay === 31 ? 30 : lastDay
+//     );
+
+//     let endDate;
+
+//     if (noticeLastDate) {
+//       endDate =
+//         noticeLastDate > monthEndDate
+//           ? monthEndDate
+//           : noticeLastDate;
+//     } else {
+//       endDate = monthEndDate;
+//     }
+
+//     const daysCount = getDaysCount(
+//       client.clientDoj,
+//       endDate,
+//       month,
+//       year
+//     );
+
+//     const calculation =
+//       calculateRentHistory({
+//         monthlyRent,
+//         depositAmount,
+//         daysCount,
+//         previousDue,
+//         ebAmt: 0,
+//         flatEB: 0,
+//         adjEB: 0,
+//         adjAmt: 0,
+//         processingFees,
+//         parkingCharges,
+//         processingFeesReceived: 0,
+//         depositAmountReceived: 0,
+//         rentReceived,
+//       });
+
+//     const history =
+//       await ClientRentHistory.create({
+//         clientId: client._id,
+//         bookingId: client.bookingId || null,
+//         propertyId: client.propertyId,
+//         bedId: client.bedId,
+//         stayType: client.stayType,
+//         month,
+//         year,
+//         startDate: client.clientDoj,
+//         endDate,
+//         monthName:
+//           doj.toLocaleString(
+//             "default",
+//             {
+//               month: "long",
+//             }
+//           ),
+//         ...calculation,
+//         paymentComments: "",
+//         remarks: "",
+//       });
+//     return history;
+//   } catch (err) {
+//     console.error(
+//       "Create Rent History Error:",
+//       err
+//     );
+//     throw err;
+//   }
+// };
 
 
 const generateMonthlyRent = async () => {
@@ -186,6 +354,7 @@ const generateMonthlyRent = async () => {
   })
     .populate("bedId")
     .lean();
+    
   const clientIds = clients.map((client) => client._id);
   const rentHistoryData = [];
   // Already Generated

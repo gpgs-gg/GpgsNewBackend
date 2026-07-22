@@ -1,5 +1,7 @@
 const Bed = require("../models/bed.model");
 const Property = require("../models/property.model");
+const mongoose = require("mongoose");
+
 // Create Bed
 exports.createBed = async (req, res) => {
   try {
@@ -81,12 +83,6 @@ exports.createBed = async (req, res) => {
   }
 };
 // Get All
-
-
-
-
-
-
 exports.getBeds = async (req, res) => {
   try {
     // Pagination
@@ -97,7 +93,6 @@ exports.getBeds = async (req, res) => {
     const query = {};
     if (req.query.search?.trim()) {
       const search = req.query.search.trim();
-
       const searchableFields = Object.keys(Bed.schema.paths).filter((key) => {
         const type = Bed.schema.paths[key].instance;
 
@@ -107,23 +102,29 @@ exports.getBeds = async (req, res) => {
         );
       });
 
-      const bedSearch = searchableFields.map((field) => {
+      const bedSearch = searchableFields.flatMap((field) => {
         const type = Bed.schema.paths[field].instance;
 
-        if (type === "Number" && !isNaN(search)) {
-          return {
-            [field]: Number(search),
-          };
+        // String fields
+        if (type === "String") {
+          return [{
+            [field]: {
+              $regex: search,
+              $options: "i",
+            },
+          }];
         }
 
-        return {
-          [field]: {
-            $regex: search,
-            $options: "i",
-          },
-        };
+        // Number fields
+        if (type === "Number" && !isNaN(search)) {
+          return [{
+            [field]: Number(search),
+          }];
+        }
+        // Agar Number field hai aur search text hai (RH-TEST-00003),
+        // to kuch bhi mat return karo.
+        return [];
       });
-
       // Search in Property collection
       const properties = await Property.find({
         $or: [
@@ -132,7 +133,6 @@ exports.getBeds = async (req, res) => {
           { propertyName: { $regex: search, $options: "i" } },
         ],
       }).select("_id");
-
       const propertyIds = properties.map((p) => p._id);
 
       // Merge Bed search + Property search
@@ -177,6 +177,98 @@ exports.getBeds = async (req, res) => {
     if (req.query.bedNo) {
       query.bedNo = req.query.bedNo;
     }
+    if (req.query.monthlyRentMin || req.query.monthlyRentMax) {
+      query.monthlyRent = {};
+
+      if (req.query.monthlyRentMin) {
+        query.monthlyRent.$gte = Number(req.query.monthlyRentMin);
+      }
+
+      if (req.query.monthlyRentMax) {
+        query.monthlyRent.$lte = Number(req.query.monthlyRentMax);
+      }
+    }
+    if (req.query.sdmfMin || req.query.sdmfMax) {
+      query.securityDepositMultiplicationFactor = {};
+
+      if (req.query.sdmfMin) {
+        query.securityDepositMultiplicationFactor.$gte = Number(
+          req.query.sdmfMin,
+        );
+      }
+
+      if (req.query.sdmfMax) {
+        query.securityDepositMultiplicationFactor.$lte = Number(
+          req.query.sdmfMax,
+        );
+      }
+    }
+    if (req.query.depositAmountMin || req.query.depositAmountMax) {
+      query.depositAmount = {};
+
+      if (req.query.depositAmountMin) {
+        query.depositAmount.$gte = Number(req.query.depositAmountMin);
+      }
+
+      if (req.query.depositAmountMax) {
+        query.depositAmount.$lte = Number(req.query.depositAmountMax);
+      }
+    }
+    if (
+      req.query.upcomingRentHikeDateFrom ||
+      req.query.upcomingRentHikeDateTo
+    ) {
+      query.upcomingRentHikeDate = {};
+
+      if (req.query.upcomingRentHikeDateFrom) {
+        query.upcomingRentHikeDate.$gte = new Date(
+          req.query.upcomingRentHikeDateFrom,
+        );
+      }
+
+      if (req.query.upcomingRentHikeDateTo) {
+        query.upcomingRentHikeDate.$lte = new Date(
+          req.query.upcomingRentHikeDateTo,
+        );
+      }
+    }
+    if (
+      req.query.upcomingRentHikeAmountMin ||
+      req.query.upcomingRentHikeAmountMax
+    ) {
+      query.upcomingRentHikeAmount = {};
+
+      if (req.query.upcomingRentHikeAmountMin) {
+        query.upcomingRentHikeAmount.$gte = Number(
+          req.query.upcomingRentHikeAmountMin,
+        );
+      }
+
+      if (req.query.upcomingRentHikeAmountMax) {
+        query.upcomingRentHikeAmount.$lte = Number(
+          req.query.upcomingRentHikeAmountMax,
+        );
+      }
+    }
+    // Previous Rent Hike Date
+    if (
+      req.query.previousRentHikeDateFrom ||
+      req.query.previousRentHikeDateTo
+    ) {
+      query.previousRentHikeDate = {};
+
+      if (req.query.previousRentHikeDateFrom) {
+        query.previousRentHikeDate.$gte = new Date(
+          req.query.previousRentHikeDateFrom,
+        );
+      }
+
+      if (req.query.previousRentHikeDateTo) {
+        query.previousRentHikeDate.$lte = new Date(
+          req.query.previousRentHikeDateTo,
+        );
+      }
+    }
     // ================= Count =================
     const totalRecords = await Bed.countDocuments(query);
     // ================= Data =================
@@ -203,11 +295,6 @@ exports.getBeds = async (req, res) => {
     });
   }
 };
-
-
-
-
-
 
 // Single Bed
 exports.getSingleBed = async (req, res) => {
@@ -268,6 +355,7 @@ exports.updateBed = async (req, res) => {
   }
 };
 // Delete Bed
+// Delete Bed
 exports.deleteBed = async (req, res) => {
   try {
     const bed = await Bed.findByIdAndDelete(req.params.id);
@@ -282,6 +370,44 @@ exports.deleteBed = async (req, res) => {
     return res.status(200).json({
       success: true,
       message: "Bed deleted successfully",
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+// Delete Multiple Beds
+exports.deleteMultipleBeds = async (req, res) => {
+  try {
+    const { ids } = req.body;
+
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Please provide bed ids.",
+      });
+    }
+
+    const invalidIds = ids.filter((id) => !mongoose.Types.ObjectId.isValid(id));
+
+    if (invalidIds.length > 0) {
+      return res.status(400).json({
+        success: false,
+        message: "One or more bed ids are invalid.",
+      });
+    }
+
+    const result = await Bed.deleteMany({
+      _id: { $in: ids },
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: `${result.deletedCount} bed${result.deletedCount === 1 ? "" : "s"} deleted successfully.`,
+      deletedCount: result.deletedCount,
     });
   } catch (error) {
     return res.status(500).json({

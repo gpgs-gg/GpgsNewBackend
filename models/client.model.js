@@ -119,6 +119,8 @@ const ClientSchema = new mongoose.Schema(
             type: String,
             trim: true
         },
+        monthlyRent: Number,
+        depositAmount: Number,
 
         ebDoj: {
             type: String,
@@ -181,7 +183,7 @@ const ClientSchema = new mongoose.Schema(
             type: Number,
             default: 0,
         },
-        
+
         temporaryParkingCharges: {
             type: Number,
             default: 0,

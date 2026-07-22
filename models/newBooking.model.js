@@ -120,7 +120,7 @@ const bookingSchema = new mongoose.Schema(
             type: Number,
             default: 0,
         },
-        PartialAmount: {
+        partialAmount: {
             type: Number,
             default: 0,
         },

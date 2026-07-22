@@ -203,6 +203,9 @@ const transferBed = async (req, res) => {
 
     let previousDue = 0;
     let extraReceived = 0;
+    let historyEndDate = null;
+          let rentEndDate = null;
+
 
 
     // New Bed Charges
@@ -217,15 +220,17 @@ const transferBed = async (req, res) => {
     }).sort({ createdAt: -1 });
 
 
-   const histories = await ClientRentHistory.find({
-  clientId: client._id,
-  depositAmount: { $gt: 0 },
-}).select("depositAmount");
+    const histories = await ClientRentHistory.find({
+      clientId: client._id,
+      depositAmount: { $gt: 0 },
 
-const carryDeposit = histories.reduce(
-  (sum, history) => sum + Number(history.depositAmount || 0),
-  0
-);
+
+    }).select("depositAmount");
+
+    const carryDeposit = histories.reduce(
+      (sum, history) => sum + Number(history.depositAmount || 0),
+      0
+    );
 
     let daysCount;
     if (oldHistory) {
@@ -299,10 +304,27 @@ const carryDeposit = histories.reduce(
         0
       );
 
+
+  if (client.noticeLastDate) {
+    const cvd = new Date(client.noticeLastDate);
+
+    if (
+      cvd.getMonth() + 1 === month &&
+      cvd.getFullYear() === year
+    ) {
+      rentEndDate = cvd;
+    }
+  }
+
+  if (!rentEndDate) {
+    rentEndDate = new Date(year, month - 1, 30);
+  }
+
+  historyEndDate = rentEndDate;
       // Total days from DOJ till month end
       const totalEligibleDays = getDaysCount(
         client.clientDoj,
-        null,
+        rentEndDate,
         month,
         year
       );
@@ -342,7 +364,7 @@ const carryDeposit = histories.reduce(
 
       daysCount = getDaysCount(
         new Date(startDate),
-        null,
+        rentEndDate,
         month,
         year
       );
@@ -368,7 +390,7 @@ const carryDeposit = histories.reduce(
       depositAmountReceived: 0,
     });
 
-
+   console.log(111111111111111111111111111, historyEndDate)
 
     await ClientRentHistory.create({
       clientId: client._id,
@@ -385,7 +407,7 @@ const carryDeposit = histories.reduce(
       year,
       monthName: monthNames[month - 1],
       startDate: startDate,
-      endDate: new Date(year, month - 1, 30),
+      endDate: historyEndDate,
       ...calculation,
       paymentComments: "",
       remarks: "",

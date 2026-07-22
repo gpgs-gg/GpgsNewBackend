@@ -46,10 +46,10 @@ const isPdfFile = (file) => {
     file.mimetype === "application/pdf" ||
     file.originalname?.toLowerCase().endsWith(".pdf")
   );
-};    
+};
 
 const createProperty = asyncHandler(async (req, res) => {
-   const propertyCode = req.body.propertyCode;
+  const propertyCode = req.body.propertyCode;
   // Check duplicate property
   const existingProperty = await Property.findOne({ propertyCode });
   if (existingProperty) {
@@ -158,10 +158,6 @@ const getAllProperties = asyncHandler(async (req, res) => {
   });
 });
 
-
-
-
-
 // READ SINGLE
 const getPropertyById = asyncHandler(async (req, res) => {
   const property = await Property.findById(req.params.id);
@@ -206,7 +202,7 @@ const updateProperty = asyncHandler(async (req, res) => {
       ? req.body.owner.photoExisting
       : [req.body.owner.photoExisting])
     : [];
-    
+
   // 📸 PHOTO UPDATE
   if (getFiles("owner[photo]").length > 0) {
     const photoUploads = await Promise.all(
@@ -251,7 +247,7 @@ const updateProperty = asyncHandler(async (req, res) => {
       runValidators: true,
     }
   );
-console.timeEnd("Total Update");
+  console.timeEnd("Total Update");
   res.status(200).json({
     success: true,
     message: "Property updated successfully",
@@ -259,11 +255,10 @@ console.timeEnd("Total Update");
   });
 });
 
+const mongoose = require("mongoose");
 // DELETE
 const deleteProperty = asyncHandler(async (req, res) => {
-  const property = await Property.findByIdAndDelete(
-    req.params.id
-  );
+  const property = await Property.findByIdAndDelete(req.params.id);
 
   if (!property) {
     throw new ApiError(404, "Property not found");
@@ -274,6 +269,31 @@ const deleteProperty = asyncHandler(async (req, res) => {
     message: "Property deleted successfully",
   });
 });
+const deleteMultipleProperties = asyncHandler(async (req, res) => {
+  const { ids } = req.body;
+
+  if (!Array.isArray(ids) || ids.length === 0) {
+    throw new ApiError(400, "Please provide property ids.");
+  }
+
+  const invalidIds = ids.filter((id) => !mongoose.Types.ObjectId.isValid(id));
+
+  if (invalidIds.length) {
+    throw new ApiError(400, "One or more property ids are invalid.");
+  }
+
+  const result = await Property.deleteMany({
+    _id: { $in: ids },
+  });
+
+  res.status(200).json({
+    success: true,
+    message: `${result.deletedCount} propert${result.deletedCount === 1 ? "y" : "ies"} deleted successfully.`,
+    deletedCount: result.deletedCount,
+  });
+});
+
+
 
 // ADD WORKLOG
 const addWorklog = asyncHandler(async (req, res) => {
@@ -305,6 +325,7 @@ const addWorklog = asyncHandler(async (req, res) => {
 });
 
 // Property Dropdown List
+
 const getPropertyDropdown = async (req, res) => {
   try {
     const page = Number(req.query.page) || 1;
@@ -366,5 +387,6 @@ module.exports = {
   updateProperty,
   deleteProperty,
   addWorklog,
+  deleteMultipleProperties,
   getPropertyDropdown
 };

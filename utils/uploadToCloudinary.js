@@ -7,10 +7,7 @@ const uploadToCloudinary = (buffer, folder, isPdf = false) => {
     const stream = cloudinary.uploader.upload_stream(
       {
         folder,
-        resource_type: isPdf ? "raw" : "image",
-
-        // ✅ THIS IS THE FIX (important)
-        format: isPdf ? "pdf" : undefined,
+        resource_type: "auto",
       },
       (error, result) => {
         if (error) return reject(error);
