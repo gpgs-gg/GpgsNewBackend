@@ -176,6 +176,8 @@ const transferBed = async (req, res) => {
 
     const month = doj.getMonth() + 1;
     const year = doj.getFullYear();
+    // const month = doj.getMonth() + 1;
+    // const year = doj.getFullYear();
 
     // const lastHistory = await ClientRentHistory.findOne({
     //   clientId: client._id,
@@ -204,8 +206,7 @@ const transferBed = async (req, res) => {
     let previousDue = 0;
     let extraReceived = 0;
     let historyEndDate = null;
-          let rentEndDate = null;
-
+    let rentEndDate = null;
 
 
     // New Bed Charges
@@ -305,22 +306,22 @@ const transferBed = async (req, res) => {
       );
 
 
-  if (client.noticeLastDate) {
-    const cvd = new Date(client.noticeLastDate);
+      if (client.noticeLastDate) {
+        const cvd = new Date(client.noticeLastDate);
 
-    if (
-      cvd.getMonth() + 1 === month &&
-      cvd.getFullYear() === year
-    ) {
-      rentEndDate = cvd;
-    }
-  }
+        if (
+          cvd.getMonth() + 1 === month &&
+          cvd.getFullYear() === year
+        ) {
+          rentEndDate = cvd;
+        }
+      }
 
-  if (!rentEndDate) {
-    rentEndDate = new Date(year, month - 1, 30);
-  }
+      if (!rentEndDate) {
+        rentEndDate = new Date(year, month - 1, 30);
+      }
 
-  historyEndDate = rentEndDate;
+      historyEndDate = rentEndDate;
       // Total days from DOJ till month end
       const totalEligibleDays = getDaysCount(
         client.clientDoj,
@@ -389,8 +390,6 @@ const transferBed = async (req, res) => {
       processingFeesReceived: 0,
       depositAmountReceived: 0,
     });
-
-   console.log(111111111111111111111111111, historyEndDate)
 
     await ClientRentHistory.create({
       clientId: client._id,

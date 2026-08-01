@@ -13,28 +13,26 @@ const userSchema = new mongoose.Schema(
     email: {
       type: String,
       required: true,
-      unique: true,
-      lowercase: true,
+      // unique: true,
+      // lowercase: true,
       trim: true,
     },
-
     password: {
       type: String,
       required: true,
       minlength: 6,
     },
+    bookingId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Booking",
+      default: null,
+    },
 
- bookingId: {
-  type: mongoose.Schema.Types.ObjectId,
-  ref: "Booking",
-  default: null,
-},
-
-employeeId: {
-  type: mongoose.Schema.Types.ObjectId,
-  ref: "Employee",
-  default: null,
-},
+    employeeId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Employee",
+      default: null,
+    },
 
     role: {
       type: String,
@@ -53,18 +51,18 @@ employeeId: {
   },
 );
 
-// !Hash Password BEFORE SAVE- if password is update then hash again password and bcrypt it
+// Hash Password BEFORE SAVE- if password is update then hash again password and bcrypt it
 userSchema.pre("save", async function () {
   if (!this.isModified("password")) return;
 
   this.password = await bcrypt.hash(this.password, 10);
 });
 
-// !Password Compare Method- check the password
+// Password Compare Method- check the password
 userSchema.methods.isPasswordCorrect = async function (password) {
   return await bcrypt.compare(password, this.password);
 };
-//! Access Token Generator
+// Access Token Generator
 userSchema.methods.generateAccessToken = function () {
   return jwt.sign(
     {
@@ -78,7 +76,7 @@ userSchema.methods.generateAccessToken = function () {
     },
   );
 };
-//! generate refresh token has less information
+//generate refresh token has less information
 userSchema.methods.generateRefreshToken = function () {
   return jwt.sign(
     {

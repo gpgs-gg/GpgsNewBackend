@@ -14,9 +14,16 @@ const TicketSchema = new mongoose.Schema(
 
     title: String,
     description: String,
-    targetDate: Date,
-
-    attachment: [String],
+    targetDate: String,
+    
+    // attachment: [String],
+    attachment: [
+  {
+    url: String,
+    uploadedBy: String,
+    uploadedAt: String,
+  }
+],
 
     customerImpacted: String,
     escalated: String,
@@ -50,8 +57,8 @@ const TicketSchema = new mongoose.Schema(
         message: String,
         createdBy: String,
         createdAt: {
-          type: Date,
-          default: Date.now,
+          type: String,
+          default: String,
         },
       },
     ],
@@ -81,9 +88,9 @@ const TicketSchema = new mongoose.Schema(
 );
 
 // Explicit indexes
-TicketSchema.index({ ticketId: 1 }, { unique: true });
+// TicketSchema.index({ ticketId: 1 }, { unique: true });
 TicketSchema.index({ createdAt: -1 });
-TicketSchema.index({ propertyCode: 1 });
+TicketSchema.index({ propertyCode: 1 }); 
 TicketSchema.index({ status: 1 });
 TicketSchema.index({ priority: 1 });
 TicketSchema.index({ department: 1 });

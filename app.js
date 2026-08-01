@@ -1,3 +1,4 @@
+process.env.TZ = "Asia/Kolkata";
 const express = require("express");
 const propertyRoutes = require("./routes/propertyRoutes");
 const bedRoutes = require("./routes/bedRoutes");
@@ -10,7 +11,11 @@ const RentHistoryRoutes = require("./routes/clientRentHistoryRoutes");
 const TicketsRoutes = require("./routes/ticketRoutes");
 const ToggleClientLogin = require("./routes/toggleClientRoutes");
 const bankTransactionRoutes = require("./routes/bankTransactionRoutes");
+const optionsDataRoutes = require("./routes/OptionsRoutes");
 const errorHandler = require("./middleware/errorHandler");
+const UserRoutes = require("./routes/userRoutes");
+const LeadsRoutes = require("./routes/leadsRoutes");
+const GlobalSettingRoutes = require("./routes/globalSettingRoutes");
 const ApiError = require("./utils/ApiError");
 const cors = require("cors");
 const cookieParser = require("cookie-parser");
@@ -43,11 +48,14 @@ app.use("/api/beds", bedRoutes);
 app.use("/api/clients", clientRoutes);
 app.use("/api", bedTransferRoutes);
 app.use("/api/new-bookings", newBookingRoutes);
-app.use("/api/rent-history",RentHistoryRoutes);
-app.use("/api/tickets",TicketsRoutes);
-app.use("/api/toggle-client-login",ToggleClientLogin);
+app.use("/api/rent-history", RentHistoryRoutes);
+app.use("/api/tickets", TicketsRoutes);
+app.use("/api/toggle-client-login", ToggleClientLogin);
 app.use("/api/bank", bankTransactionRoutes);
-
+app.use("/api/options", optionsDataRoutes);
+app.use("/api/users", UserRoutes);
+app.use("/api/leads", LeadsRoutes);
+app.use("/api", GlobalSettingRoutes);
 app.use((req, res, next) => {
   next(new ApiError(404, `Route Not Found - ${req.originalUrl}`));
 });

@@ -34,7 +34,7 @@ const BedSchema = new mongoose.Schema(
 
     sharingType: {
       type: String,
-      enum: ["Private", "Double", "Triple", "Quad"],
+      // enum: ["Private", "Double", "Triple", "Quad"],
       required: true,
     },
 

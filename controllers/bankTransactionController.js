@@ -278,7 +278,7 @@ exports.uploadBankStatement = async (req, res) => {
 
 // ===================== GET ALL TRANSACTIONS =====================
 exports.getAllTransactions = async (req, res) => {
-    console.log("asjkdhkljahsdah skjdh ajkshd kjahs djkah sdjkhjkshsakjdhkjsdh")
+
   try {
     const {
       page = 1,
@@ -574,25 +574,194 @@ exports.getClientsByPropertyId = async (req, res) => {
   try {
     const { propertyId } = req.params;
 
-    const clients = await Client.find({
-      propertyId,
-      isBookingCancelled: false,
-    })
-      .select("fullName bedId propertyId stayType")
-      .populate("bedId", "roomNo bedNo")
-      .sort({ fullName: 1 });
+    const clients = await Client.aggregate([
+      {
+        $match: {
+          propertyId: new mongoose.Types.ObjectId(propertyId),
+          isBookingCancelled: false,
+        },
+      },
 
-    res.status(200).json({
+      {
+        $lookup: {
+          from: "beds",
+          localField: "bedId",
+          foreignField: "_id",
+          as: "bed",
+        },
+      },
+      {
+        $unwind: "$bed",
+      },
+
+      {
+        $lookup: {
+          from: "clientrenthistories",
+          let: { clientId: "$_id" },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $eq: ["$clientId", "$$clientId"],
+                },
+              },
+            },
+            {
+              $sort: {
+                year: -1,
+                month: -1,
+                createdAt: -1,
+              },
+            },
+            {
+              $limit: 1,
+            },
+          ],
+          as: "rentHistory",
+        },
+      },
+
+      {
+        $unwind: {
+          path: "$rentHistory",
+          preserveNullAndEmptyArrays: true,
+        },
+      },
+
+      {
+        $project: {
+          fullName: 1,
+          propertyId: 1,
+          stayType: 1,
+
+          bedId: {
+            _id: "$bed._id",
+            roomNo: "$bed.roomNo",
+            bedNo: "$bed.bedNo",
+          },
+
+          month: {
+            $ifNull: ["$rentHistory.month", null],
+          },
+          
+          monthName: {
+            $ifNull: ["$rentHistory.monthName", null],
+          },
+
+          year: {
+            $ifNull: ["$rentHistory.year", null],
+          },
+
+          paymentStatus: {
+            $ifNull: ["$rentHistory.paymentStatus", null],
+          },
+
+          currentDue: {
+            $ifNull: ["$rentHistory.currentDue", 0],
+          },
+
+          totalReceived: {
+            $ifNull: ["$rentHistory.totalReceived", 0],
+          },
+        },
+      },
+
+      {
+        $sort: {
+          fullName: 1,
+        },
+      },
+    ]);
+
+    return res.status(200).json({
       success: true,
       data: clients,
     });
   } catch (error) {
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: error.message,
     });
   }
 };
+
+// exports.updateClientRentHistoryReceived = async (req, res) => {
+//   try {
+//     const {
+//       propertyId,
+//       clientId,
+//       bedId,
+//       month,
+//       year,
+//       amount,
+//       // transactionId,
+//       // valueDate,
+//     } = req.body;
+
+//     const history = await ClientRentHistory.findOne({
+//       propertyId,
+//       clientId,
+//       bedId,
+//       month,
+//       year,
+//     });
+
+//     if (!history) {
+//       return res.status(404).json({
+//         success: false,
+//         message: "Rent history not found",
+//       });
+//     }
+
+//     const receivedAmount = Number(amount || 0);
+
+//     const cumulativeReceived =
+//       Number(history.totalReceived || 0) + receivedAmount;
+
+//     const calculation = calculateRentHistory({
+//       monthlyRent: history.monthlyRent,
+//       depositAmount: history.depositAmount,
+//       daysCount: history.daysCount,
+//       previousDue: history.previousDue,
+
+//       ebAmt: history.ebAmt,
+//       flatEB: history.flatEB,
+//       adjEB: history.adjEB,
+//       adjAmt: history.adjAmt,
+
+//       processingFees: history.processingFees,
+//       parkingCharges: history.parkingCharges,
+
+//       processingFeesReceived: history.processingFeesReceived,
+//       depositAmountReceived: history.depositAmountReceived,
+
+//       // 👇 important
+//       rentReceived: cumulativeReceived,
+//     });
+
+//     Object.assign(history, calculation);
+
+//     history.totalReceived = cumulativeReceived;
+
+//     history.totalReceivedHistory.push({
+//       amount: receivedAmount,
+//       // valueDate: valueDate || new Date(),
+//       date: new Date(),
+//     });
+
+//     await history.save();
+//     return res.status(200).json({
+//       success: true,
+//       message: "Received amount added successfully",
+//       data: history,
+//     });
+//   } catch (error) {
+//     return res.status(500).json({
+//       success: false,
+//       message: error.message,
+//     });
+//   }
+// };
 
 
 exports.updateClientRentHistoryReceived = async (req, res) => {
@@ -604,10 +773,28 @@ exports.updateClientRentHistoryReceived = async (req, res) => {
       month,
       year,
       amount,
-      // transactionId,
-      // valueDate,
+      transactionId,
     } = req.body;
+    // ===============================
+    // Check Transaction
+    // ===============================
+    const transaction = await BankTransaction.findById(transactionId);
 
+    if (!transaction) {
+      return res.status(404).json({
+        success: false,
+        message: "Bank transaction not found",
+      });
+    }
+    if (transaction.isMapped) {
+      return res.status(400).json({
+        success: false,
+        message: "This transaction is already mapped.",
+      });
+    }
+    // ===============================
+    // Find Rent History
+    // ===============================
     const history = await ClientRentHistory.findOne({
       propertyId,
       clientId,
@@ -623,49 +810,70 @@ exports.updateClientRentHistoryReceived = async (req, res) => {
       });
     }
 
-const receivedAmount = Number(amount || 0);
+    const receivedAmount = Number(amount || 0);
 
-const cumulativeReceived =
-  Number(history.totalReceived || 0) + receivedAmount;
+    const cumulativeReceived =
+      Number(history.totalReceived || 0) + receivedAmount;
 
-const calculation = calculateRentHistory({
-  monthlyRent: history.monthlyRent,
-  depositAmount: history.depositAmount,
-  daysCount: history.daysCount,
-  previousDue: history.previousDue,
+    // ===============================
+    // Recalculate
+    // ===============================
+    const calculation = calculateRentHistory({
+      monthlyRent: history.monthlyRent,
+      depositAmount: history.depositAmount,
+      daysCount: history.daysCount,
+      previousDue: history.previousDue,
 
-  ebAmt: history.ebAmt,
-  flatEB: history.flatEB,
-  adjEB: history.adjEB,
-  adjAmt: history.adjAmt,
+      ebAmt: history.ebAmt,
+      flatEB: history.flatEB,
+      adjEB: history.adjEB,
+      adjAmt: history.adjAmt,
 
-  processingFees: history.processingFees,
-  parkingCharges: history.parkingCharges,
+      processingFees: history.processingFees,
+      parkingCharges: history.parkingCharges,
 
-  processingFeesReceived: history.processingFeesReceived,
-  depositAmountReceived: history.depositAmountReceived,
+      processingFeesReceived:
+        history.processingFeesReceived,
 
-  // 👇 important
-  rentReceived: cumulativeReceived,
-});
+      depositAmountReceived:
+        history.depositAmountReceived,
 
-Object.assign(history, calculation);
+      rentReceived: cumulativeReceived,
+    });
 
-history.totalReceived = cumulativeReceived;
+    Object.assign(history, calculation);
 
-history.totalReceivedHistory.push({
-  amount: receivedAmount,
-  // valueDate: valueDate || new Date(),
-  date: new Date(),
-});
+    history.totalReceived = cumulativeReceived;
 
-await history.save();
+    history.totalReceivedHistory.push({
+      amount: receivedAmount,
+      transactionId: transaction._id,
+      valueDate: transaction.valueDate,
+      date: new Date(),
+    });
+
+    await history.save();
+
+    // ===============================
+    // Mark Transaction Used
+    // ===============================
+    transaction.isMapped = true;
+    transaction.mappedAt = new Date();
+    transaction.clientId = clientId;
+    transaction.propertyId = propertyId;
+    transaction.bedId = bedId;
+    transaction.rentHistoryId = history._id;
+
+    await transaction.save();
+
     return res.status(200).json({
       success: true,
-      message: "Received amount added successfully",
+      message: "Received amount added successfully.",
       data: history,
     });
   } catch (error) {
+    console.error(error);
+
     return res.status(500).json({
       success: false,
       message: error.message,

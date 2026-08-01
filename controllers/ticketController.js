@@ -17,11 +17,30 @@ if (lastTicket) {
   ticketId = `TKT-${year}-${String(lastNumber + 1).padStart(4, "0")}`;
 }
   // Upload attachments
-  const attachments = await Promise.all(
-    (req.files || []).map((file) =>
-      uploadFile(file, `Tickets/${ticketId}`)
-    )
-  );
+  // const attachments = await Promise.all(
+  //   (req.files || []).map((file) =>
+  //     uploadFile(file, `Tickets/${ticketId}`)
+  //   )
+  // );
+  const uploadedBy =
+  req.body.createdByName ||
+  req.body.updatedByName ||
+  "System";
+
+const attachments = await Promise.all(
+  (req.files || []).map(async (file) => {
+    const url = await uploadFile(
+      file,
+      `Tickets/${ticketId}`
+    );
+
+    return {
+      url,
+      uploadedBy,
+      uploadedAt: convertStringFormatDateTime(new Date()),
+    };
+  })
+);
   // Create Ticket
   const ticket = await Ticket.create({
     ...req.body,
@@ -172,7 +191,92 @@ const getTicketById = asyncHandler(async (req, res) => {
   });
 });
 
+const getTicketNavigation = asyncHandler(async (req, res) => {
+  const currentTicket = await Ticket.findById(req.params.id);
 
+  if (!currentTicket) {
+    throw new ApiError(404, "Ticket not found");
+  }
+
+  // Same query as getAllTickets
+  const query = {};
+
+  if (req.query.search) {
+    query.$or = [
+      {
+        ticketId: {
+          $regex: req.query.search,
+          $options: "i",
+        },
+      },
+      {
+        title: {
+          $regex: req.query.search,
+          $options: "i",
+        },
+      },
+      {
+        description: {
+          $regex: req.query.search,
+          $options: "i",
+        },
+      },
+      {
+        propertyCode: {
+          $regex: req.query.search,
+          $options: "i",
+        },
+      },
+    ];
+  }
+
+  if (req.query.status) query.status = req.query.status;
+  if (req.query.priority) query.priority = req.query.priority;
+  if (req.query.category) query.category = req.query.category;
+  if (req.query.department) query.department = req.query.department;
+  if (req.query.assignee) query.assignee = req.query.assignee;
+  if (req.query.manager) query.manager = req.query.manager;
+  if (req.query.propertyCode) query.propertyCode = req.query.propertyCode;
+  if (req.query.propertyLocation)
+    query.propertyLocation = req.query.propertyLocation;
+  if (req.query.customerImpacted)
+    query.customerImpacted = req.query.customerImpacted;
+  if (req.query.escalated)
+    query.escalated = req.query.escalated;
+
+  if (req.query.lateStatus === "LateAcknowledged") {
+    query.lateAcknowledged = "Yes";
+  }
+
+  if (req.query.lateStatus === "LateResolved") {
+    query.lateResolved = "Yes";
+  }
+
+  // Same order as Ticket List
+  const tickets = await Ticket.find(query)
+    .sort({ createdAt: -1 })
+    .select("_id");
+
+  const currentIndex = tickets.findIndex(
+    (t) => t._id.toString() === req.params.id
+  );
+
+  const previousId =
+    currentIndex > 0
+      ? tickets[currentIndex - 1]._id
+      : null;
+
+  const nextId =
+    currentIndex < tickets.length - 1
+      ? tickets[currentIndex + 1]._id
+      : null;
+
+  res.status(200).json({
+    success: true,
+    previousId,
+    nextId,
+  });
+});
 
 const calculateAcknowledged = (ticket, newStatus) => {
   let acknowledgedDate = ticket.acknowledgedDate;
@@ -284,79 +388,309 @@ const calculateResolved = (ticket, newStatus) => {
   return { lateResolved };
 };
 
+// const updateTicket = asyncHandler(async (req, res) => {
+//   const ticket = await Ticket.findById(req.params.id);
+//   const newStatus = req.body.status;
+
+// const acknowledgeData = calculateAcknowledged(
+//   ticket,
+//   newStatus
+// );
+
+// const resolveData = calculateResolved(
+//   ticket,
+//   newStatus
+// );
+//     if (!ticket) {
+//     throw new ApiError(404, "Ticket not found");
+//   }
+
+//   let attachments = [];
+
+// if (req.body.existingAttachments) {
+//   attachments = JSON.parse(req.body.existingAttachments);
+// }
+
+// delete req.body.existingAttachments;
+
+// if (req.files?.length) {
+//   const uploadedFiles = await Promise.all(
+//     req.files.map((file) =>
+//       uploadFile(file, `Tickets/${ticket.ticketId}`)
+//     )
+//   );
+
+//   attachments = [...attachments, ...uploadedFiles];
+// }
+
+// let auditorLogs = ticket.auditorLogs || [];
+
+// let auditorMessage = "";
+
+// if (Array.isArray(req.body.auditorLog)) {
+//   auditorMessage = req.body.auditorLog[0];
+// } else {
+//   auditorMessage = req.body.auditorLog;
+// }
+
+// auditorMessage = String(auditorMessage || "").trim();
+
+// if (auditorMessage) {
+//   auditorLogs.push({
+//     message: auditorMessage,
+//     createdBy: req.body.updatedByName,
+//     createdAt: new Date(),
+//   });
+// }
+
+//   const updatedTicket = await Ticket.findByIdAndUpdate(
+//     req.params.id,
+//     {
+//       ...req.body,
+//        auditorLogs,
+//       attachment: attachments,
+//       updatedDateTime: convertStringFormatDateTime(new Date()),
+//          acknowledgedDate:
+//       acknowledgeData.acknowledgedDate,
+
+//     lateAcknowledged:
+//       acknowledgeData.lateAcknowledged,
+
+//     lateResolved:
+//       resolveData.lateResolved,
+//     },
+//     {
+//       new: true,
+//       runValidators: true,
+//     }
+//   );
+
+//   res.status(200).json({
+//     success: true,
+//     message: "Ticket updated successfully",
+//     data: updatedTicket,
+//   });
+// });
+
 const updateTicket = asyncHandler(async (req, res) => {
   const ticket = await Ticket.findById(req.params.id);
-  const newStatus = req.body.status;
 
-const acknowledgeData = calculateAcknowledged(
-  ticket,
-  newStatus
-);
-
-const resolveData = calculateResolved(
-  ticket,
-  newStatus
-);
-    if (!ticket) {
+  if (!ticket) {
     throw new ApiError(404, "Ticket not found");
   }
 
+  const newStatus = req.body.status;
+
+  const acknowledgeData = calculateAcknowledged(ticket, newStatus);
+  const resolveData = calculateResolved(ticket, newStatus);
+const user =
+  req.body.updatedByName ||
+  req.body.createdByName ||
+  "System";
+  // ================= Attachments =================
+
   let attachments = [];
 
-if (req.body.existingAttachments) {
-  attachments = JSON.parse(req.body.existingAttachments);
-}
+  if (req.body.existingAttachments) {
+    attachments = JSON.parse(req.body.existingAttachments);
+  }
 
-delete req.body.existingAttachments;
+  delete req.body.existingAttachments;
 
-if (req.files?.length) {
-  const uploadedFiles = await Promise.all(
-    req.files.map((file) =>
-      uploadFile(file, `Tickets/${ticket.ticketId}`)
-    )
+  if (req.files?.length) {
+    // const uploadedFiles = await Promise.all(
+    //   req.files.map((file) =>
+    //     uploadFile(file, `Tickets/${ticket.ticketId}`)
+    //   )
+    // );
+
+    // attachments = [...attachments, ...uploadedFiles];
+    const uploadedFiles = await Promise.all(
+  req.files.map(async (file) => {
+    const url = await uploadFile(
+      file,
+      `Tickets/${ticket.ticketId}`
+    );
+
+    return {
+      url,
+      uploadedBy: user,
+      uploadedAt: convertStringFormatDateTime(new Date()),
+    };
+  })
+);
+
+      attachments = [...attachments, ...uploadedFiles];
+  }
+
+  // ================= Auditor Logs =================
+
+  let auditorLogs = ticket.auditorLogs || [];
+
+  let auditorMessage = "";
+
+  if (Array.isArray(req.body.auditorLog)) {
+    auditorMessage = req.body.auditorLog[0];
+  } else {
+    auditorMessage = req.body.auditorLog;
+  }
+
+  auditorMessage = String(auditorMessage || "").trim();
+
+  if (auditorMessage) {
+    auditorLogs.push({
+      message: auditorMessage,
+      createdBy: req.body.updatedByName || "System",
+      createdAt: convertStringFormatDateTime(new Date()),
+    });
+  }
+
+// ================= Work Logs =================
+
+let workLogs = ticket.workLogs || [];
+
+
+
+// Sarv changes eka array madhe collect karu
+const changes = [];
+// ================= Deleted Attachments =================
+
+const oldAttachments = ticket.attachment || [];
+const currentAttachments = attachments || [];
+
+const getUrl = (item) =>
+  typeof item === "string" ? item : item?.url;
+
+const deletedAttachments = oldAttachments.filter((oldFile) => {
+  const oldUrl = getUrl(oldFile);
+
+  return !currentAttachments.some(
+    (newFile) => getUrl(newFile) === oldUrl
   );
+});
 
-  attachments = [...attachments, ...uploadedFiles];
+if (deletedAttachments.length > 0) {
+  const deletedNames = deletedAttachments
+    .map((file) => {
+      const url = getUrl(file);
+      return decodeURIComponent(url.split("/").pop());
+    })
+    .join(", ");
+
+  changes.push(
+    `Deleted ${deletedAttachments.length} attachment(s): ${deletedNames}`
+  );
+}
+const fields = [
+  { key: "status", label: "Status" },
+  { key: "priority", label: "Priority" },
+  { key: "department", label: "Department" },
+  { key: "category", label: "Category" },
+  { key: "manager", label: "Manager" },
+  { key: "ticketManager", label: "Ticket Manager" },
+  { key: "assignee", label: "Assignee" },
+  { key: "propertyCode", label: "Property" },
+  { key: "propertyLocation", label: "Property Location" },
+  { key: "customerImpacted", label: "Customer Impacted" },
+  { key: "escalated", label: "Escalated" },
+  { key: "title", label: "Title" },
+  { key: "description", label: "Description" },
+  { key: "actualTimeSpent", label: "Actual Time" },
+];
+
+fields.forEach(({ key, label }) => {
+  const oldValue = ticket[key] ?? "";
+  const newValue = req.body[key];
+
+  if (
+    newValue !== undefined &&
+    String(oldValue) !== String(newValue)
+  ) {
+    changes.push(
+      `${label} changed from "${oldValue || "Blank"}" to "${newValue}"`
+    );
+  }
+});
+
+// Target Date
+if (
+  req.body.targetDate &&
+  String(ticket.targetDate || "") !==
+    String(req.body.targetDate)
+) {
+  changes.push(
+    `Target Date changed from "${ticket.targetDate || "Blank"}" to "${req.body.targetDate}"`
+  );
 }
 
-let auditorLogs = ticket.auditorLogs || [];
+// Attachment Upload
+// if (req.files?.length) {
+//   changes.push(
+//     `${req.files.length} attachment(s) uploaded`
+//   );
+// }
+if (req.files?.length) {
+  const names = req.files
+    .map((x) => x.originalname)
+    .join(", ");
 
-let auditorMessage = "";
-
-if (Array.isArray(req.body.auditorLog)) {
-  auditorMessage = req.body.auditorLog[0];
-} else {
-  auditorMessage = req.body.auditorLog;
+  changes.push(
+    `uploaded ${req.files.length} attachment(s): ${names}`
+  );
 }
-
-auditorMessage = String(auditorMessage || "").trim();
-
+// Auditor Log Add
 if (auditorMessage) {
-  auditorLogs.push({
-    message: auditorMessage,
-    createdBy: req.body.updatedByName,
-    createdAt: new Date(),
+  changes.push(`Auditor Log added`);
+}
+
+// Manual Work Log (Add WorkLog field)
+const newWorkLog = String(req.body.newWorkLog || "").trim();
+
+if (newWorkLog) {
+  workLogs.push({
+    message: newWorkLog,
+    createdBy: user,
+    createdAt: convertStringFormatDateTime(new Date()),
   });
 }
+
+// Ekach WorkLog create kara
+if (changes.length > 0) {
+  workLogs.push({
+    message: changes.join("\n"),
+    createdBy: user,
+    createdAt: convertStringFormatDateTime(new Date()),
+  });
+}
+
+  // ================= Update Ticket =================
 
   const updatedTicket = await Ticket.findByIdAndUpdate(
     req.params.id,
     {
       ...req.body,
-       auditorLogs,
+
       attachment: attachments,
-      updatedDateTime: convertStringFormatDateTime(new Date()),
-         acknowledgedDate:
-      acknowledgeData.acknowledgedDate,
 
-    lateAcknowledged:
-      acknowledgeData.lateAcknowledged,
+      auditorLogs,
 
-    lateResolved:
-      resolveData.lateResolved,
+      workLogs,
+
+      updatedDateTime: convertStringFormatDateTime(
+        new Date()
+      ),
+
+      acknowledgedDate:
+        acknowledgeData.acknowledgedDate,
+
+      lateAcknowledged:
+        acknowledgeData.lateAcknowledged,
+
+      lateResolved:
+        resolveData.lateResolved,
     },
     {
-      new: true,
+      returnDocument: "after",
       runValidators: true,
     }
   );
@@ -368,10 +702,11 @@ if (auditorMessage) {
   });
 });
 
+
 const deleteTicket = asyncHandler(async (req, res) => {
   const ticket = await Ticket.findByIdAndDelete(req.params.id);
 
-   if (!ticket) {
+   if (!ticket) { 
     throw new ApiError(404, "Ticket not found");
   }
 
@@ -394,7 +729,7 @@ const addWorkLog = asyncHandler(async (req, res) => {
       },
     },
     {
-      new: true,
+       returnDocument: "after",
     }
   );
 
@@ -595,4 +930,5 @@ module.exports = {
   addWorkLog,
   getTicketDropdown,
   insertBulkTickets,
+  getTicketNavigation,
 };

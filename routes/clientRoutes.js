@@ -41,7 +41,7 @@ router.post(
   "/create-from-booking",
   createClientFromBooking
 );
-router.post("/dummy-clients", createDummyClients);
+// router.post("/dummy-clients", createDummyClients);
 
 module.exports = router;
 

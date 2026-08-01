@@ -101,6 +101,52 @@ exports.getClientRentHistoryById = async (req, res) => {
   }
 };
 
+exports.getClientRentHistoryByBookingId = async (req, res) => {
+  try {
+    const { bookingId } = req.params;
+
+    // Booking ke sabhi clients
+    const clients = await Client.find({ bookingId }).select("_id");
+
+    if (!clients.length) {
+      return res.status(404).json({
+        success: false,
+        message: "No clients found for this booking.",
+      });
+    }
+
+    const clientIds = clients.map((c) => c._id);
+
+    // Sabhi rent history
+    const histories = await ClientRentHistory.find({
+      clientId: { $in: clientIds },
+    })
+      .populate("clientId", "fullName callingNo clientDoj stayType")
+      .populate("propertyId", "propertyCode")
+      .populate("bedId", "bedNo roomNo")
+      .sort({
+        year: -1,
+        month: -1,
+        createdAt: -1,
+      });
+
+    return res.status(200).json({
+      success: true,
+      count: histories.length,
+      data: histories,
+    });
+  } catch (error) {
+    console.error(
+      "Get Rent History By BookingId Error:",
+      error
+    );
+
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
 
 
 

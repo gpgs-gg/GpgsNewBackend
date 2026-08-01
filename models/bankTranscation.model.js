@@ -1,4 +1,3 @@
-// models/BankTransaction.js
 const mongoose = require("mongoose");
 
 const bankTransactionSchema = new mongoose.Schema(
@@ -8,42 +7,79 @@ const bankTransactionSchema = new mongoose.Schema(
       required: [true, "Transaction date is required"],
       index: true,
     },
+
     narration: {
       type: String,
       required: [true, "Narration is required"],
       trim: true,
     },
+
     chqNo: {
       type: String,
       trim: true,
       default: "",
     },
+
     withdrawal: {
       type: Number,
       default: 0,
       min: 0,
     },
+
     deposit: {
       type: Number,
       default: 0,
       min: 0,
     },
+
     balance: {
       type: Number,
       default: 0,
     },
+
     valueDate: {
       type: Date,
     },
+
     source: {
       type: String,
       enum: ["upload", "api", "manual"],
       default: "upload",
     },
+
     userId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
       index: true,
+    },
+
+    // ===========================
+    // Mapping Details
+    // ===========================
+    isMapped: {
+      type: Boolean,
+      default: false,
+      index: true,
+    },
+
+    mappedAt: {
+      type: Date,
+      default: null,
+    },
+
+    clientId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Client",
+    },
+
+    propertyId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Property",
+    },
+
+    bedId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Bed",
     },
     metadata: {
       fileName: String,
@@ -56,13 +92,20 @@ const bankTransactionSchema = new mongoose.Schema(
   }
 );
 
-// Compound index for duplicate detection
-bankTransactionSchema.index(
-  { date: 1, narration: 1, withdrawal: 1, deposit: 1 },
-  { unique: false }
+// Duplicate detection
+bankTransactionSchema.index({
+  date: 1,
+  narration: 1,
+  withdrawal: 1,
+  deposit: 1,
+});
+
+// Search
+bankTransactionSchema.index({
+  narration: "text",
+});
+
+module.exports = mongoose.model(
+  "BankTransaction",
+  bankTransactionSchema
 );
-
-// Index for search
-bankTransactionSchema.index({ narration: "text" });
-
-module.exports = mongoose.model("BankTransaction", bankTransactionSchema);

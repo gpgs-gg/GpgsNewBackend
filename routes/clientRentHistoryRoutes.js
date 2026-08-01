@@ -6,7 +6,8 @@ const {
  updateClientRentHistory,
  getClientRentHistory,
  getClientRentHistoryById,
- getClientCompleteRentHistory
+ getClientCompleteRentHistory,
+ getClientRentHistoryByBookingId
 } = require("../controllers/ClientRentHistoryController");
 
 router.post("/", createClientRentHistory);
@@ -16,7 +17,10 @@ router.get("/", getClientRentHistory);
 router.get("/:id", getClientRentHistoryById); 
 
 // router.get("/client/:clientId", getClientCompleteRentHistory);
-
+router.get(
+  "/renthistoryfrombooking/:bookingId",
+ getClientRentHistoryByBookingId
+);
 router.put("/:id", updateClientRentHistory);
 
 // router.delete("/:id", rentHistory);
