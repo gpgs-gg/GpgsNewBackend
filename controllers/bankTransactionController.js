@@ -276,78 +276,144 @@ exports.uploadBankStatement = async (req, res) => {
   }
 };
 
+
+
+
+
 // ===================== GET ALL TRANSACTIONS =====================
 exports.getAllTransactions = async (req, res) => {
-
   try {
-    const {
-      page = 1,
-      limit = 50,
-      startDate,
-      endDate,
-      search,
-      minAmount,
-      maxAmount,
-      type,
-    } = req.query;
+    // ================= Pagination =================
+    const page = Math.max(parseInt(req.query.page) || 1, 1);
+    const limit = Math.max(parseInt(req.query.limit) || 10, 1);
+    const skip = (page - 1) * limit;
 
+    // ================= Base Query =================
     const query = {};
 
-    if (startDate || endDate) {
+    // ================= Global Search =================
+    if (req.query.search?.trim()) {
+      const regex = new RegExp(req.query.search.trim(), "i");
+
+      query.$or = [{ narration: regex }, { chqNo: regex }, { source: regex }];
+    }
+
+    // ================= Transaction Date =================
+    if (req.query.fromDate || req.query.toDate) {
       query.date = {};
-      if (startDate) query.date.$gte = new Date(startDate);
-      if (endDate) query.date.$lte = new Date(endDate);
-    }
 
-    if (search) {
-      query.narration = { $regex: search, $options: "i" };
-    }
-
-    if (minAmount || maxAmount) {
-      query.$or = [];
-      if (minAmount) {
-        query.$or.push(
-          { withdrawal: { $gte: parseFloat(minAmount) } },
-          { deposit: { $gte: parseFloat(minAmount) } }
-        );
+      if (req.query.fromDate) {
+        query.date.$gte = new Date(req.query.fromDate);
       }
-      if (maxAmount) {
-        query.$or.push(
-          { withdrawal: { $lte: parseFloat(maxAmount) } },
-          { deposit: { $lte: parseFloat(maxAmount) } }
-        );
+
+      if (req.query.toDate) {
+        const end = new Date(req.query.toDate);
+        end.setHours(23, 59, 59, 999);
+        query.date.$lte = end;
       }
     }
 
-    if (type === "credit") {
+    // ================= Value Date =================
+    if (req.query.valueFromDate || req.query.valueToDate) {
+      query.valueDate = {};
+
+      if (req.query.valueFromDate) {
+        query.valueDate.$gte = new Date(req.query.valueFromDate);
+      }
+
+      if (req.query.valueToDate) {
+        const end = new Date(req.query.valueToDate);
+        end.setHours(23, 59, 59, 999);
+        query.valueDate.$lte = end;
+      }
+    }
+
+    // ================= Source =================
+    if (req.query.source) {
+      query.source = req.query.source;
+    }
+
+    // ================= Uploaded By =================
+    if (req.query.userId) {
+      query.userId = req.query.userId;
+    }
+
+    // ================= Cheque / Ref No =================
+    if (req.query.chqNo) {
+      query.chqNo = {
+        $regex: req.query.chqNo,
+        $options: "i",
+      };
+    }
+
+    // ================= Narration =================
+    if (req.query.narration) {
+      query.narration = {
+        $regex: req.query.narration,
+        $options: "i",
+      };
+    }
+
+    // ================= Amount Filter =================
+    if (req.query.minAmount || req.query.maxAmount) {
+      const min = Number(req.query.minAmount || 0);
+      const max = Number(req.query.maxAmount || Number.MAX_SAFE_INTEGER);
+
+      query.$and = [
+        {
+          $or: [
+            {
+              withdrawal: {
+                $gte: min,
+                $lte: max,
+              },
+            },
+            {
+              deposit: {
+                $gte: min,
+                $lte: max,
+              },
+            },
+          ],
+        },
+      ];
+    }
+
+    // ================= Transaction Type =================
+    // ================= Transaction Type =================
+    if (req.query.transactionType === "deposit") {
       query.deposit = { $gt: 0 };
-    } else if (type === "debit") {
+    }
+
+    if (req.query.transactionType === "withdrawal") {
       query.withdrawal = { $gt: 0 };
     }
 
-    const skip = (parseInt(page) - 1) * parseInt(limit);
+    // ================= Count =================
+    const totalRecords = await BankTransaction.countDocuments(query);
 
-    const [transactions, total] = await Promise.all([
-      BankTransaction.find(query)
-        .sort({ date: -1 })
-        .skip(skip)
-        .limit(parseInt(limit))
-        .lean(),
-      BankTransaction.countDocuments(query),
-    ]);
+    // ================= Fetch =================
+    const transactions = await BankTransaction.find(query)
+      .populate("userId", "fullName")
+      .sort({ date: -1, createdAt: -1 })
+      .skip(skip)
+      .limit(limit)
+      .lean();
 
     res.status(200).json({
       success: true,
+      page,
+      limit,
+      totalRecords,
+      totalPages: Math.ceil(totalRecords / limit),
+      hasNextPage: page < Math.ceil(totalRecords / limit),
+      hasPrevPage: page > 1,
+      count: transactions.length,
       data: transactions,
-      pagination: {
-        page: parseInt(page),
-        limit: parseInt(limit),
-        total,
-        pages: Math.ceil(total / limit),
-      },
     });
   } catch (error) {
     console.error("Get Transactions Error:", error);
+
     res.status(500).json({
       success: false,
       message: "Failed to fetch transactions",
@@ -355,6 +421,10 @@ exports.getAllTransactions = async (req, res) => {
     });
   }
 };
+
+
+
+
 
 // ===================== GET SINGLE TRANSACTION =====================
 exports.getTransactionById = async (req, res) => {
@@ -877,6 +947,38 @@ exports.updateClientRentHistoryReceived = async (req, res) => {
     return res.status(500).json({
       success: false,
       message: error.message,
+    });
+  }
+};
+
+exports.getTransactionByNarration = async (req, res) => {
+  try {
+    const { narration } = req.params;
+    if (!narration?.trim()) {
+      return res.status(400).json({
+        success: false,
+        message: "Narration is required",
+      });
+    }
+    const transaction = await BankTransaction.findOne({
+      narration: narration.trim(),
+    }).lean();
+    if (!transaction) {
+      return res.status(404).json({
+        success: false,
+        message: "Transaction not found",
+      });
+    }
+    res.status(200).json({
+      success: true,
+      data: transaction,
+    });
+  } catch (error) {
+    console.error("Get Transaction By Narration Error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch transaction",
+      error: error.message,
     });
   }
 };

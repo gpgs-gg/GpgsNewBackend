@@ -3,12 +3,13 @@ const asyncHandler = require("../middleware/asyncHandler");
 const ApiError = require("../utils/ApiError");
 
 // ================= GET GLOBAL SETTINGS =================
-const getLeadAutoTransfer = asyncHandler(async (req, res) => {
+const getGlobalSettings = asyncHandler(async (req, res) => {
   let setting = await GlobalSettings.findOne();
 
   if (!setting) {
     setting = await GlobalSettings.create({
       leadAutoTransfer: false,
+      teamAutoAssignment: true,
     });
   }
 
@@ -19,45 +20,49 @@ const getLeadAutoTransfer = asyncHandler(async (req, res) => {
 });
 
 // ================= UPDATE GLOBAL SETTINGS =================
-const updateLeadAutoTransfer = asyncHandler(async (req, res) => {
-  const { leadAutoTransfer } = req.body;
+const updateGlobalSettings = asyncHandler(async (req, res) => {
+  const {
+    leadAutoTransfer,
+    teamAutoAssignment,
+  } = req.body;
 
-  if (typeof leadAutoTransfer !== "boolean") {
+  const updateData = {};
+
+  if (typeof leadAutoTransfer === "boolean") {
+    updateData.leadAutoTransfer = leadAutoTransfer;
+  }
+
+  if (typeof teamAutoAssignment === "boolean") {
+    updateData.teamAutoAssignment = teamAutoAssignment;
+  }
+
+  if (!Object.keys(updateData).length) {
     throw new ApiError(
       400,
-      "leadAutoTransfer must be true or false"
+      "Nothing to update"
     );
   }
 
   const setting = await GlobalSettings.findOneAndUpdate(
     {},
     {
-      leadAutoTransfer,
+      $set: updateData,
     },
     {
-      returnDocument: "after",
+      new: true,
       upsert: true,
       runValidators: true,
+      setDefaultsOnInsert: true,
     }
   );
 
-  if (!setting) {
-    throw new ApiError(
-      500,
-      "Failed to update global settings"
-    );
-  }
-
   res.status(200).json({
     success: true,
-    message: `Lead Auto Transfer ${
-      leadAutoTransfer ? "Enabled" : "Disabled"
-    } Successfully`,
     data: setting,
   });
 });
 
 module.exports = {
-  getLeadAutoTransfer,
-  updateLeadAutoTransfer,
+  getGlobalSettings,
+  updateGlobalSettings,
 };

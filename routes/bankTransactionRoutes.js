@@ -8,7 +8,10 @@ router.post("/upload", bankController.upload.single("file"), bankController.uplo
 router.put("/transaction-received", bankController.updateClientRentHistoryReceived);
 router.get("/", bankController.getAllTransactions);
 router.get("/:id", bankController.getTransactionById);
-router.put("/:id", bankController.updateTransaction);
+router.get(
+  "/amountFromNarration/:narration",
+  bankController.getTransactionByNarration
+);  router.put("/:id", bankController.updateTransaction);
 router.delete("/:id", bankController.deleteTransaction);
 router.post("/delete-multiple", bankController.deleteMultipleTransactions);
 router.get("/summary/stats", bankController.getSummary);

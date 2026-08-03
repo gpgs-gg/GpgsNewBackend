@@ -42,16 +42,16 @@ exports.getAllOptionsData = async (req, res) => {
 
       OptionsData.countDocuments(query),
     ]);
-
-    return res.status(200).json({
+ res.status(200).json({
       success: true,
+      page,
+      limit,
+      totalRecords: total,
+      totalPages: Math.ceil(total / limit),
+      hasNextPage: page < Math.ceil(total / limit),
+      hasPrevPage: page > 1,
+      count: optionsData.length,
       data: optionsData,
-      pagination: {
-        page,
-        limit,
-        total,
-        totalPages: Math.ceil(total / limit),
-      },
     });
   } catch (error) {
     console.error("Get Master Data Error:", error);
@@ -278,6 +278,53 @@ exports.getOptionsDataByCategory = async (req, res) => {
     return res.status(500).json({
       success: false,
       message: "Failed to fetch master data.",
+    });
+  }
+};
+
+
+exports.getBatchOptions = async (req, res) => {
+  try {
+    const { categories } = req.query;
+
+    if (!categories) {
+      return res.status(400).json({
+        success: false,
+        message: "Categories are required.",
+      });
+    }
+
+    const categoryList = categories
+      .split(",")
+      .map((item) => item.trim().toLowerCase());
+
+    const options = await OptionsData.find({
+      categoryKey: { $in: categoryList },
+    }).select("categoryKey items");
+
+    const result = {};
+
+    options.forEach((category) => {
+      result[category.categoryKey] = category.items
+        .filter((item) => item.isActive)
+        .sort((a, b) => a.displayOrder - b.displayOrder)
+        .map((item) => ({
+          label: item.label,
+          value: item.value,
+          code: item.code,
+        }));
+    });
+
+    return res.status(200).json({
+      success: true,
+      data: result,
+    });
+  } catch (error) {
+    console.error("Get Batch Options Error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch options.",
     });
   }
 };

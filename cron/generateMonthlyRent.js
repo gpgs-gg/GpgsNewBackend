@@ -9,9 +9,7 @@ const {
 cron.schedule("*/30 * * * * *", async () => {
   try {
     console.log("Monthly Rent Generation Started");
-
-    // const result = await generateMonthlyRent();
-
+    const result = await generateMonthlyRent();
     console.log("Monthly Rent Generated");
     // console.log(result);
   } catch (err) {

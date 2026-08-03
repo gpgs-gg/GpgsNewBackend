@@ -20,6 +20,7 @@ const TicketSchema = new mongoose.Schema(
     attachment: [
   {
     url: String,
+    role:String,
     uploadedBy: String,
     uploadedAt: String,
   }

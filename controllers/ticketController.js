@@ -26,6 +26,8 @@ if (lastTicket) {
   req.body.createdByName ||
   req.body.updatedByName ||
   "System";
+   
+  const role = req.body.createdBy
 
 const attachments = await Promise.all(
   (req.files || []).map(async (file) => {
@@ -36,6 +38,7 @@ const attachments = await Promise.all(
 
     return {
       url,
+      role: role,
       uploadedBy,
       uploadedAt: convertStringFormatDateTime(new Date()),
     };
@@ -487,6 +490,7 @@ const user =
   req.body.updatedByName ||
   req.body.createdByName ||
   "System";
+  const role = req.body.createdBy
   // ================= Attachments =================
 
   let attachments = [];
@@ -514,6 +518,7 @@ const user =
 
     return {
       url,
+      role: role,
       uploadedBy: user,
       uploadedAt: convertStringFormatDateTime(new Date()),
     };

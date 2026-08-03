@@ -10,6 +10,7 @@ const {
   updateTicket,
   deleteTicket,
   addWorkLog,
+  getTicketNavigation,
 } = require("../controllers/ticketController");
 const { verifyJWT } = require("../middleware/verifyJWT");
 
@@ -22,6 +23,7 @@ router.post(
 
 // READ ALL
 router.get("/",  getAllTickets);
+router.get("/navigation/:id",  getTicketNavigation);
 
 // READ SINGLE
 router.get("/:id", getTicketById);

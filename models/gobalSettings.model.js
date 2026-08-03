@@ -6,6 +6,11 @@ const GlobalSettingsSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+
+    teamAutoAssignment: {
+      type: Boolean,
+      default: true,
+    },
   },
   {
     timestamps: true,

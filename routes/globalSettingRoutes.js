@@ -2,12 +2,11 @@ const express = require("express");
 const router = express.Router();
 
 const {
-  getLeadAutoTransfer,
-  updateLeadAutoTransfer,
+  getGlobalSettings,
+  updateGlobalSettings,
 } = require("../controllers/GlobalSettingController");
 
-router.get("/lead-auto-transfer", getLeadAutoTransfer);
-
-router.put("/lead-auto-transfer", updateLeadAutoTransfer);
+router.get("/global-settings", getGlobalSettings);
+router.put("/global-settings", updateGlobalSettings);
 
 module.exports = router;

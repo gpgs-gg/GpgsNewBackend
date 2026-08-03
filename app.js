@@ -16,6 +16,8 @@ const errorHandler = require("./middleware/errorHandler");
 const UserRoutes = require("./routes/userRoutes");
 const LeadsRoutes = require("./routes/leadsRoutes");
 const GlobalSettingRoutes = require("./routes/globalSettingRoutes");
+const housekeepingRoutes = require("./routes/houseKeepingRoutes");
+const maintenanceRoutes = require("./routes/maintenanceRoutes");
 const ApiError = require("./utils/ApiError");
 const cors = require("cors");
 const cookieParser = require("cookie-parser");
@@ -56,6 +58,8 @@ app.use("/api/options", optionsDataRoutes);
 app.use("/api/users", UserRoutes);
 app.use("/api/leads", LeadsRoutes);
 app.use("/api", GlobalSettingRoutes);
+app.use("/api/housekeeping", housekeepingRoutes);
+app.use("/api/maintenance", maintenanceRoutes);
 app.use((req, res, next) => {
   next(new ApiError(404, `Route Not Found - ${req.originalUrl}`));
 });

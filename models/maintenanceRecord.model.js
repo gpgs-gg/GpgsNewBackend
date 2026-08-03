@@ -1,0 +1,76 @@
+const mongoose = require("mongoose");
+
+const HistorySchema = new mongoose.Schema(
+  {
+    completedDate: {
+      type: Date,
+      required: true,
+    },
+
+    updatedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
+    },
+
+    updatedByName: {
+      type: String,
+      required: true,
+    },
+
+    remarks: {
+      type: String,
+      default: "",
+    },
+
+    attachments: [
+      {
+        type: String,
+      },
+    ],
+
+    completedAt: {
+      type: Date,
+      default: Date.now,
+    },
+  },
+  {
+    _id: false,
+  },
+);
+
+const MaintenanceRecordSchema = new mongoose.Schema(
+  {
+    propertyId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Property",
+      required: true,
+    },
+
+    activityId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "MaintenanceActivity",
+      required: true,
+    },
+
+    history: {
+      type: [HistorySchema],
+      default: [],
+    },
+  },
+  {
+    timestamps: true,
+  },
+);
+
+MaintenanceRecordSchema.index(
+  {
+    propertyId: 1,
+    activityId: 1,
+  },
+  {
+    unique: true,
+  },
+);
+
+module.exports = mongoose.model("MaintenanceRecord", MaintenanceRecordSchema);
