@@ -1,6 +1,5 @@
-
 const Property = require("../models/property.model");
-const MaintenanceActivity = require("../models/maintenanceActivity.model");
+
 const MaintenanceRecord = require("../models/maintenanceRecord.model");
 const OptionsData = require("../models/options.model");
 const asyncHandler = require("../middleware/asyncHandler");
@@ -37,10 +36,11 @@ const fetchMaintenanceData = asyncHandler(async (req, res) => {
     });
   // Build the activities array with frequency and notification values
   const activities =
-    master?.items
-      ?.filter((item) => item.isActive !== false)
-      .sort((a, b) => (a.displayOrder || 0) - (b.displayOrder || 0))
+    master.items
+      .filter((item) => item.isActive)
+      .sort((a, b) => a.displayOrder - b.displayOrder)
       .map((item) => ({
+        activityId: item._id,
         activityName: item.label,
         frequency: Number(item.value),
         notifyBefore: notificationMap[item.label.trim().toLowerCase()] ?? 0,
@@ -59,7 +59,6 @@ const fetchMaintenanceData = asyncHandler(async (req, res) => {
 
   const records = await MaintenanceRecord.find()
     .populate("propertyId", "propertyCode")
-    .populate("activityId")
     .populate("history.updatedBy", "name");
 
   // 4. Headers
@@ -68,13 +67,17 @@ const fetchMaintenanceData = asyncHandler(async (req, res) => {
     "Activities",
     "Freq",
     "Notify",
-    ...properties.map((p) => p.propertyCode),
+    ...properties.map((p) => ({
+      title: p.propertyCode,
+      propertyId: p._id,
+    })),
   ];
 
   // 5. Rows
   const data = activities.map((activity, index) => {
     const row = {
       SrNo: index + 1,
+      activityId: activity.activityId,
       Activities: activity.activityName,
       Freq: activity.frequency,
       Notify: activity.notifyBefore,
@@ -83,8 +86,8 @@ const fetchMaintenanceData = asyncHandler(async (req, res) => {
     properties.forEach((property) => {
       const record = records.find(
         (r) =>
-          r.propertyId?._id?.toString() === property._id.toString() &&
-          r.activityId?.activityName === activity.activityName,
+          r.propertyId._id.toString() === property._id.toString() &&
+          r.activityId.toString() === activity.activityId.toString(),
       );
 
       if (!record || record.history.length === 0) {
@@ -95,13 +98,11 @@ const fetchMaintenanceData = asyncHandler(async (req, res) => {
       const history = [...record.history]
         .sort((a, b) => new Date(b.completedAt) - new Date(a.completedAt))
         .map((h) => {
-          const completedDate = new Date(h.completedDate)
-            .toLocaleDateString("en-GB", {
-              day: "2-digit",
-              month: "short",
-              year: "numeric",
-            })
-            .replace(/ /g, " ");
+          const date = new Date(h.completedDate).toLocaleDateString("en-GB", {
+            day: "2-digit",
+            month: "short",
+            year: "numeric",
+          });
 
           const completedAt = new Date(h.completedAt).toLocaleString("en-IN", {
             hour12: false,
@@ -109,7 +110,7 @@ const fetchMaintenanceData = asyncHandler(async (req, res) => {
 
           const updatedBy = h.updatedByName || h.updatedBy?.name || "Unknown";
 
-          return `${completedDate}_[${completedAt} - ${updatedBy}]`;
+          return `${date}_[${completedAt} - ${updatedBy}]`;
         });
 
       row[property.propertyCode] = history.join("$") + "$";
@@ -140,42 +141,18 @@ const updateMaintenanceData = asyncHandler(async (req, res) => {
     });
   }
 
-  const activities = await MaintenanceActivity.find({
-    isActive: true,
-  }).sort({
-    displayOrder: 1,
-  });
-
-  const properties = await Property.find(
-    {},
-    {
-      propertyCode: 1,
-    },
-  );
-
-  const propertyMap = new Map();
-
-  properties.forEach((property) => {
-    propertyMap.set(property.propertyCode, property);
-  });
-
   const operations = [];
 
   for (const update of updates) {
-    const activity = activities[update.rowIndex];
-
-    if (!activity) continue;
-
+    if (!update.activityId) continue;
     for (const column of update.columns) {
-      const property = propertyMap.get(column.columnName);
-
-      if (!property) continue;
+      if (!column.propertyId) continue;
 
       operations.push({
         updateOne: {
           filter: {
-            propertyId: property._id,
-            activityId: activity._id,
+            propertyId: column.propertyId,
+            activityId: update.activityId,
           },
 
           update: {
@@ -183,10 +160,11 @@ const updateMaintenanceData = asyncHandler(async (req, res) => {
               history: {
                 $each: [
                   {
-                    completedDate: parseDate(column.value),
+                    completedDate: new Date(column.value),
                     completedAt: new Date(),
                     updatedBy: req.user?._id,
-                    updatedByName: column.name || req.user?.name || "Unknown",
+                    updatedByName:
+                      column.updatedByName || req.user?.name || "Unknown",
                     remarks: "",
                     attachments: [],
                   },

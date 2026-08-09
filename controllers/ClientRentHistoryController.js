@@ -1,5 +1,6 @@
 const ClientRentHistory = require("../models/clientRentHistory.model");
 const Client = require("../models/client.model");
+const Property = require("../models/property.model");
 const Bed = require("../models/bed.model");
 const calculateRentHistory = require("../utils/calculateRentHistory");
 const getDaysCount = require("../utils/getDaysCount");
@@ -42,13 +43,69 @@ const getDaysCount = require("../utils/getDaysCount");
 //   }
 // };
 
+
 exports.getClientRentHistory = async (req, res) => {
   try {
-    const { clientId, month, year } = req.query;
+    const { clientId, propertyId, month, year, search } = req.query;
+
     const filter = {};
+
+    // Direct filters
     if (clientId) filter.clientId = clientId;
+    if (propertyId) filter.propertyId = propertyId;
     if (month) filter.month = Number(month);
     if (year) filter.year = Number(year);
+
+    // Search filter
+    if (search?.trim()) {
+      const keyword = search.trim();
+
+      const [clients, properties, beds] = await Promise.all([
+        Client.find({
+          $or: [
+            { fullName: { $regex: keyword, $options: "i" } },
+            { callingNo: { $regex: keyword, $options: "i" } },
+          ],
+        }).select("_id"),
+
+        Property.find({
+          propertyCode: { $regex: keyword, $options: "i" },
+        }).select("_id"),
+
+        Bed.find({
+          $or: [
+            { roomNo: { $regex: keyword, $options: "i" } },
+            { bedNo: { $regex: keyword, $options: "i" } },
+          ],
+        }).select("_id"),
+      ]);
+
+      const searchConditions = [
+        { clientId: { $in: clients.map((item) => item._id) } },
+        { propertyId: { $in: properties.map((item) => item._id) } },
+        { bedId: { $in: beds.map((item) => item._id) } },
+        { monthName: { $regex: keyword, $options: "i" } },
+        { paymentStatus: { $regex: keyword, $options: "i" } },
+        { paymentComments: { $regex: keyword, $options: "i" } },
+        { remarks: { $regex: keyword, $options: "i" } },
+      ];
+
+      // Numeric search
+      if (!isNaN(keyword)) {
+        const number = Number(keyword);
+
+        searchConditions.push(
+          { year: number },
+          { month: number },
+          { currentDue: number },
+          { totalReceived: number },
+          { totalReceivable: number },
+          { monthlyRent: number }
+        );
+      }
+
+      filter.$or = searchConditions;
+    }
 
     const rentHistory = await ClientRentHistory.find(filter)
       .populate("clientId", "fullName callingNo clientDoj")
@@ -60,13 +117,20 @@ exports.getClientRentHistory = async (req, res) => {
         createdAt: -1,
       })
       .lean();
+
     return res.status(200).json({
       success: true,
       count: rentHistory.length,
       data: rentHistory,
     });
   } catch (error) {
-    console.error(error);
+    console.error("getClientRentHistory error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch client rent history.",
+      error: error.message,
+    });
   }
 };
 
@@ -324,6 +388,17 @@ exports.updateClientRentHistory = async (req, res) => {
       (history.totalReceived || 0) + receivedAmount;
     // Recalculate Complete Rent
 
+
+const actualLastDay = new Date(
+  history.year,
+  history.month,
+  0
+).getDate();
+
+const rentDivider =
+  actualLastDay === 31 ? 30 : actualLastDay;
+
+
     const calculation = calculateRentHistory({
       // monthlyRent: history.monthlyRent,
       // depositAmount: history.depositAmount,
@@ -351,21 +426,16 @@ exports.updateClientRentHistory = async (req, res) => {
       depositAmount: Number(depositAmount),
 
       rentReceived: cumulativeReceived,
+       rentDivider,
     });
-
-
-
     Object.assign(history, calculation);
-
     if (!isNaN(receivedAmount) && receivedAmount !== 0) {
       history.totalReceivedHistory.push({
         amount: receivedAmount,
         date: new Date(),
       });
     }
-
     history.daysCount = daysCount;
-
     // Snapshot bhi update kar do
     history.clientDoj = client.clientDoj;
     history.noticeLastDate = client.noticeLastDate;
@@ -374,7 +444,81 @@ exports.updateClientRentHistory = async (req, res) => {
     history.remarks = remarks;
 
     await history.save();
+await history.save();
 
+const futureHistories = await ClientRentHistory.find({
+  clientId: history.clientId,
+  $or: [
+    { year: { $gt: history.year } },
+    {
+      year: history.year,
+      month: { $gt: history.month },
+    },
+  ],
+}).sort({
+  year: 1,
+  month: 1,
+  createdAt: 1,
+});
+
+let previousDue = Number(history.currentDue || 0);
+
+for (const futureHistory of futureHistories) {
+  const actualLastDay = new Date(
+    futureHistory.year,
+    futureHistory.month,
+    0
+  ).getDate();
+
+  const rentDivider =
+    actualLastDay === 31 ? 30 : actualLastDay;
+
+  const futureCalculation = calculateRentHistory({
+    monthlyRent: Number(futureHistory.monthlyRent || 0),
+    depositAmount: Number(futureHistory.depositAmount || 0),
+
+    daysCount: Number(futureHistory.daysCount || 0),
+
+    previousDue,
+
+    ebAmt: Number(futureHistory.ebAmt || 0),
+    flatEB: Number(futureHistory.flatEB || 0),
+    adjEB: Number(futureHistory.adjEB || 0),
+    adjAmt: Number(futureHistory.adjAmt || 0),
+
+    processingFees: Number(
+      futureHistory.processingFees || 0
+    ),
+
+    parkingCharges: Number(
+      futureHistory.parkingCharges || 0
+    ),
+
+    processingFeesReceived: Number(
+      futureHistory.processingFeesReceived || 0
+    ),
+
+    depositAmountReceived: Number(
+      futureHistory.depositAmountReceived || 0
+    ),
+
+    rentReceived: Number(
+      futureHistory.totalReceived || 0
+    ),
+
+    rentDivider,
+  });
+
+  Object.assign(futureHistory, futureCalculation);
+
+  futureHistory.previousDue = previousDue;
+
+  await futureHistory.save();
+
+  previousDue = Number(
+    futureHistory.currentDue || 0
+  );
+}
     return res.status(200).json({
       success: true,
       message: "Rent history updated successfully",

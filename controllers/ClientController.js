@@ -88,6 +88,27 @@ exports.createClientFromBooking = async (
       });
     }
 
+const email = booking.emailId?.trim().toLowerCase();
+
+if (!email) {
+  return res.status(400).json({
+    success: false,
+    message: "Email is required.",
+  });
+}
+
+const activeUser = await User.findOne({
+  email,
+  isActive: true,
+}).lean();
+
+if (activeUser) {
+  return res.status(409).json({
+    success: false,
+    message: "An active account already exists with this email address, please change this email.",
+  });
+}
+
     // =========================
     // REACTIVATE OLD CLIENTS
     // =========================

@@ -21,7 +21,6 @@ const monthNames = [
 ];
 
 
-
 const createClientRentHistory = async (client) => {
 
   try {
@@ -46,7 +45,6 @@ const createClientRentHistory = async (client) => {
     });
     // Previous Due
     let previousDue;
-
     if (history) {
       // UPDATE
       previousDue = history.previousDue;
@@ -59,30 +57,23 @@ const createClientRentHistory = async (client) => {
         month: -1,
         createdAt: -1,
       });
-
       previousDue = lastHistory?.currentDue || 0;
     }
-
     const monthlyRent = Number(
       bed.monthlyRent || 0
     );
-
     let depositAmount = 0;
-
     if (client.stayType === "P. Booked") {
       depositAmount = Number(bed.depositAmount || 0);
     }
-
     const processingFees = Number(
       client.processingFees || 0
     );
-
     const parkingCharges = Number(
       client.stayType === "T. Booked"
         ? client.temporaryParkingCharges || 0
         : client.parkingCharges || 0
     );
-
     let rentReceived = 0;
     if (client.stayType === "P. Booked") {
       rentReceived = Number(client.bookingAmount || 0) - Number(client.temporaryTotalAmount || 0);
@@ -120,11 +111,16 @@ const createClientRentHistory = async (client) => {
       year
     );
 
+    const actualMonthDays = new Date(year, month, 0).getDate();
+
+    const rentDivider =
+      actualMonthDays === 31 ? 30 : actualMonthDays;
     const calculation =
       calculateRentHistory({
         monthlyRent,
         depositAmount,
         daysCount,
+        rentDivider,
         previousDue,
         ebAmt: 0,
         flatEB: 0,
@@ -184,201 +180,52 @@ const createClientRentHistory = async (client) => {
   }
 };
 
-
-// const createClientRentHistory = async (client) => {
-//   try {
-//     // Bed Details
-//     const bed = await Bed.findById(client.bedId).lean();
-
-//     if (!bed) {
-//       throw new Error("Bed not found.");
-//     }
-
-//     const doj = new Date(client.clientDoj);
-
-//     const month = doj.getMonth() + 1; // 1-12
-//     const year = doj.getFullYear();
-
-//     // Duplicate Check
-//     const alreadyExists =
-//       await ClientRentHistory.findOne({
-//         clientId: client._id,
-//         month,
-//         year,
-//       });
-
-//     if (alreadyExists) {
-//       return alreadyExists;
-//     }
-
-//     // Previous Due
-//     const lastHistory =
-//       await ClientRentHistory.findOne({
-//         clientId: client._id,
-//       }).sort({
-//         year: -1,
-//         month: -1,
-//         createdAt: -1,
-//       });
-
-//     const previousDue =
-//       lastHistory?.currentDue || 0;
-
-//     const monthlyRent = Number(
-//       bed.monthlyRent || 0
-//     );
-
-//     let depositAmount = 0;
-
-//     if (client.stayType === "P. Booked") {
-//       depositAmount = Number(bed.depositAmount || 0);
-//     }
-
-//     const processingFees = Number(
-//       client.processingFees || 0
-//     );
-
-//     const parkingCharges = Number(
-//       client.stayType === "T. Booked"
-//         ? client.temporaryParkingCharges || 0
-//         : client.parkingCharges || 0
-//     );
-
-//     let rentReceived = 0;
-//     if (client.stayType === "P. Booked") {
-//       rentReceived = Number(client.bookingAmount || 0) - Number(client.temporaryTotalAmount || 0);
-//     } else if (client.stayType === "T. Booked") {
-//       rentReceived = Number(client.temporaryTotalAmount || 0);
-//       // rentReceived = 0;
-//     }
-
-//     const noticeLastDate = client.noticeLastDate
-//       ? new Date(client.noticeLastDate)
-//       : null;
-//     // Business rule: month ka end (31 ko 30 treat karna)
-//     const lastDay = new Date(year, month, 0).getDate();
-
-//     const monthEndDate = new Date(
-//       year,
-//       month - 1,
-//       lastDay === 31 ? 30 : lastDay
-//     );
-
-//     let endDate;
-
-//     if (noticeLastDate) {
-//       endDate =
-//         noticeLastDate > monthEndDate
-//           ? monthEndDate
-//           : noticeLastDate;
-//     } else {
-//       endDate = monthEndDate;
-//     }
-
-//     const daysCount = getDaysCount(
-//       client.clientDoj,
-//       endDate,
-//       month,
-//       year
-//     );
-
-//     const calculation =
-//       calculateRentHistory({
-//         monthlyRent,
-//         depositAmount,
-//         daysCount,
-//         previousDue,
-//         ebAmt: 0,
-//         flatEB: 0,
-//         adjEB: 0,
-//         adjAmt: 0,
-//         processingFees,
-//         parkingCharges,
-//         processingFeesReceived: 0,
-//         depositAmountReceived: 0,
-//         rentReceived,
-//       });
-
-//     const history =
-//       await ClientRentHistory.create({
-//         clientId: client._id,
-//         bookingId: client.bookingId || null,
-//         propertyId: client.propertyId,
-//         bedId: client.bedId,
-//         stayType: client.stayType,
-//         month,
-//         year,
-//         startDate: client.clientDoj,
-//         endDate,
-//         monthName:
-//           doj.toLocaleString(
-//             "default",
-//             {
-//               month: "long",
-//             }
-//           ),
-//         ...calculation,
-//         paymentComments: "",
-//         remarks: "",
-//       });
-//     return history;
-//   } catch (err) {
-//     console.error(
-//       "Create Rent History Error:",
-//       err
-//     );
-//     throw err;
-//   }
-// };
-
-
 const generateMonthlyRent = async () => {
   const today = new Date();
-  const month = new Date().getMonth() + 1;
-  const year = new Date().getFullYear();
-  // const month = 9;
-  // const year = 2026;
+  // const month = new Date().getMonth() + 1;
+  // const year = new Date().getFullYear();
+  const month = 3;
+  const year = 2026;
+  // const todayFilterDate = "2026-05-03";
 const todayFilterDate = new Date().toISOString().split("T")[0];
-
 const clients = await Client.find({
   isBookingCancelled: false,
-  $expr: {
-    $gte: [
-      {
-        $ifNull: [
-          {
-            $cond: [
-              {
-                $and: [
-                  { $ne: ["$noticeLastDate", null] },
-                  { $ne: ["$clientVacatingDate", null] },
-                ],
-              },
-              {
-                $cond: [
-                  { $gt: ["$noticeLastDate", "$clientVacatingDate"] },
-                  "$noticeLastDate",
-                  "$clientVacatingDate",
-                ],
-              },
-              {
-                $ifNull: [
-                  "$noticeLastDate",
-                  "$clientVacatingDate",
-                ],
-              },
-            ],
-          },
-          "9999-12-31",
-        ],
+  $or: [
+    {
+      $and: [
+        {
+          $or: [
+            { noticeLastDate: { $exists: false } },
+            { noticeLastDate: null },
+            { noticeLastDate: "" },
+          ],
+        },
+        {
+          $or: [
+            { clientVacatingDate: { $exists: false } },
+            { clientVacatingDate: null },
+            { clientVacatingDate: "" },
+          ],
+        },
+      ],
+    },
+
+    {
+      noticeLastDate: {
+        $gte: todayFilterDate,
       },
-      todayFilterDate,
-    ],
-  },
+    },
+
+    {
+      clientVacatingDate: {
+        $gte: todayFilterDate,
+      },
+    },
+  ],
 })
 .populate("bedId")
 .lean();
-    
+
   const clientIds = clients.map((client) => client._id);
   const rentHistoryData = [];
   // Already Generated
@@ -429,6 +276,7 @@ const clients = await Client.find({
     );
   });
   for (const client of clients) {
+
     if (!client.bedId) continue;
     const key = `${client._id}_${client.bedId._id}`;
     if (existingHistorySet.has(key)) {
@@ -498,11 +346,18 @@ const clients = await Client.find({
       month,
       year
     );
+
+    const actualMonthDays = new Date(year, month, 0).getDate();
+
+    const rentDivider =
+      actualMonthDays === 31 ? 30 : actualMonthDays;
+
     const calculation =
       calculateRentHistory({
         monthlyRent,
         depositAmount: 0,  // for every month
         daysCount,
+        rentDivider,
         previousDue,
         ebAmt: 0,
         flatEB: 0,
@@ -557,17 +412,32 @@ const clients = await Client.find({
     500
   );
 };
-const recalculateRentHistory = async (clientId, isTempToPermanent = false) => {
-  const today = new Date();
-  const currentMonth = 7;
-  const currentYear = 2026;
-  // const currentMonth = today.getMonth() + 1;
-  // const currentYear = today.getFullYear();
-  // Client.....................................
+
+const recalculateRentHistory = async (
+  clientId,
+  isTempToPermanent = false
+) => {
+  // Client
   const client = await Client.findById(clientId)
     .populate("bedId", "monthlyRent depositAmount")
     .lean();
-  if (!client || !client.bedId) return null;
+
+  if (!client) {
+    throw new Error("Client not found");
+  }
+
+  let effectiveDate;
+
+  if (client.noticeStartDate) {
+    effectiveDate = new Date(client.noticeStartDate);
+  } else if (client.clientDoj) {
+    effectiveDate = new Date(client.clientDoj);
+  } else {
+    effectiveDate = new Date();
+  }
+  const currentMonth = effectiveDate.getMonth() + 1;
+  const currentYear = effectiveDate.getFullYear();
+
   // DOJ
   const dojDate = new Date(client.clientDoj);
   let month = currentMonth;
@@ -585,46 +455,42 @@ const recalculateRentHistory = async (clientId, isTempToPermanent = false) => {
     clientId,
     bedId: client.bedId._id,
     month,
-    year,  
+    year,
   });
 
 
 
-let transferredReceived = 0;
-if (isTempToPermanent) {
-  const cancelledPermanentClient = await Client.findOne({
-    bookingId: client.bookingId,
-    stayType: "P. Booked",
-    isBookingCancelled: true,
-    _id: { $ne: client._id },
-  });
-
-  if (cancelledPermanentClient) {
-    const cancelledPermanentHistory = await ClientRentHistory.findOne({
-      clientId: cancelledPermanentClient._id,
-    }).sort({
-      year: -1,
-      month: -1,
-      createdAt: -1,
+  let transferredReceived = 0;
+  if (isTempToPermanent) {
+    const cancelledPermanentClient = await Client.findOne({
+      bookingId: client.bookingId,
+      stayType: "P. Booked",
+      isBookingCancelled: true,
+      _id: { $ne: client._id },
     });
 
-   if (cancelledPermanentHistory) {
-  transferredReceived = Number(
-    cancelledPermanentHistory.totalReceived || 0
-  );
+    if (cancelledPermanentClient) {
+      const cancelledPermanentHistory = await ClientRentHistory.findOne({
+        clientId: cancelledPermanentClient._id,
+      }).sort({
+        year: -1,
+        month: -1,
+        createdAt: -1,
+      });
 
-  // Transfer ho gaya, ab old history se received hata do
-  cancelledPermanentHistory.totalReceived = 0;
-  cancelledPermanentHistory.totalReceivedHistory = [];
+      if (cancelledPermanentHistory) {
+        transferredReceived = Number(
+          cancelledPermanentHistory.totalReceived || 0
+        );
 
-  await cancelledPermanentHistory.save();
-}
+        // Transfer ho gaya, ab old history se received hata do
+        cancelledPermanentHistory.totalReceived = 0;
+        cancelledPermanentHistory.totalReceivedHistory = [];
+
+        await cancelledPermanentHistory.save();
+      }
+    }
   }
-}
-
-
-
-
 
   if (!history) {
     throw new Error(
@@ -635,97 +501,73 @@ if (isTempToPermanent) {
   const isDOJInBillingMonth =
     dojDate.getMonth() + 1 === month &&
     dojDate.getFullYear() === year;
+
+  // 👇 DOJ change hone par hamesha client ka latest DOJ use karo
   let startDate;
-  if (history.startDate) {
-    // Transfer ya pehle se saved start date
-    startDate = history.startDate;
-  } else if (isDOJInBillingMonth) {
-    // First month
-    startDate = client.clientDoj;
+
+  if (isDOJInBillingMonth) {
+    startDate = new Date(client.clientDoj);
   } else {
-    // Normal monthly rent
     startDate = new Date(year, month - 1, 1);
   }
 
-  // Notice Last Date OR Vacating Date
 
+  let lastDate = null;
 
-
-
-
-  // let lastDate = null;
-  // if (client.noticeLastDate && client.clientVacatingDate) {
-  //   lastDate =
-  //     new Date(client.noticeLastDate) > new Date(client.clientVacatingDate)
-  //       ? client.noticeLastDate
-  //       : client.clientVacatingDate;
-  // } else if (client.noticeLastDate || client.clientVacatingDate) {
-  //   lastDate = client.noticeLastDate || client.clientVacatingDate;
-  // } else {
-  //   // Business rule: Every month = 30 days
-  //   lastDate = new Date(year, month - 1, 30);
-  // }
-
-  // Notice Last Date OR Vacating Date
-let lastDate = null;
-
-if (client.noticeLastDate && client.clientVacatingDate) {
-  lastDate =
-    new Date(client.noticeLastDate) > new Date(client.clientVacatingDate)
-      ? new Date(client.noticeLastDate)
-      : new Date(client.clientVacatingDate);
-} else if (client.noticeLastDate || client.clientVacatingDate) {
-  lastDate = new Date(
-    client.noticeLastDate || client.clientVacatingDate
-  );
-}
-
-// Current billing month ka end
-const billingMonthEnd = new Date(year, month - 1, 30);
-
-// Final endDate
-let endDate;
-
-if (!lastDate) {
-  endDate = billingMonthEnd;
-} else {
-  const isSameBillingMonth =
-    lastDate.getMonth() + 1 === month &&
-    lastDate.getFullYear() === year;
-
-  if (isSameBillingMonth) {
-    endDate =
-      lastDate > billingMonthEnd
-        ? billingMonthEnd
-        : lastDate;
-  } else {
-    // Future month me notice hai to current month full dikhao
-    endDate = billingMonthEnd;
+  if (client.noticeLastDate && client.clientVacatingDate) {
+    lastDate =
+      new Date(client.noticeLastDate) > new Date(client.clientVacatingDate)
+        ? new Date(client.noticeLastDate)
+        : new Date(client.clientVacatingDate);
+  } else if (client.noticeLastDate || client.clientVacatingDate) {
+    lastDate = new Date(
+      client.noticeLastDate || client.clientVacatingDate
+    );
   }
-}
 
+  // Current billing month ka end
+  const actualLastDay = new Date(year, month, 0).getDate();
 
+  const billingDay =
+    actualLastDay === 31 ? 30 : actualLastDay;
 
+  const billingMonthEnd = new Date(
+    year,
+    month - 1,
+    billingDay
+  );
+  // Final endDate
+  let endDate;
+  if (!lastDate) {
+    endDate = billingMonthEnd;
+  } else {
+    const isSameBillingMonth =
+      lastDate.getMonth() + 1 === month &&
+      lastDate.getFullYear() === year;
 
+    if (isSameBillingMonth) {
+      endDate =
+        lastDate > billingMonthEnd
+          ? billingMonthEnd
+          : lastDate;
+    } else {
+      // Future month me notice hai to current month full dikhao
+      endDate = billingMonthEnd;
+    }
+  }
   // Days Count
   const daysCount = getDaysCount(
     startDate,
-    lastDate,
+    endDate,
     month,
     year
   );
-
-
-
-
   const depositAmount = isTempToPermanent
     ? Number(client.bedId.depositAmount || 0)
     : history.depositAmount;
-
   const processingFees = isTempToPermanent
     ? 500
     : history.processingFees;
-
   // Calculation
   const calculation = calculateRentHistory({
     monthlyRent: Number(client.bedId.monthlyRent || 0),
@@ -733,100 +575,145 @@ if (!lastDate) {
     // depositAmount: client.bedId.depositAmount,
     daysCount,
     previousDue: history.previousDue,
-
     ebAmt: history.ebAmt,
     flatEB: history.flatEB,
-
     adjEB: history.adjEB,
     adjAmt: history.adjAmt,
-
     processingFees,
     parkingCharges: 0,
-
     depositAmountReceived:
       history.depositAmountReceived,
-
-   rentReceived:
-  Number(history.totalReceived || 0) + transferredReceived,
+    rentReceived:
+      Number(history.totalReceived || 0) + transferredReceived,
   });
-
   Object.assign(history, calculation);
   // history.endDate = lastDate;
+  history.startDate = startDate;
   history.endDate = endDate;   // 👈 lastDate ki jagah
-
   history.monthlyRent = client.bedId.monthlyRent;
   // history.depositAmount = client.bedId.depositAmount;
   history.daysCount = daysCount;
-
-if (isTempToPermanent && transferredReceived > 0) {
-  history.totalReceivedHistory.push({
-    amount: transferredReceived,
-    date: new Date(),
-  });
-}
-
-await history.save();
-
-// ================================
-// Recalculate Future Rent History
-// ================================
-let previousHistory = history;
-
-while (true) {
-  let nextMonth = previousHistory.month + 1;
-  let nextYear = previousHistory.year;
-
-  if (nextMonth > 12) {
-    nextMonth = 1;
-    nextYear++;
+  if (isTempToPermanent && transferredReceived > 0) {
+    history.totalReceivedHistory.push({
+      amount: transferredReceived,
+      date: new Date(),
+    });
   }
-
-  const nextHistory = await ClientRentHistory.findOne({
-    clientId,
-    month: nextMonth,
-    year: nextYear,
-  });
-
-  if (!nextHistory) break;
-
-  const nextCalculation = calculateRentHistory({
-    monthlyRent: nextHistory.monthlyRent,
-    depositAmount: nextHistory.depositAmount,
-    daysCount: nextHistory.daysCount,
-
-    // 👇 Previous month ka updated due
-    previousDue: previousHistory.currentDue,
-
-    ebAmt: nextHistory.ebAmt,
-    flatEB: nextHistory.flatEB,
-
-    adjEB: nextHistory.adjEB,
-    adjAmt: nextHistory.adjAmt,
-
-    processingFees: nextHistory.processingFees,
-    parkingCharges: nextHistory.parkingCharges,
-
-    depositAmountReceived:
-      nextHistory.depositAmountReceived,
-
-    rentReceived:
-      Number(nextHistory.totalReceived || 0),
-  });
-
-  Object.assign(nextHistory, nextCalculation);
-
-  nextHistory.previousDue = previousHistory.currentDue;
-
-  await nextHistory.save();
-
-  previousHistory = nextHistory;
-}
-return history;
-};
+  await history.save();
+  // ================================
+  // Recalculate Future Rent History
+  // ================================
+  let previousHistory = history;
+  while (true) {
+    let nextMonth = previousHistory.month + 1;
+    let nextYear = previousHistory.year;
+    if (nextMonth > 12) {
+      nextMonth = 1;
+      nextYear++;
+    }
+    const nextHistory = await ClientRentHistory.findOne({
+      clientId,
+      month: nextMonth,
+      year: nextYear,
+    });
+    if (!nextHistory) break;
+    const actualLastDay = new Date(
+      nextHistory.year,
+      nextHistory.month,
+      0
+    ).getDate();
+    const billingDay =
+      actualLastDay === 31 ? 30 : actualLastDay;
+    const billingMonthEnd = new Date(
+      nextHistory.year,
+      nextHistory.month - 1,
+      billingDay
+    );
+    // Start Date
+    let nextStartDate = new Date(
+      nextHistory.year,
+      nextHistory.month - 1,
+      1
+    );
+    // Agar DOJ isi month me hai
+    const doj = new Date(client.clientDoj);
+    if (
+      doj.getMonth() + 1 === nextHistory.month &&
+      doj.getFullYear() === nextHistory.year
+    ) {
+      nextStartDate = doj;
+    }
+    // Notice/CVD
+    let nextLastDate = null;
+    if (client.noticeLastDate && client.clientVacatingDate) {
+      nextLastDate =
+        new Date(client.noticeLastDate) > new Date(client.clientVacatingDate)
+          ? new Date(client.noticeLastDate)
+          : new Date(client.clientVacatingDate);
+    } else if (client.noticeLastDate || client.clientVacatingDate) {
+      nextLastDate = new Date(
+        client.noticeLastDate || client.clientVacatingDate
+      );
+    }
+    let nextEndDate;
+    if (!nextLastDate) {
+      nextEndDate = billingMonthEnd;
+    } else {
+      const isSameMonth =
+        nextLastDate.getMonth() + 1 === nextHistory.month &&
+        nextLastDate.getFullYear() === nextHistory.year;
+      if (isSameMonth) {
+        nextEndDate =
+          nextLastDate > billingMonthEnd
+            ? billingMonthEnd
+            : nextLastDate;
+      } else if (nextLastDate < nextStartDate) {
+        // Client pehle hi vacate ho gaya
+        break;
+      } else {
+        nextEndDate = billingMonthEnd;
+      }
+    }
+    const nextDaysCount = getDaysCount(
+      nextStartDate,
+      nextEndDate,
+      nextHistory.month,
+      nextHistory.year
+    );
+    const nextCalculation = calculateRentHistory({
+      monthlyRent: nextHistory.monthlyRent,
+      depositAmount: nextHistory.depositAmount,
+      daysCount: nextDaysCount,
+      previousDue: previousHistory.currentDue,
+      ebAmt: nextHistory.ebAmt,
+      flatEB: nextHistory.flatEB,
+      adjEB: nextHistory.adjEB,
+      adjAmt: nextHistory.adjAmt,
+      processingFees: nextHistory.processingFees,
+      parkingCharges: nextHistory.parkingCharges,
+      depositAmountReceived:
+        nextHistory.depositAmountReceived,
+      rentReceived:
+        Number(nextHistory.totalReceived || 0),
+      rentDivider:
+        new Date(nextHistory.year, nextHistory.month, 0).getDate() === 31
+          ? 30
+          : new Date(nextHistory.year, nextHistory.month, 0).getDate(),
+    });
+    Object.assign(nextHistory, nextCalculation);
+    nextHistory.previousDue = previousHistory.currentDue;
+    nextHistory.startDate = nextStartDate;
+    nextHistory.endDate = nextEndDate;
+    nextHistory.daysCount = nextDaysCount;
+    await nextHistory.save();
+    previousHistory = nextHistory;
+  }
+  return history;
+};  
 
 module.exports = {
   generateMonthlyRent,
   createClientRentHistory,
   recalculateRentHistory
 };
-
+  

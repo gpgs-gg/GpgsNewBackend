@@ -49,7 +49,6 @@ const HousekeepingRecordSchema = new mongoose.Schema(
 
     activityId: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: "HousekeepingActivity",
       required: true,
     },
 

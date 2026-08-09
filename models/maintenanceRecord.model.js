@@ -49,7 +49,6 @@ const MaintenanceRecordSchema = new mongoose.Schema(
 
     activityId: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: "MaintenanceActivity",
       required: true,
     },
 

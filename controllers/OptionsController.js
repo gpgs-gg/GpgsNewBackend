@@ -42,7 +42,7 @@ exports.getAllOptionsData = async (req, res) => {
 
       OptionsData.countDocuments(query),
     ]);
- res.status(200).json({
+    res.status(200).json({
       success: true,
       page,
       limit,
@@ -105,10 +105,11 @@ exports.getOptionsDataById = async (req, res) => {
         message: "Master category not found.",
       });
     }
-
+    const data = master.toObject();
+    data.items.sort((a, b) => b.displayOrder - a.displayOrder);
     return res.status(200).json({
       success: true,
-      data: master,
+      data: data,
     });
   } catch (error) {
     console.error("Get Master Data By Id:", error);
@@ -178,19 +179,19 @@ exports.updateOptionsData = async (req, res) => {
   try {
     const { categoryName, description, items } = req.body;
 
-// Prevent duplicate values inside items
-const values = items.map((item) => item.value.trim().toLowerCase());
+    // Prevent duplicate values inside items
+    const values = items.map((item) => item.value.trim().toLowerCase());
 
-const duplicateValue = values.find(
-  (value, index) => values.indexOf(value) !== index
-);
+    const duplicateValue = values.find(
+      (value, index) => values.indexOf(value) !== index
+    );
 
-if (duplicateValue) {
-  return res.status(400).json({
-    success: false,
-    message: `The item "${duplicateValue}" has been entered more than once. Please remove the duplicate and try again.`,
-  });
-}
+    if (duplicateValue) {
+      return res.status(400).json({
+        success: false,
+        message: `The item "${duplicateValue}" has been entered more than once. Please remove the duplicate and try again.`,
+      });
+    }
 
     const master = await OptionsData.findByIdAndUpdate(
       req.params.id,

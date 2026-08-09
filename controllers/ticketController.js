@@ -926,7 +926,7 @@ const insertBulkTickets = async (req, res) => {
   }
 };
 
-module.exports = {
+module.exports = {  
   createTicket,
   getAllTickets,
   getTicketById,

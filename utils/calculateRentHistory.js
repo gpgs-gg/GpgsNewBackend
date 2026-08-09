@@ -10,12 +10,11 @@ const calculateRentHistory = ({
 
   adjEB = 0,
   adjAmt = 0,
-
+  rentDivider = 30,
   processingFees = 0,
   parkingCharges = 0,
   parkingChargesReceived = 0,
   processingFeesReceived = 0,
-
   depositAmountReceived = 0,
   rentReceived = 0,
 }) => {
@@ -47,10 +46,8 @@ const calculateRentHistory = ({
 
   // Rent
   const rentAmt = Math.round(
-    (monthlyRent / 30) * daysCount
+    (monthlyRent / rentDivider) * daysCount
   );
-
-
 
   const depositAmountDue =
     depositAmount -

@@ -885,6 +885,14 @@ exports.updateClientRentHistoryReceived = async (req, res) => {
     const cumulativeReceived =
       Number(history.totalReceived || 0) + receivedAmount;
 
+const actualLastDay = new Date(
+  history.year,
+  history.month,
+  0
+).getDate();
+
+const rentDivider =
+  actualLastDay === 31 ? 30 : actualLastDay;
     // ===============================
     // Recalculate
     // ===============================
@@ -893,37 +901,28 @@ exports.updateClientRentHistoryReceived = async (req, res) => {
       depositAmount: history.depositAmount,
       daysCount: history.daysCount,
       previousDue: history.previousDue,
-
       ebAmt: history.ebAmt,
       flatEB: history.flatEB,
       adjEB: history.adjEB,
       adjAmt: history.adjAmt,
-
       processingFees: history.processingFees,
       parkingCharges: history.parkingCharges,
-
       processingFeesReceived:
         history.processingFeesReceived,
-
       depositAmountReceived:
         history.depositAmountReceived,
-
       rentReceived: cumulativeReceived,
+      rentDivider
     });
-
     Object.assign(history, calculation);
-
     history.totalReceived = cumulativeReceived;
-
     history.totalReceivedHistory.push({
       amount: receivedAmount,
       transactionId: transaction._id,
       valueDate: transaction.valueDate,
       date: new Date(),
     });
-
     await history.save();
-
     // ===============================
     // Mark Transaction Used
     // ===============================
@@ -933,9 +932,7 @@ exports.updateClientRentHistoryReceived = async (req, res) => {
     transaction.propertyId = propertyId;
     transaction.bedId = bedId;
     transaction.rentHistoryId = history._id;
-
     await transaction.save();
-
     return res.status(200).json({
       success: true,
       message: "Received amount added successfully.",
