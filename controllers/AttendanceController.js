@@ -9,11 +9,55 @@ const { uploadToCloudinary } = require("../utils/uploadToCloudinary");
 // ======================================================
 // CONSTANTS
 // ======================================================
+const uploadRegularizationDocument = async (file) => {
+  if (!file) {
+    return null;
+  }
 
+  if (!file.buffer) {
+    throw new Error("Regularization document buffer not found");
+  }
+
+  const result = await uploadToCloudinary(
+    file.buffer,
+    "attendance/regularization-documents",
+  );
+
+  return {
+    publicId: result?.public_id || null,
+    url: result?.secure_url || null,
+    originalName: file.originalname || null,
+    mimeType: file.mimetype || null,
+    size: file.size || null,
+  };
+};
 // 9 hours = 540 minutes
-const REQUIRED_WORKING_MINUTES = 9 * 60;
 
 const COMPANY_TIMEZONE = "Asia/Kolkata";
+// fpr gettomg employee working hours
+const getEmployeeWorkingMinutes = (employee) => {
+  const workingHours = Number(employee?.workingHours);
+  const halfDayHours = Number(employee?.halfDayHours);
+
+  // Default full-day = 9 hours
+  const requiredHours =
+    Number.isFinite(workingHours) && workingHours > 0 ? workingHours : 9;
+
+  const requiredMinutes = requiredHours * 60;
+
+  // Default half-day = 5 hours
+  const halfDayMinutes =
+    Number.isFinite(halfDayHours) && halfDayHours > 0
+      ? halfDayHours * 60
+      : 5 * 60;
+
+  return {
+    requiredHours,
+    requiredMinutes,
+    halfDayHours: halfDayMinutes / 60,
+    halfDayMinutes,
+  };
+};
 
 // ======================================================
 // HELPER: GET TODAY DATE IN COMPANY TIMEZONE
@@ -169,7 +213,7 @@ const uploadAttendanceSelfie = async (file) => {
 // HELPER: CALCULATE ATTENDANCE HOURS
 // ======================================================
 
-const calculateAttendanceHours = (inTime, outTime) => {
+const calculateAttendanceHours = (inTime, outTime, employee) => {
   if (!inTime || !outTime) {
     return {
       totalMinutes: 0,
@@ -177,32 +221,17 @@ const calculateAttendanceHours = (inTime, outTime) => {
       deficitMinutes: 0,
     };
   }
-  // ======================================================
-  // HELPER: CALCULATE ATTENDANCE STATUS
-  // ======================================================
 
-  const calculateAttendanceStatus = (totalMinutes = 0) => {
-    // 9 hours or more = PRESENT
-    if (totalMinutes >= REQUIRED_WORKING_MINUTES) {
-      return 1;
-    }
+  const { requiredMinutes } = getEmployeeWorkingMinutes(employee);
 
-    // 4.5 hours or more = HALF DAY
-    if (totalMinutes >= REQUIRED_WORKING_MINUTES / 2) {
-      return 0.5;
-    }
-
-    // Less than 4.5 hours = ABSENT
-    return 0;
-  };
   const start = new Date(inTime);
   const end = new Date(outTime);
 
   const totalMinutes = Math.max(0, Math.floor((end - start) / (1000 * 60)));
 
-  const overtimeMinutes = Math.max(totalMinutes - REQUIRED_WORKING_MINUTES, 0);
+  const overtimeMinutes = Math.max(totalMinutes - requiredMinutes, 0);
 
-  const deficitMinutes = Math.max(REQUIRED_WORKING_MINUTES - totalMinutes, 0);
+  const deficitMinutes = Math.max(requiredMinutes - totalMinutes, 0);
 
   return {
     totalMinutes,
@@ -242,22 +271,25 @@ const getAttendanceStatusLabel = (status) => {
 // HELPER: CALCULATE ATTENDANCE STATUS
 // ======================================================
 
-const calculateAttendanceStatus = (totalMinutes) => {
+const calculateAttendanceStatus = (totalMinutes = 0, employee) => {
   if (!totalMinutes || totalMinutes <= 0) {
     return 0;
   }
 
-  // 9 hours or more = Present
-  if (totalMinutes >= REQUIRED_WORKING_MINUTES) {
+  const { requiredMinutes, halfDayMinutes } =
+    getEmployeeWorkingMinutes(employee);
+
+  // Full Day
+  if (totalMinutes >= requiredMinutes) {
     return 1;
   }
 
-  // 4.5 hours or more = Half Day
-  if (totalMinutes >= REQUIRED_WORKING_MINUTES / 2) {
+  // Half Day
+  if (totalMinutes >= halfDayMinutes) {
     return 0.5;
   }
 
-  // Less than 4.5 hours = Absent
+  // Absent
   return 0;
 };
 
@@ -265,9 +297,11 @@ const calculateAttendanceStatus = (totalMinutes) => {
 // HELPER: CALCULATE REMAINING WORKING MINUTES
 // ======================================================
 
-const calculateRemainingMinutes = (inTime, outTime = null) => {
+const calculateRemainingMinutes = (inTime, outTime = null, employee) => {
+  const { requiredMinutes } = getEmployeeWorkingMinutes(employee);
+
   if (!inTime) {
-    return REQUIRED_WORKING_MINUTES;
+    return requiredMinutes;
   }
 
   const start = new Date(inTime);
@@ -276,7 +310,7 @@ const calculateRemainingMinutes = (inTime, outTime = null) => {
 
   const workedMinutes = Math.max(0, Math.floor((end - start) / (1000 * 60)));
 
-  return Math.max(REQUIRED_WORKING_MINUTES - workedMinutes, 0);
+  return Math.max(requiredMinutes - workedMinutes, 0);
 };
 // ======================================================
 // 1. CHECK IN
@@ -287,6 +321,11 @@ const checkIn = async (req, res) => {
     const { employee } = await getAuthenticatedEmployee(req.user?._id);
 
     const attendanceDate = getTodayAttendanceDate();
+
+    // -----------------------------------------------
+    // Check if attendance already exists
+    // -----------------------------------------------
+    const ATTENDANCE_TEST_MODE = true;
 
     // -----------------------------------------------
     // Check if attendance already exists
@@ -304,7 +343,6 @@ const checkIn = async (req, res) => {
         data: existingAttendance,
       });
     }
-
     // -----------------------------------------------
     // Selfie required
     // -----------------------------------------------
@@ -337,8 +375,7 @@ const checkIn = async (req, res) => {
         publicId: selfie.publicId,
         url: selfie.url,
       },
-
-      status: 1,
+      status: 0,
 
       totalMinutes: 0,
       overtimeMinutes: 0,
@@ -380,7 +417,10 @@ const checkOut = async (req, res) => {
     const attendance = await Attendance.findOne({
       employeeId: employee._id,
       attendanceDate,
-    });
+    }).populate(
+      "employeeId",
+      "employeeId employeeName department designation workingHours halfDayHours",
+    );
 
     if (!attendance) {
       return res.status(400).json({
@@ -432,11 +472,11 @@ const checkOut = async (req, res) => {
     const outTime = new Date();
 
     // -----------------------------------------------
-    // Calculate working hours
+    // Calculate working hours based on employee
     // -----------------------------------------------
 
     const { totalMinutes, overtimeMinutes, deficitMinutes } =
-      calculateAttendanceHours(attendance.inTime, outTime);
+      calculateAttendanceHours(attendance.inTime, outTime, employee);
 
     // -----------------------------------------------
     // Update attendance
@@ -454,8 +494,9 @@ const checkOut = async (req, res) => {
     attendance.overtimeMinutes = overtimeMinutes;
 
     attendance.deficitMinutes = deficitMinutes;
-    // Automatically calculate attendance status
-    attendance.status = calculateAttendanceStatus(totalMinutes);
+
+    // Employee-specific working hours
+    attendance.status = calculateAttendanceStatus(totalMinutes, employee);
 
     await attendance.save();
 
@@ -488,45 +529,125 @@ const checkOut = async (req, res) => {
 // 3. GET TODAY'S ATTENDANCE
 // ======================================================
 
+// ======================================================
+// 3. GET TODAY'S ATTENDANCE
+// ======================================================
+
 const getTodayAttendance = async (req, res) => {
   try {
     const { employee } = await getAuthenticatedEmployee(req.user?._id);
 
     const attendanceDate = getTodayAttendanceDate();
 
+    // ==================================================
+    // EMPLOYEE WORKING CONFIGURATION
+    // ==================================================
+
+    const workingConfig = getEmployeeWorkingMinutes(employee);
+
+    // ==================================================
+    // FIND TODAY'S ATTENDANCE
+    // ==================================================
+
     const attendance = await Attendance.findOne({
       employeeId: employee._id,
       attendanceDate,
-    }).populate("employeeId", "employeeId employeeName department designation");
+    }).populate(
+      "employeeId",
+      "employeeId employeeName department designation workingHours halfDayHours",
+    );
+
+    // ==================================================
+    // NO ATTENDANCE YET
+    // ==================================================
 
     if (!attendance) {
       return res.status(200).json({
         success: true,
         message: "No attendance found for today",
-        data: null,
+        data: {
+          attendance: null,
+
+          // Employee working configuration
+          requiredWorkingMinutes: workingConfig.requiredMinutes,
+          requiredWorkingHours: formatMinutes(workingConfig.requiredMinutes),
+
+          halfDayWorkingMinutes: workingConfig.halfDayMinutes,
+          halfDayWorkingHours: formatMinutes(workingConfig.halfDayMinutes),
+
+          // No attendance means nothing worked yet
+          remainingMinutes: workingConfig.requiredMinutes,
+          remainingHours: formatMinutes(workingConfig.requiredMinutes),
+
+          totalMinutes: 0,
+          totalHours: "0H 0M",
+
+          overtimeMinutes: 0,
+          overtime: "0H 0M",
+
+          deficitMinutes: 0,
+          deficitHours: "0H 0M",
+
+          status: 0,
+          statusLabel: "ABSENT",
+        },
       });
     }
 
+    // ==================================================
+    // REMAINING MINUTES
+    // ==================================================
+
+    const remainingMinutes = calculateRemainingMinutes(
+      attendance.inTime,
+      attendance.outTime,
+      employee,
+    );
+
+    // ==================================================
+    // RESPONSE
+    // ==================================================
+
     return res.status(200).json({
       success: true,
+
       data: {
         ...attendance.toObject(),
 
         statusLabel: getAttendanceStatusLabel(attendance.status),
 
-        totalHours: formatMinutes(attendance.totalMinutes),
+        // Attendance totals
+        totalMinutes: attendance.totalMinutes || 0,
 
-        overtime: formatMinutes(attendance.overtimeMinutes),
+        totalHours: formatMinutes(attendance.totalMinutes || 0),
 
-        deficitHours: formatMinutes(attendance.deficitMinutes),
-        remainingMinutes: calculateRemainingMinutes(
-          attendance.inTime,
-          attendance.outTime,
-        ),
+        overtimeMinutes: attendance.overtimeMinutes || 0,
 
-        remainingHours: formatMinutes(
-          calculateRemainingMinutes(attendance.inTime, attendance.outTime),
-        ),
+        overtime: formatMinutes(attendance.overtimeMinutes || 0),
+
+        deficitMinutes: attendance.deficitMinutes || 0,
+
+        deficitHours: formatMinutes(attendance.deficitMinutes || 0),
+
+        // ==================================================
+        // LIVE WORKING CONFIG
+        // ==================================================
+
+        requiredWorkingMinutes: workingConfig.requiredMinutes,
+
+        requiredWorkingHours: formatMinutes(workingConfig.requiredMinutes),
+
+        halfDayWorkingMinutes: workingConfig.halfDayMinutes,
+
+        halfDayWorkingHours: formatMinutes(workingConfig.halfDayMinutes),
+
+        // ==================================================
+        // REMAINING TIME
+        // ==================================================
+
+        remainingMinutes,
+
+        remainingHours: formatMinutes(remainingMinutes),
       },
     });
   } catch (error) {
@@ -588,7 +709,7 @@ const getMyAttendance = async (req, res) => {
       Attendance.find(query)
         .populate(
           "employeeId",
-          "employeeId employeeName department designation",
+          "employeeId employeeName department designation workingHours halfDayHours",
         )
         .sort({
           attendanceDate: -1,
@@ -604,7 +725,9 @@ const getMyAttendance = async (req, res) => {
       const remainingMinutes = calculateRemainingMinutes(
         item.inTime,
         item.outTime,
+        item.employeeId,
       );
+      const workingConfig = getEmployeeWorkingMinutes(item.employeeId);
       return {
         ...item,
 
@@ -613,9 +736,16 @@ const getMyAttendance = async (req, res) => {
         totalHours: formatMinutes(item.totalMinutes),
 
         overtime: formatMinutes(item.overtimeMinutes),
+
         remainingMinutes,
+
         remainingHours: formatMinutes(remainingMinutes),
+
         deficitHours: formatMinutes(item.deficitMinutes),
+
+        requiredWorkingHours: formatMinutes(workingConfig.requiredMinutes),
+
+        halfDayWorkingHours: formatMinutes(workingConfig.halfDayMinutes),
       };
     });
 
@@ -645,6 +775,10 @@ const getMyAttendance = async (req, res) => {
 // 5. ADMIN / HR - GET ALL ATTENDANCE
 // ======================================================
 
+// ======================================================
+// ADMIN / HR - GET ALL ATTENDANCE
+// ======================================================
+
 const getAllAttendance = async (req, res) => {
   try {
     const page = Math.max(Number(req.query.page) || 1, 1);
@@ -655,9 +789,9 @@ const getAllAttendance = async (req, res) => {
 
     const query = {};
 
-    // -----------------------------------------------
-    // Employee filter
-    // -----------------------------------------------
+    // ==================================================
+    // EMPLOYEE FILTER
+    // ==================================================
 
     if (req.query.employeeId) {
       if (!mongoose.Types.ObjectId.isValid(req.query.employeeId)) {
@@ -670,17 +804,75 @@ const getAllAttendance = async (req, res) => {
       query.employeeId = req.query.employeeId;
     }
 
-    // -----------------------------------------------
-    // Status filter
-    // -----------------------------------------------
+    // ==================================================
+    // STATUS FILTER
+    // ==================================================
 
-    if (req.query.status) {
-      query.status = req.query.status.toUpperCase();
+    if (req.query.status !== undefined && req.query.status !== "") {
+      const numericStatus = Number(req.query.status);
+
+      if (![0, 0.5, 1].includes(numericStatus)) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid status. Allowed values are 0, 0.5 and 1",
+        });
+      }
+
+      query.status = numericStatus;
     }
 
-    // -----------------------------------------------
-    // Exact date filter
-    // -----------------------------------------------
+    // ==================================================
+    // SEARCH
+    // ==================================================
+
+    if (req.query.search?.trim()) {
+      const search = req.query.search.trim();
+
+      const matchingEmployees = await Employee.find({
+        $or: [
+          {
+            employeeId: {
+              $regex: search,
+              $options: "i",
+            },
+          },
+          {
+            employeeName: {
+              $regex: search,
+              $options: "i",
+            },
+          },
+          {
+            email: {
+              $regex: search,
+              $options: "i",
+            },
+          },
+          {
+            department: {
+              $regex: search,
+              $options: "i",
+            },
+          },
+          {
+            designation: {
+              $regex: search,
+              $options: "i",
+            },
+          },
+        ],
+      }).select("_id");
+
+      const employeeIds = matchingEmployees.map((employee) => employee._id);
+
+      query.employeeId = {
+        $in: employeeIds,
+      };
+    }
+
+    // ==================================================
+    // EXACT DATE FILTER
+    // ==================================================
 
     if (req.query.date) {
       const date = new Date(`${req.query.date}T00:00:00+05:30`);
@@ -693,7 +885,6 @@ const getAllAttendance = async (req, res) => {
       }
 
       const nextDate = new Date(date);
-
       nextDate.setUTCDate(nextDate.getUTCDate() + 1);
 
       query.attendanceDate = {
@@ -702,10 +893,10 @@ const getAllAttendance = async (req, res) => {
       };
     }
 
-    // -----------------------------------------------
-    // Month filter
+    // ==================================================
+    // MONTH FILTER
     // Example: 2026-08
-    // -----------------------------------------------
+    // ==================================================
 
     if (req.query.month) {
       const [year, month] = req.query.month.split("-").map(Number);
@@ -722,7 +913,6 @@ const getAllAttendance = async (req, res) => {
       );
 
       const nextMonth = month === 12 ? 1 : month + 1;
-
       const nextYear = month === 12 ? year + 1 : year;
 
       const endDate = new Date(
@@ -735,15 +925,15 @@ const getAllAttendance = async (req, res) => {
       };
     }
 
-    // -----------------------------------------------
-    // Query
-    // -----------------------------------------------
+    // ==================================================
+    // QUERY
+    // ==================================================
 
     const [attendance, total] = await Promise.all([
       Attendance.find(query)
         .populate(
           "employeeId",
-          "employeeId employeeName department designation email",
+          "employeeId employeeName department designation email workingHours halfDayHours",
         )
         .sort({
           attendanceDate: -1,
@@ -756,20 +946,33 @@ const getAllAttendance = async (req, res) => {
       Attendance.countDocuments(query),
     ]);
 
-    // -----------------------------------------------
-    // Format response
-    // -----------------------------------------------
-    const formattedData = attendance.map((item) => ({
-      ...item,
+    // ==================================================
+    // FORMAT RESPONSE
+    // ==================================================
 
-      statusLabel: getAttendanceStatusLabel(item.status),
+    const formattedData = attendance.map((item) => {
+      const remainingMinutes = calculateRemainingMinutes(
+        item.inTime,
+        item.outTime,
+        item.employeeId,
+      );
 
-      totalHours: formatMinutes(item.totalMinutes),
+      return {
+        ...item,
 
-      overtime: formatMinutes(item.overtimeMinutes),
+        statusLabel: getAttendanceStatusLabel(item.status),
 
-      deficitHours: formatMinutes(item.deficitMinutes),
-    }));
+        totalHours: formatMinutes(item.totalMinutes),
+
+        overtime: formatMinutes(item.overtimeMinutes),
+
+        deficitHours: formatMinutes(item.deficitMinutes),
+
+        remainingMinutes,
+
+        remainingHours: formatMinutes(remainingMinutes),
+      };
+    });
 
     return res.status(200).json({
       success: true,
@@ -788,11 +991,10 @@ const getAllAttendance = async (req, res) => {
 
     return res.status(500).json({
       success: false,
-      message: error.message || "Failed to fetch attendance",
+      message: error.message || "Failed to fetch all attendance",
     });
   }
 };
-
 // ======================================================
 // 6. GET ATTENDANCE BY ID
 // ======================================================
@@ -850,117 +1052,565 @@ const getAttendanceById = async (req, res) => {
 // 7. ADMIN / HR - UPDATE ATTENDANCE
 // ======================================================
 
-const updateAttendance = async (req, res) => {
-  try {
-    const { id } = req.params;
+// create a check in check out and regularise attendance
+// ======================================================
+// CREATE / REGULARIZE ATTENDANCE - ADMIN
+// Status Only
+// ======================================================
 
-    if (!mongoose.Types.ObjectId.isValid(id)) {
+// ======================================================
+// CREATE / REGULARIZE ATTENDANCE STATUS
+// ======================================================
+const createOrRegularizeAttendance = async (req, res) => {
+  try {
+    const { employeeId, attendanceDate, status, remarks } = req.body;
+
+    // ==================================================
+    // 1. VALIDATE EMPLOYEE ID
+    // ==================================================
+
+    if (!employeeId || !mongoose.Types.ObjectId.isValid(employeeId)) {
       return res.status(400).json({
         success: false,
-        message: "Invalid attendance ID",
+        message: "Valid employeeId is required",
       });
     }
 
-    const attendance = await Attendance.findById(id);
+    // ==================================================
+    // 2. FIND EMPLOYEE
+    // ==================================================
 
-    if (!attendance) {
+    const employee = await Employee.findById(employeeId);
+
+    if (!employee) {
       return res.status(404).json({
         success: false,
-        message: "Attendance record not found",
+        message: "Employee not found",
       });
     }
 
-    const { inTime, outTime, status, remarks } = req.body;
+    // ==================================================
+    // 3. VALIDATE ATTENDANCE DATE
+    // ==================================================
 
-    // -----------------------------------------------
-    // Update times
-    // -----------------------------------------------
-
-    if (inTime !== undefined) {
-      attendance.inTime = inTime ? new Date(inTime) : null;
+    if (!attendanceDate) {
+      return res.status(400).json({
+        success: false,
+        message: "Attendance date is required",
+      });
     }
 
-    if (outTime !== undefined) {
-      attendance.outTime = outTime ? new Date(outTime) : null;
+    // ==================================================
+    // 3. VALIDATE ATTENDANCE DATE
+    // ==================================================
+
+    if (!attendanceDate) {
+      return res.status(400).json({
+        success: false,
+        message: "Attendance date is required",
+      });
     }
 
-    // -----------------------------------------------
-    // Recalculate hours
-    // -----------------------------------------------
-
-    const { totalMinutes, overtimeMinutes, deficitMinutes } =
-      calculateAttendanceHours(attendance.inTime, attendance.outTime);
-
-    attendance.totalMinutes = totalMinutes;
-
-    attendance.overtimeMinutes = overtimeMinutes;
-
-    attendance.deficitMinutes = deficitMinutes;
-
-    // -----------------------------------------------
-    // Status
-    // -----------------------------------------------
-
-    // -----------------------------------------------
-    // Status
-    // -----------------------------------------------
-
-    if (status !== undefined) {
-      const numericStatus = Number(status);
-
-      if (![0, 0.5, 1].includes(numericStatus)) {
-        return res.status(400).json({
-          success: false,
-          message: "Invalid attendance status. Allowed values are 0, 0.5 and 1",
-        });
-      }
-
-      attendance.status = numericStatus;
-    } else {
-      attendance.status = calculateAttendanceStatus(attendance.totalMinutes);
-    }
-    // -----------------------------------------------
-    // Remarks
-    // -----------------------------------------------
-
-    if (remarks !== undefined) {
-      attendance.remarks = remarks;
+    // Expect YYYY-MM-DD
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(attendanceDate)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid attendance date. Expected YYYY-MM-DD",
+      });
     }
 
-    // -----------------------------------------------
-    // Audit
-    // -----------------------------------------------
+    // ==================================================
+    // INDIA DAY RANGE
+    // ==================================================
+
+    // Start of selected day in IST
+    const attendanceDateObj = new Date(`${attendanceDate}T00:00:00+05:30`);
+
+    // Start of next day in IST
+    const nextDateObj = new Date(`${attendanceDate}T00:00:00+05:30`);
+
+    nextDateObj.setUTCDate(nextDateObj.getUTCDate() + 1);
+
+    if (isNaN(attendanceDateObj.getTime()) || isNaN(nextDateObj.getTime())) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid attendance date",
+      });
+    }
+
+    // ==================================================
+    // 4. VALIDATE STATUS
+    // ==================================================
+
+    if (status === undefined || status === null || status === "") {
+      return res.status(400).json({
+        success: false,
+        message: "Attendance status is required",
+      });
+    }
+
+    const numericStatus = Number(status);
+
+    if (![0, 0.5, 1].includes(numericStatus)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid attendance status. Allowed values are 0, 0.5 and 1",
+      });
+    }
+
+    // ==================================================
+    // 5. VALIDATE DOCUMENT COUNT
+    // ==================================================
+
+    const files = req.files || [];
+
+    if (files.length > 5) {
+      return res.status(400).json({
+        success: false,
+        message: "Maximum 5 supporting documents are allowed",
+      });
+    }
+
+    // ==================================================
+    // 6. FIND EXISTING ATTENDANCE FOR SAME INDIA DATE
+    // ==================================================
+
+    let attendance = await Attendance.findOne({
+      employeeId: employee._id,
+
+      attendanceDate: {
+        $gte: attendanceDateObj,
+        $lt: nextDateObj,
+      },
+    });
+
+    // ==================================================
+    // 7. UPLOAD NEW DOCUMENTS
+    // ==================================================
+
+    let uploadedDocuments = [];
+
+    if (files.length > 0) {
+      uploadedDocuments = await Promise.all(
+        files.map((file) => uploadRegularizationDocument(file)),
+      );
+    }
+
+    // ==================================================
+    // 8. CREATE NEW ATTENDANCE
+    // ==================================================
+
+    if (!attendance) {
+      attendance = new Attendance({
+        employeeId: employee._id,
+
+        attendanceDate: attendanceDateObj,
+
+        inTime: null,
+        outTime: null,
+
+        totalMinutes: 0,
+        overtimeMinutes: 0,
+        deficitMinutes: 0,
+
+        status: numericStatus,
+
+        attendanceSource: "ADMIN",
+
+        remarks: remarks?.trim() || "Attendance created by Admin",
+
+        // ==========================================
+        // DOCUMENTS
+        // ==========================================
+
+        regularizationDocuments: uploadedDocuments,
+
+        editedBy: req.user?._id || null,
+
+        editedAt: new Date(),
+      });
+
+      await attendance.save();
+
+      const populatedAttendance = await Attendance.findById(attendance._id)
+        .populate(
+          "employeeId",
+          "employeeId employeeName department designation workingHours halfDayHours",
+        )
+        .populate("editedBy", "name email role");
+
+      return res.status(201).json({
+        success: true,
+
+        message: "Attendance created successfully",
+
+        data: {
+          ...populatedAttendance.toObject(),
+
+          statusLabel: getAttendanceStatusLabel(populatedAttendance.status),
+
+          totalHours: formatMinutes(populatedAttendance.totalMinutes || 0),
+
+          overtime: formatMinutes(populatedAttendance.overtimeMinutes || 0),
+
+          deficitHours: formatMinutes(populatedAttendance.deficitMinutes || 0),
+        },
+      });
+    }
+
+    // ==================================================
+    // 9. EXISTING ATTENDANCE
+    // ==================================================
+
+    attendance.status = numericStatus;
+
+    attendance.attendanceSource = "ADMIN";
+
+    attendance.remarks =
+      remarks !== undefined ? remarks.trim() : attendance.remarks;
+
+    // ==================================================
+    // ADD NEW DOCUMENTS
+    // ==================================================
+
+    if (uploadedDocuments.length > 0) {
+      attendance.regularizationDocuments.push(...uploadedDocuments);
+    }
+
+    // ==================================================
+    // MAX 5 DOCUMENTS CHECK
+    // ==================================================
+
+    if (attendance.regularizationDocuments.length > 5) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Maximum 5 supporting documents are allowed per attendance record",
+      });
+    }
 
     attendance.editedBy = req.user?._id || null;
+
     attendance.editedAt = new Date();
+
+    // DO NOT CHANGE:
+    //
+    // attendance.inTime
+    // attendance.outTime
+    // attendance.totalMinutes
+    // attendance.overtimeMinutes
+    // attendance.deficitMinutes
 
     await attendance.save();
 
+    // ==================================================
+    // 10. POPULATE
+    // ==================================================
+
+    const populatedAttendance = await Attendance.findById(attendance._id)
+      .populate(
+        "employeeId",
+        "employeeId employeeName department designation workingHours halfDayHours",
+      )
+      .populate("editedBy", "name email role");
+
+    // ==================================================
+    // 11. RESPONSE
+    // ==================================================
+
     return res.status(200).json({
       success: true,
-      message: "Attendance updated successfully",
+
+      message: "Attendance status updated successfully",
 
       data: {
-        ...attendance.toObject(),
+        ...populatedAttendance.toObject(),
 
-        statusLabel: getAttendanceStatusLabel(attendance.status),
+        statusLabel: getAttendanceStatusLabel(populatedAttendance.status),
 
-        totalHours: formatMinutes(attendance.totalMinutes),
+        totalHours: formatMinutes(populatedAttendance.totalMinutes || 0),
 
-        overtime: formatMinutes(attendance.overtimeMinutes),
+        overtime: formatMinutes(populatedAttendance.overtimeMinutes || 0),
 
-        deficitHours: formatMinutes(attendance.deficitMinutes),
+        deficitHours: formatMinutes(populatedAttendance.deficitMinutes || 0),
       },
     });
   } catch (error) {
-    console.error("Update Attendance Error:", error);
+    console.error("Create / Regularize Attendance Error:", error);
 
     return res.status(500).json({
       success: false,
-      message: error.message || "Failed to update attendance",
+      message: error.message || "Failed to update attendance status",
     });
   }
 };
+// const createOrRegularizeAttendance = async (req, res) => {
+//   try {
+//     const { employeeId, attendanceDate, status, remarks } = req.body;
+//     // ================================================
+//     // UPLOAD REGULARIZATION DOCUMENT
+//     // ================================================
+
+//     let regularizationDocument = null;
+
+//     if (req.file) {
+//       regularizationDocument = await uploadRegularizationDocument(req.file);
+//     }
+//     // ==================================================
+//     // 1. VALIDATE EMPLOYEE ID
+//     // ==================================================
+
+//     if (!employeeId || !mongoose.Types.ObjectId.isValid(employeeId)) {
+//       return res.status(400).json({
+//         success: false,
+//         message: "Valid employeeId is required",
+//       });
+//     }
+
+//     // ==================================================
+//     // 2. FIND EMPLOYEE
+//     // ==================================================
+
+//     const employee = await Employee.findById(employeeId);
+
+//     if (!employee) {
+//       return res.status(404).json({
+//         success: false,
+//         message: "Employee not found",
+//       });
+//     }
+
+//     // ==================================================
+//     // 3. VALIDATE ATTENDANCE DATE
+//     // ==================================================
+
+//     if (!attendanceDate) {
+//       return res.status(400).json({
+//         success: false,
+//         message: "Attendance date is required",
+//       });
+//     }
+
+//     const attendanceDateObj = new Date(`${attendanceDate}T00:00:00+05:30`);
+
+//     if (isNaN(attendanceDateObj.getTime())) {
+//       return res.status(400).json({
+//         success: false,
+//         message: "Invalid attendance date",
+//       });
+//     }
+
+//     // ==================================================
+//     // 4. VALIDATE STATUS
+//     // ==================================================
+
+//     if (status === undefined || status === null || status === "") {
+//       return res.status(400).json({
+//         success: false,
+//         message: "Attendance status is required",
+//       });
+//     }
+
+//     const numericStatus = Number(status);
+
+//     if (![0, 0.5, 1].includes(numericStatus)) {
+//       return res.status(400).json({
+//         success: false,
+//         message: "Invalid attendance status. Allowed values are 0, 0.5 and 1",
+//       });
+//     }
+//     // ==================================================
+//     // 5. VALIDATE DOCUMENT COUNT
+//     // ==================================================
+
+//     const files = req.files || [];
+
+//     if (files.length > 5) {
+//       return res.status(400).json({
+//         success: false,
+//         message: "Maximum 5 supporting documents are allowed",
+//       });
+//     }
+//     // ==================================================
+//     // 5. FIND EXISTING ATTENDANCE
+//     // ==================================================
+
+//     let attendance = await Attendance.findOne({
+//       employeeId: employee._id,
+//       attendanceDate: attendanceDateObj,
+//     });
+
+//     // ==================================================
+//     // 7. UPLOAD NEW DOCUMENTS
+//     // ==================================================
+
+//     let uploadedDocuments = [];
+
+//     if (files.length > 0) {
+//       uploadedDocuments = await Promise.all(
+//         files.map((file) => uploadRegularizationDocument(file)),
+//       );
+//     }
+
+//     // ==================================================
+//     // 6. CREATE NEW ATTENDANCE
+//     // ==================================================
+
+//     if (!attendance) {
+//       attendance = new Attendance({
+//         employeeId: employee._id,
+
+//         attendanceDate: attendanceDateObj,
+
+//         // Admin regularization does NOT create
+//         // check-in / check-out times
+//         inTime: null,
+//         outTime: null,
+
+//         // No working time because there is no
+//         // check-in / check-out
+//         totalMinutes: 0,
+//         overtimeMinutes: 0,
+//         deficitMinutes: 0,
+
+//         // Admin-selected status
+//         status: numericStatus,
+
+//         attendanceSource: "ADMIN",
+
+//         remarks: remarks?.trim() || "Attendance created by Admin",
+//         // ================================================
+//         // REGULARIZATION DOCUMENT
+//         // ================================================
+
+//         regularizationDocuments: uploadedDocuments,
+
+//         editedBy: req.user?._id || null,
+//         editedAt: new Date(),
+//       });
+
+//       await attendance.save();
+
+//       // -----------------------------------------------
+//       // Populate response
+//       // -----------------------------------------------
+
+//       const populatedAttendance = await Attendance.findById(attendance._id)
+//         .populate(
+//           "employeeId",
+//           "employeeId employeeName department designation workingHours halfDayHours",
+//         )
+//         .populate("editedBy", "name email role");
+
+//       return res.status(201).json({
+//         success: true,
+
+//         message: "Attendance created successfully",
+
+//         data: {
+//           ...populatedAttendance.toObject(),
+
+//           statusLabel: getAttendanceStatusLabel(populatedAttendance.status),
+
+//           totalHours: formatMinutes(populatedAttendance.totalMinutes || 0),
+
+//           overtime: formatMinutes(populatedAttendance.overtimeMinutes || 0),
+
+//           deficitHours: formatMinutes(populatedAttendance.deficitMinutes || 0),
+//         },
+//       });
+//     }
+
+//     // ==================================================
+//     // 7. EXISTING ATTENDANCE
+//     // ==================================================
+//     //
+//     // IMPORTANT:
+//     //
+//     // Only update:
+//     //   status
+//     //   remarks
+//     //   attendanceSource
+//     //   editedBy
+//     //   editedAt
+//     //
+//     // NEVER update:
+//     //   inTime
+//     //   outTime
+//     //   totalMinutes
+//     //   overtimeMinutes
+//     //   deficitMinutes
+//     //
+//     // ==================================================
+
+//     attendance.status = numericStatus;
+
+//     attendance.attendanceSource = "ADMIN";
+
+//     attendance.remarks =
+//       remarks !== undefined ? remarks.trim() : attendance.remarks;
+//     // ================================================
+//     // UPDATE REGULARIZATION DOCUMENT
+//     // ================================================
+
+//     if (regularizationDocument) {
+//       attendance.regularizationDocument = regularizationDocument;
+//     }
+//     attendance.editedBy = req.user?._id || null;
+
+//     attendance.editedAt = new Date();
+
+//     // Do NOT touch these fields:
+//     //
+//     // attendance.inTime
+//     // attendance.outTime
+//     // attendance.totalMinutes
+//     // attendance.overtimeMinutes
+//     // attendance.deficitMinutes
+
+//     await attendance.save();
+
+//     // ==================================================
+//     // 8. POPULATE RESPONSE
+//     // ==================================================
+
+//     const populatedAttendance = await Attendance.findById(attendance._id)
+//       .populate(
+//         "employeeId",
+//         "employeeId employeeName department designation workingHours halfDayHours",
+//       )
+//       .populate("editedBy", "name email role");
+
+//     // ==================================================
+//     // 9. RESPONSE
+//     // ==================================================
+
+//     return res.status(200).json({
+//       success: true,
+
+//       message: "Attendance status updated successfully",
+
+//       data: {
+//         ...populatedAttendance.toObject(),
+
+//         statusLabel: getAttendanceStatusLabel(populatedAttendance.status),
+
+//         totalHours: formatMinutes(populatedAttendance.totalMinutes || 0),
+
+//         overtime: formatMinutes(populatedAttendance.overtimeMinutes || 0),
+
+//         deficitHours: formatMinutes(populatedAttendance.deficitMinutes || 0),
+//       },
+//     });
+//   } catch (error) {
+//     console.error("Create / Regularize Attendance Error:", error);
+
+//     return res.status(500).json({
+//       success: false,
+//       message: error.message || "Failed to update attendance status",
+//     });
+//   }
+// };
 
 // ======================================================
 // EXPORT
@@ -973,5 +1623,6 @@ module.exports = {
   getMyAttendance,
   getAllAttendance,
   getAttendanceById,
-  updateAttendance,
+
+  createOrRegularizeAttendance,
 };

@@ -3,13 +3,11 @@ const Employee = require("../models/employee.model");
 const User = require("../models/user.model");
 
 const toggleEmployeeLogin = async (employeeId) => {
-  // Validate ObjectId first
   if (!mongoose.Types.ObjectId.isValid(employeeId)) {
     throw new Error("Invalid employee ID");
   }
 
   const employee = await Employee.findById(employeeId);
-
   if (!employee) {
     throw new Error("Employee not found");
   }
@@ -19,30 +17,19 @@ const toggleEmployeeLogin = async (employeeId) => {
   }
 
   const email = employee.email.trim().toLowerCase();
-
-  // Toggle employee login status
+  
   const newLoginEnabled = !employee.loginEnabled;
 
-  employee.loginEnabled = newLoginEnabled;
-  await employee.save();
-
-  // Find employee user
-  let user = await User.findOne({
-    email,
-    role: "Employee",
-  });
-
-  // ============================================================
-  // DISABLE LOGIN
-  // ============================================================
   if (!newLoginEnabled) {
+    employee.loginEnabled = false;
+    await employee.save();
+
+    const user = await User.findOne({
+      employeeId: employee._id,
+    });
+
     if (user) {
       user.isActive = false;
-
-      // IMPORTANT:
-      // User.employeeId must contain Employee MongoDB _id
-      user.employeeId = employee._id;
-
       await user.save();
     }
 
@@ -54,21 +41,46 @@ const toggleEmployeeLogin = async (employeeId) => {
     };
   }
 
-  // ============================================================
-  // ENABLE LOGIN
-  // ============================================================
+  const existingEmailUser = await User.findOne({
+    email,
+  });
 
-  // Existing employee user
-  if (user) {
-    user.name = employee.employeeName;
-    user.email = email;
-    user.role = "Employee";
-    user.employeeId = employee._id;
+  if (existingEmailUser) {
+    if (
+      existingEmailUser.employeeId &&
+      String(existingEmailUser.employeeId) === String(employee._id)
+    ) {
+      existingEmailUser.name = employee.employeeName;
+      existingEmailUser.email = email;
+      existingEmailUser.role = "Employee";
+      existingEmailUser.employeeId = employee.employeeId;
+      existingEmailUser.employeeIdLable = employee.employeeId;
+      existingEmailUser.isActive = true;
 
-    // Reactivate user
-    user.isActive = true;
+      await existingEmailUser.save();
 
-    await user.save();
+      employee.loginEnabled = true;
+      await employee.save();
+
+      return {
+        loginEnabled: true,
+        isActive: true,
+        employeeId: employee._id,
+        employeeIdLable: employee.employeeId,
+      };
+    }
+
+    existingEmailUser.name = employee.employeeName;
+    existingEmailUser.email = email;
+    existingEmailUser.role = "Employee";
+    existingEmailUser.employeeId = employee._id;
+    existingEmailUser.employeeIdLable = employee.employeeId;
+    existingEmailUser.isActive = true;
+
+    await existingEmailUser.save();
+
+    employee.loginEnabled = true;
+    await employee.save();
 
     return {
       loginEnabled: true,
@@ -78,26 +90,25 @@ const toggleEmployeeLogin = async (employeeId) => {
     };
   }
 
-  // ============================================================
-  // CREATE NEW EMPLOYEE USER
-  // ============================================================
-
-  user = await User.create({
+  const user = await User.create({
     name: employee.employeeName,
     email,
     password: "123456",
     role: "Employee",
     isActive: true,
-
-    // IMPORTANT
     employeeId: employee._id,
     employeeIdLable: employee.employeeId,
   });
+
+  employee.loginEnabled = true;
+  await employee.save();
 
   return {
     loginEnabled: true,
     isActive: true,
     employeeId: employee._id,
+    employeeIdLable: employee.employeeId,
+    userId: user._id,
   };
 };
 

@@ -181,50 +181,53 @@ const createClientRentHistory = async (client) => {
 };
 
 const generateMonthlyRent = async () => {
+
+
   const today = new Date();
-  // const month = new Date().getMonth() + 1;
-  // const year = new Date().getFullYear();
-  const month = 3;
-  const year = 2026;
+  const month = new Date().getMonth() + 1;
+  const year = new Date().getFullYear();
+  // const month = 4;
+  // const year = 2026;
   // const todayFilterDate = "2026-05-03";
-const todayFilterDate = new Date().toISOString().split("T")[0];
-const clients = await Client.find({
-  isBookingCancelled: false,
-  $or: [
-    {
-      $and: [
-        {
-          $or: [
-            { noticeLastDate: { $exists: false } },
-            { noticeLastDate: null },
-            { noticeLastDate: "" },
-          ],
-        },
-        {
-          $or: [
-            { clientVacatingDate: { $exists: false } },
-            { clientVacatingDate: null },
-            { clientVacatingDate: "" },
-          ],
-        },
-      ],
-    },
 
-    {
-      noticeLastDate: {
-        $gte: todayFilterDate,
+  const todayFilterDate = new Date().toISOString().split("T")[0];
+  const clients = await Client.find({
+    isBookingCancelled: false,
+    $or: [
+      {
+        $and: [
+          {
+            $or: [
+              { noticeLastDate: { $exists: false } },
+              { noticeLastDate: null },
+              { noticeLastDate: "" },
+            ],
+          },
+          {
+            $or: [
+              { clientVacatingDate: { $exists: false } },
+              { clientVacatingDate: null },
+              { clientVacatingDate: "" },
+            ],
+          },
+        ],
       },
-    },
 
-    {
-      clientVacatingDate: {
-        $gte: todayFilterDate,
+      {
+        noticeLastDate: {
+          $gte: todayFilterDate,
+        },
       },
-    },
-  ],
-})
-.populate("bedId")
-.lean();
+
+      {
+        clientVacatingDate: {
+          $gte: todayFilterDate,
+        },
+      },
+    ],
+  })
+    .populate("bedId")
+    .lean();
 
   const clientIds = clients.map((client) => client._id);
   const rentHistoryData = [];
@@ -709,11 +712,11 @@ const recalculateRentHistory = async (
     previousHistory = nextHistory;
   }
   return history;
-};  
+};
 
 module.exports = {
   generateMonthlyRent,
   createClientRentHistory,
   recalculateRentHistory
 };
-  
+

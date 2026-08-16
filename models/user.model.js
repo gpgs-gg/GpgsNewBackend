@@ -22,16 +22,21 @@ const userSchema = new mongoose.Schema(
       required: true,
       minlength: 6,
     },
+    
     bookingId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Booking",
       default: null,
     },
 
-    employeeId: {
+    clientId: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: "Employee",
+      ref: "Booking",
       default: null,
+    },
+
+    employeeId: {
+    type: String,
     },
 
     role: {

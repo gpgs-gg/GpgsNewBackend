@@ -62,7 +62,7 @@ const ClientSchema = new mongoose.Schema(
             enum: ["P. Booked", "T. Booked"],
             default: "P. Booked",
         },
-
+        status: String,
         // ===================================
         // CLIENT DETAILS
         // ===================================
@@ -256,7 +256,7 @@ const ClientSchema = new mongoose.Schema(
 // ===================================
 // INDEXES
 // ===================================
-
+ClientSchema.index({ createdAt: -1 });
 ClientSchema.index({
     propertyId: 1,
     status: 1,

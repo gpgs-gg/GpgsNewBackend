@@ -8,8 +8,8 @@ const {
   getTodayAttendance,
   getMyAttendance,
   getAllAttendance,
+  createOrRegularizeAttendance,
   getAttendanceById,
-  updateAttendance,
 } = require("../controllers/AttendanceController");
 
 const { verifyJWT } = require("../middleware/verifyJWT");
@@ -48,7 +48,12 @@ router.get("/", verifyJWT, getAllAttendance);
 // Single attendance
 router.get("/:id", verifyJWT, getAttendanceById);
 
-// Update attendance
-router.put("/:id", verifyJWT, updateAttendance);
-
+// Regularise attendance
+router.post(
+  "/admin/regularize",
+  verifyJWT,
+  upload.array("supportingDocuments", 5),
+  createOrRegularizeAttendance,
+);
+// router.get("/search", searchEmployees);
 module.exports = router;

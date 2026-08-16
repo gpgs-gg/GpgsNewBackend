@@ -11,65 +11,66 @@ const {
 } = require("../services/rentHistory.service");
 const uploadFile = require("../services/uploadFile");
 
+const ClientRentHistory = require("../models/clientRentHistory.model");
 
 
-// exports.createDummyClients = async (req, res) => {
-//   try {
-//     const clients = [];
+  exports.createDummyClients = async (req, res) => {
+    try {
+      const clients = [];
 
-//     for (let i = 1; i <= 2000; i++) {
-//       clients.push({
-//         propertyId: "6a40c37f1b3149860bf45ae6",
-//         bedId: "6a40c54d1b3149860bf45ae7",
-//         bookingId: "6a4f785416d15e9afa6e829e",
+      for (let i = 1; i <= 20000; i++) {
+        clients.push({
+          propertyId: "6a5f00cf449ad08b14340eca",
+          bedId: "6a5f02c8449ad08b14340ecb",
+          bookingId: "6a4f785416d15e9afa6e829e",
 
-//         stayType: "P. Booked",
-//         status: "Booked",
-//         isBookingCancelled: false,
+          stayType: "P. Booked",
+          status: "Booked",
+          isBookingCancelled: false,
 
-//         fullName: `Dummy Client ${i}`,
-//         whatsappNo: `9000${String(i).padStart(6, "0")}`,
-//         callingNo: `9000${String(i).padStart(6, "0")}`,
-//         emailId: `dummy${i}@gmail.com`,
+          fullName: `Dummy Client ${i}`,
+          whatsappNo: `9000${String(i).padStart(6, "0")}`,
+          callingNo: `9000${String(i).padStart(6, "0")}`,
+          emailId: `dummy${i}@gmail.com`,
 
-//         monthlyRent: 8000,
-//         depositAmount: 16000,
-//         parkingCharges: 100,
-//         processingFees: 500,
+          monthlyRent: 8000,
+          depositAmount: 16000,
+          parkingCharges: 100,
+          processingFees: 500,
 
-//         clientDoj: new Date("2026-06-15"),
+          clientDoj: new Date("2026-06-15"),
 
-//         totalAmount: 24600,
-//         bookingAmount: 2000,
-//         balanceAmount: 22600,
+          totalAmount: 24600,
+          bookingAmount: 2000,
+          balanceAmount: 22600,
 
-//         photo: [],
-//         aadhaarCard: [],
-//         pan: [],
-//         collegeIdentification: [],
-//         companyIdentification: [],
-//         clientRentalAgreement: [],
-//         clientPoliceNOC: [],
-//         attachments: [],
-//         bedHistory: [],
-//         worklogs: [],
-//       });
-//     }
+          photo: [],
+          aadhaarCard: [],
+          pan: [],
+          collegeIdentification: [],
+          companyIdentification: [],
+          clientRentalAgreement: [],
+          clientPoliceNOC: [],
+          attachments: [],
+          bedHistory: [],
+          worklogs: [],
+        });
+      }
 
-//     const result = await Client.insertMany(clients);
+      const result = await Client.insertMany(clients);
 
-//     return res.status(200).json({
-//       success: true,
-//       message: `${result.length} Dummy Clients Created`,
-//     });
-//   } catch (err) {
-//     console.error(err);
-//     return res.status(500).json({
-//       success: false,
-//       message: err.message,
-//     });
-//   }
-// };
+      return res.status(200).json({
+        success: true,
+        message: `${result.length} Dummy Clients Created`,
+      });
+    } catch (err) {
+      console.error(err);
+      return res.status(500).json({
+        success: false,
+        message: err.message,
+      });
+    }
+  };
 
 exports.createClientFromBooking = async (
   req,
@@ -88,26 +89,26 @@ exports.createClientFromBooking = async (
       });
     }
 
-const email = booking.emailId?.trim().toLowerCase();
+    const email = booking.emailId?.trim().toLowerCase();
 
-if (!email) {
-  return res.status(400).json({
-    success: false,
-    message: "Email is required.",
-  });
-}
+    if (!email) {
+      return res.status(400).json({
+        success: false,
+        message: "Email is required.",
+      });
+    }
 
-const activeUser = await User.findOne({
-  email,
-  isActive: true,
-}).lean();
+    const activeUser = await User.findOne({
+      email,
+      isActive: true,
+    }).lean();
 
-if (activeUser) {
-  return res.status(409).json({
-    success: false,
-    message: "An active account already exists with this email address, please change this email.",
-  });
-}
+    if (activeUser) {
+      return res.status(409).json({
+        success: false,
+        message: "An active account already exists with this email address, please change this email.",
+      });
+    }
 
     // =========================
     // REACTIVATE OLD CLIENTS
@@ -776,7 +777,7 @@ exports.getClients = async (req, res) => {
     // ================= Global Search =================
     if (req.query.search?.trim()) {
       const search = req.query.search.trim();
-// search conditions if any field matches
+      // search conditions if any field matches
       const searchConditions = [
         { fullName: { $regex: search, $options: "i" } },
         { callingNo: { $regex: search, $options: "i" } },
@@ -1498,9 +1499,8 @@ exports.updateClient = async (req, res) => {
     } else {
       client.clientPoliceNOC = existingClientPoliceNOC;
     }
-
     // ===============================================
-
+    const wasBookingCancelled = client.isBookingCancelled;
     // Update Other Fields
     Object.keys(req.body).forEach((key) => {
       if (!key.endsWith("Existing")) {
@@ -1510,6 +1510,22 @@ exports.updateClient = async (req, res) => {
 
     await client.save();
 
+    if (
+      wasBookingCancelled !== client.isBookingCancelled
+    ) {
+      await User.findOneAndUpdate(
+        {
+          bookingId: client.bookingId,
+          role: "Client",
+        },
+        {
+          $set: {
+            isActive: !client.isBookingCancelled,
+          },
+        }
+      );
+    }
+    await client.save();
     const shouldRecalculate =
       oldData.clientDoj !== client.clientDoj ||
       oldData.noticeLastDate !== client.noticeLastDate ||
@@ -1517,7 +1533,6 @@ exports.updateClient = async (req, res) => {
       oldData.bedId !== client.bedId?.toString() ||
       oldData.monthlyRent !== client.monthlyRent ||
       oldData.depositAmount !== client.depositAmount;
-
 
     const isTempToPermanent =
       oldData.stayType === "T. Booked" &&
@@ -1654,6 +1669,728 @@ exports.deleteClient = async (req, res) => {
   }
 };
 
-// ======================================
-// AVAILABLE BEDS
-// ======================================
+
+exports.getNoticeClients = async (req, res) => {
+  try {
+    const clients = await Client.aggregate([
+      {
+        $match: {
+          isBookingCancelled: false,
+          noticeLastDate: {
+            $exists: true,
+            $nin: [null, ""],
+          },
+        },
+      },
+
+      {
+        $lookup: {
+          from: "clientrenthistories",
+          let: {
+            clientId: "$_id",
+          },
+
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $eq: ["$clientId", "$$clientId"],
+                },
+              },
+            },
+            {
+              $sort: {
+                year: -1,
+                month: -1,
+                createdAt: -1,
+                _id: -1,
+              },
+            },
+            {
+              $limit: 1,
+            },
+          ],
+
+          as: "latestRentHistory",
+        },
+      },
+// ==========================================
+// TOTAL PAID DEPOSIT
+// ==========================================
+{
+  $lookup: {
+    from: "clientrenthistories",
+    let: {
+      clientId: "$_id",
+    },
+    pipeline: [
+      {
+        $match: {
+          $expr: {
+            $eq: ["$clientId", "$$clientId"],
+          },
+        },
+      },
+      {
+        $group: {
+          _id: null,
+          totalPaidDeposit: {
+            $sum: {
+              $toDouble: {
+                $ifNull: [
+                  "$depositAmount",
+                  0,
+                ],
+              },
+            },
+          },
+        },
+      },
+    ],
+    as: "depositSummary",
+  },
+},
+      {
+        $unwind: {
+          path: "$latestRentHistory",
+          preserveNullAndEmptyArrays: true,
+        },
+      },
+
+      {
+        $lookup: {
+          from: "properties",
+          localField: "propertyId",
+          foreignField: "_id",
+          as: "property",
+        },
+      },
+
+      {
+        $unwind: {
+          path: "$property",
+          preserveNullAndEmptyArrays: true,
+        },
+      },
+
+      {
+        $lookup: {
+          from: "beds",
+          localField: "bedId",
+          foreignField: "_id",
+          as: "bed",
+        },
+      },
+
+      {
+        $unwind: {
+          path: "$bed",
+          preserveNullAndEmptyArrays: true,
+        },
+      },
+
+      {
+        $project: {
+          _id: 1,
+          fullName: 1,
+          emailId: 1,
+          callingNo: 1,
+          whatsappNo: 1,
+
+          clientDoj: 1,
+          noticeStartDate: 1,
+          noticeLastDate: 1,
+          clientVacatingDate: 1,
+
+          stayType: 1,
+          status: 1,
+          isBookingCancelled: 1,
+totalPaidDeposit: {
+  $ifNull: [
+    {
+      $arrayElemAt: [
+        "$depositSummary.totalPaidDeposit",
+        0,
+      ],
+    },
+    0,
+  ],
+},
+          propertyId: 1,
+          propertyCode: "$property.propertyCode",
+
+          bedId: 1,
+          roomNo: "$bed.roomNo",
+          bedNo: "$bed.bedNo",
+
+          latestRentHistory: 1,
+        },
+      },
+
+      {
+        $sort: {
+          noticeLastDate: 1,
+        },
+      },
+    ]);
+
+    return res.status(200).json({
+      success: true,
+      count: clients.length,
+      data: clients,
+    });
+  } catch (error) {
+    console.error("Get Notice Clients Error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+exports.getClientsWithLatestRentHistory = async (req, res) => {
+  try {
+    const page = Math.max(Number(req.query.page) || 1, 1);
+    const limit = Math.max(Number(req.query.limit) || 10, 1);
+    const skip = (page - 1) * limit;
+
+    const clients = await Client.aggregate([
+      {
+        $match: {
+          isBookingCancelled: false,
+        },
+      },
+
+      {
+        $lookup: {
+          from: "properties",
+          localField: "propertyId",
+          foreignField: "_id",
+          as: "property",
+        },
+      },
+
+      {
+        $unwind: {
+          path: "$property",
+          preserveNullAndEmptyArrays: true,
+        },
+      },
+
+      {
+        $lookup: {
+          from: "beds",
+          localField: "bedId",
+          foreignField: "_id",
+          as: "bed",
+        },
+      },
+
+      {
+        $unwind: {
+          path: "$bed",
+          preserveNullAndEmptyArrays: true,
+        },
+      },
+
+      {
+        $lookup: {
+          from: "rentnotreceivedcomments",
+          localField: "_id",
+          foreignField: "clientId",
+          as: "rentNotReceivedComment",
+        },
+      },
+
+      {
+        $lookup: {
+          from: "clientrenthistories",
+          let: {
+            clientId: "$_id",
+          },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $eq: ["$clientId", "$$clientId"],
+                },
+              },
+            },
+
+            {
+              $sort: {
+                year: -1,
+                month: -1,
+                createdAt: -1,
+                _id: -1,
+              },
+            },
+
+            {
+              $limit: 1,
+            },
+
+            {
+              $match: {
+                $expr: {
+                  $gt: [
+                    {
+                      $ifNull: ["$currentDue", 0],
+                    },
+                    0,
+                  ],
+                },
+              },
+            },
+          ],
+          as: "latestRentHistory",
+        },
+      },
+
+      {
+        $unwind: {
+          path: "$latestRentHistory",
+          preserveNullAndEmptyArrays: false,
+        },
+      },
+
+      {
+        $project: {
+          _id: 1,
+
+          fullName: 1,
+          emailId: 1,
+          callingNo: 1,
+          whatsappNo: 1,
+
+          propertyId: 1,
+
+          propertyCode: "$property.propertyCode",
+
+          bedId: "$bed._id",
+          roomNo: "$bed.roomNo",
+          bedNo: "$bed.bedNo",
+
+          stayType: 1,
+
+          clientDoj: 1,
+          noticeStartDate: 1,
+          noticeLastDate: 1,
+          clientVacatingDate: 1,
+
+          monthlyRent: 1,
+          depositAmount: 1,
+
+          rentNotReceivedComment: {
+            $ifNull: [
+              {
+                $arrayElemAt: [
+                  "$rentNotReceivedComment",
+                  0,
+                ],
+              },
+              {
+                _id: null,
+                comments: [],
+              },
+            ],
+          },
+
+          latestRentHistory: {
+            _id: "$latestRentHistory._id",
+
+            month: "$latestRentHistory.month",
+            monthName: "$latestRentHistory.monthName",
+            year: "$latestRentHistory.year",
+
+            startDate: "$latestRentHistory.startDate",
+            endDate: "$latestRentHistory.endDate",
+
+            monthlyRent:
+              "$latestRentHistory.monthlyRent",
+
+            daysCount:
+              "$latestRentHistory.daysCount",
+
+            rentDivider:
+              "$latestRentHistory.rentDivider",
+
+            totalRent:
+              "$latestRentHistory.totalRent",
+
+            totalReceived:
+              "$latestRentHistory.totalReceived",
+
+            currentDue: {
+              $ifNull: [
+                "$latestRentHistory.currentDue",
+                0,
+              ],
+            },
+
+            paymentStatus:
+              "$latestRentHistory.paymentStatus",
+
+            ebAmt:
+              "$latestRentHistory.ebAmt",
+
+            flatEB:
+              "$latestRentHistory.flatEB",
+
+            adjEB:
+              "$latestRentHistory.adjEB",
+
+            adjAmt:
+              "$latestRentHistory.adjAmt",
+
+            processingFees:
+              "$latestRentHistory.processingFees",
+
+            parkingCharges:
+              "$latestRentHistory.parkingCharges",
+
+            depositAmount:
+              "$latestRentHistory.depositAmount",
+
+            depositAmountReceived:
+              "$latestRentHistory.depositAmountReceived",
+          },
+        },
+      },
+
+      {
+        $sort: {
+          fullName: 1,
+          _id: 1,
+        },
+      },
+
+      // PAGINATION
+      {
+        $facet: {
+          data: [
+            {
+              $skip: skip,
+            },
+            {
+              $limit: limit,
+            },
+          ],
+
+          totalCount: [
+            {
+              $count: "count",
+            },
+          ],
+
+          totalCurrentDue: [
+            {
+              $group: {
+                _id: null,
+                total: {
+                  $sum: {
+                    $toDouble: {
+                      $ifNull: [
+                        "$latestRentHistory.currentDue",
+                        0,
+                      ],
+                    },
+                  },
+                },
+              },
+            },
+          ],
+        },
+      },
+    ]);
+
+    const result = clients[0] || {};
+
+    const data = result.data || [];
+
+    const totalCount =
+      result.totalCount?.[0]?.count || 0;
+
+    const totalCurrentDue =
+      result.totalCurrentDue?.[0]?.total || 0;
+
+    const totalPages = Math.ceil(
+      totalCount / limit
+    );
+
+    return res.status(200).json({
+      success: true,
+
+      count: data.length,
+
+      totalCount,
+
+      totalPages,
+
+      currentPage: page,
+
+      limit,
+
+      hasNextPage: page < totalPages,
+
+      hasPreviousPage: page > 1,
+
+      totalCurrentDue,
+
+      data,
+    });
+  } catch (error) {
+    console.error(
+      "Get Clients With Latest Rent History Error:",
+      error
+    );
+
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+// exports.getClientsWithLatestRentHistory = async (req, res) => {
+//   try {
+
+
+
+//     const clients = await Client.aggregate([
+//       {
+//         $match: {
+//           isBookingCancelled: false,
+//         },
+//       },
+
+//       {
+//         $lookup: {
+//           from: "properties",
+//           localField: "propertyId",
+//           foreignField: "_id",
+//           as: "property",
+//         },
+//       },
+
+//       {
+//         $unwind: {
+//           path: "$property",
+//           preserveNullAndEmptyArrays: true,
+//         },
+//       },
+
+//       {
+//         $lookup: {
+//           from: "beds",
+//           localField: "bedId",
+//           foreignField: "_id",
+//           as: "bed",
+//         },
+//       },
+
+//       {
+//         $unwind: {
+//           path: "$bed",
+//           preserveNullAndEmptyArrays: true,
+//         },
+//       },
+//       {
+//         $lookup: {
+//           from: "rentnotreceivedcomments",
+//           localField: "_id",
+//           foreignField: "clientId",
+//           as: "rentNotReceivedComment",
+//         },
+//       },
+
+//       {
+//         $lookup: {
+//           from: "clientrenthistories",
+//           let: {
+//             clientId: "$_id",
+//           },
+//           pipeline: [
+//             {
+//               $match: {
+//                 $expr: {
+//                   $eq: ["$clientId", "$$clientId"],
+//                 },
+//               },
+//             },
+
+//             {
+//               $sort: {
+//                 year: -1,
+//                 month: -1,
+//                 createdAt: -1,
+//                 _id: -1,
+//               },
+//             },
+
+//             {
+//               $limit: 1,
+//             },
+
+//             {
+//               $match: {
+//                 $expr: {
+//                   $gt: [
+//                     {
+//                       $ifNull: ["$currentDue", 0],
+//                     },
+//                     0,
+//                   ],
+//                 },
+//               },
+//             },
+//           ],
+//           as: "latestRentHistory",
+//         },
+//       },
+
+//       {
+//         $unwind: {
+//           path: "$latestRentHistory",
+//           preserveNullAndEmptyArrays: false,
+//         },
+//       },
+
+//       {
+//         $project: {
+//           _id: 1,
+
+//           fullName: 1,
+//           emailId: 1,
+//           callingNo: 1,
+//           whatsappNo: 1,
+
+//           propertyId: 1,
+
+//           propertyCode: "$property.propertyCode",
+
+//           bedId: "$bed._id",
+//           roomNo: "$bed.roomNo",
+//           bedNo: "$bed.bedNo",
+
+//           stayType: 1,
+
+//           clientDoj: 1,
+//           noticeStartDate: 1,
+//           noticeLastDate: 1,
+//           clientVacatingDate: 1,
+
+//           monthlyRent: 1,
+//           depositAmount: 1,
+//           rentNotReceivedComment: {
+//               $ifNull: [
+//                 {
+//                   $arrayElemAt: [
+//                     "$rentNotReceivedComment",
+//                     0,
+//                   ],
+//                 },
+//                 {
+//                   _id: null,
+//                   comments: [],
+//                 },
+//               ],
+//             },
+//           latestRentHistory: {
+//             _id: "$latestRentHistory._id",
+
+//             month: "$latestRentHistory.month",
+//             monthName: "$latestRentHistory.monthName",
+//             year: "$latestRentHistory.year",
+
+//             startDate: "$latestRentHistory.startDate",
+//             endDate: "$latestRentHistory.endDate",
+
+//             monthlyRent:
+//               "$latestRentHistory.monthlyRent",
+
+//             daysCount:
+//               "$latestRentHistory.daysCount",
+
+//             rentDivider:
+//               "$latestRentHistory.rentDivider",
+
+//             totalRent:
+//               "$latestRentHistory.totalRent",
+
+//             totalReceived:
+//               "$latestRentHistory.totalReceived",
+
+//             currentDue: {
+//               $ifNull: [
+//                 "$latestRentHistory.currentDue",
+//                 0,
+//               ],
+//             },
+  
+
+//             paymentStatus:
+//               "$latestRentHistory.paymentStatus",
+
+//             ebAmt:
+//               "$latestRentHistory.ebAmt",
+
+//             flatEB:
+//               "$latestRentHistory.flatEB",
+
+//             adjEB:
+//               "$latestRentHistory.adjEB",
+
+//             adjAmt:
+//               "$latestRentHistory.adjAmt",
+
+//             processingFees:
+//               "$latestRentHistory.processingFees",
+
+//             parkingCharges:
+//               "$latestRentHistory.parkingCharges",
+
+//             depositAmount:
+//               "$latestRentHistory.depositAmount",
+
+//             depositAmountReceived:
+//               "$latestRentHistory.depositAmountReceived",
+//           },
+//         },
+//       },
+
+//       {
+//         $sort: {
+//           fullName: 1,
+//         },
+//       },
+//     ]);
+
+//     const totalCurrentDue = clients.reduce(
+//       (total, client) =>
+//         total +
+//         Number(
+//           client.latestRentHistory?.currentDue || 0
+//         ),
+//       0
+//     );
+
+//     return res.status(200).json({
+//       success: true,
+//       count: clients.length,
+//       totalCurrentDue,
+//       data: clients,
+//     });
+//   } catch (error) {
+//     console.error(
+//       "Get Clients With Latest Rent History Error:",
+//       error
+//     );
+
+//     return res.status(500).json({
+//       success: false,
+//       message: error.message,
+//     });
+//   }
+// };

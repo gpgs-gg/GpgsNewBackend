@@ -93,50 +93,50 @@ const enableClientLogin = async (bookingId) => {
     return;
   }
 
-  // Search by email
-  const existingEmailUser = await User.findOne({
-    email: client.emailId,
-    role: "Client",
-  });
+const existingEmailUser = await User.findOne({
+  email: client.emailId,
+  role: "Client",
+});
 
-  if (existingEmailUser) {
-    // Same booking already linked
-    if (
-      existingEmailUser.bookingId &&
-      existingEmailUser.bookingId.toString() === bookingId.toString()
-    ) {
-      return;
-    }
-
-    // Same email active in another booking
-    if (existingEmailUser.isActive) {
-      throw new Error(
-        "A client with this email is already active."
-      );
-    }
-
-    // Reuse inactive user
-    existingEmailUser.name = client.fullName;
-    existingEmailUser.email = client.emailId;
-    existingEmailUser.bookingId = bookingId;
-    existingEmailUser.role = "Client";
-    existingEmailUser.password = "123456";
-    existingEmailUser.isActive = true;
-
+if (existingEmailUser) {
+  if (
+    existingEmailUser.bookingId &&
+    existingEmailUser.bookingId.toString() === bookingId.toString()
+  ) {
+    existingEmailUser.clientId = client._id;
     await existingEmailUser.save();
-
     return;
   }
 
+  if (existingEmailUser.isActive) {
+    throw new Error(
+      "A client with this email is already active."
+    );
+  }
+
+  existingEmailUser.name = client.fullName;
+  existingEmailUser.email = client.emailId;
+  existingEmailUser.bookingId = bookingId;
+  existingEmailUser.clientId = client._id;
+  existingEmailUser.role = "Client";
+  existingEmailUser.password = "123456";
+  existingEmailUser.isActive = true;
+
+  await existingEmailUser.save();
+
+  return;
+}
+
   // Create new user
-  await User.create({
-    name: client.fullName,
-    email: client.emailId,
-    password: "123456",
-    role: "Client",
-    bookingId,
-    isActive: true,
-  });
+ await User.create({
+  name: client.fullName,
+  email: client.emailId,
+  password: "123456",
+  role: "Client",
+  bookingId,
+  clientId: client._id,
+  isActive: true,
+});
 };
 
 module.exports = {

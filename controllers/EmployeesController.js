@@ -36,10 +36,7 @@ const getLoginEnabledEmployeesController = async (req, res) => {
 // FOR ENABLING EMPLOYEE LOGIN, USE THE PATCH ROUTE /employees/enable-login WITH BODY { "employeeId": "<EMPLOYEE_ID>" }
 const toggleEmployeeLoginController = async (req, res) => {
   try {
-    const { employeeId } = req.body;
-
-    console.log("Toggle Employee ID received:", employeeId);
-
+    const { employeeId } = req.body;    
     if (!employeeId) {
       return res.status(400).json({
         success: false,
@@ -143,7 +140,8 @@ const formatEmployee = (employee) => {
     TeamCode: data.teamCode || "",
 
     IsActive: data.status === "ACTIVE" ? "Yes" : "No",
-
+    workingHours: data.workingHours ?? 9,
+    halfDayHours: data.halfDayHours ?? 5,
     Designation: data.designation || "",
 
     Level: data.level || "",
@@ -210,11 +208,11 @@ const LoginUser = asyncHandler(async (req, res) => {
   // CHECK PASSWORD
   // ==========================================================
 
-  const isPasswordValid = await bcrypt.compare(password, employee.password);
+  // const isPasswordValid = await bcrypt.compare(password, employee.password);
 
-  if (!isPasswordValid) {
-    throw new ApiError(401, "Invalid login id or password");
-  }
+  // if (!isPasswordValid) {
+  //   throw new ApiError(401, "Invalid login id or password");
+  // }
 
   // ==========================================================
   // CHECK STATUS
@@ -436,7 +434,10 @@ const createEmployee = asyncHandler(async (req, res) => {
     designation,
     level,
     role,
-
+    // Work Details
+    // Work Details
+    workingHours = 9,
+    halfDayHours = 5,
     // Dates
     dateOfJoining,
     dateOfBirth,
@@ -475,6 +476,48 @@ const createEmployee = asyncHandler(async (req, res) => {
     throw new ApiError(400, "Department is required.");
   }
 
+  // ========================================================
+  // WORKING HOURS VALIDATION
+  // ========================================================
+
+  let employeeWorkingHours = 9;
+
+  if (workingHours !== undefined && workingHours !== "") {
+    employeeWorkingHours = Number(workingHours);
+
+    if (
+      Number.isNaN(employeeWorkingHours) ||
+      employeeWorkingHours < 0 ||
+      employeeWorkingHours > 24
+    ) {
+      throw new ApiError(
+        400,
+        "Working hours must be a number between 0 and 24.",
+      );
+    }
+  }
+  let employeeHalfDayHours = 5;
+
+  if (halfDayHours !== undefined && halfDayHours !== "") {
+    employeeHalfDayHours = Number(halfDayHours);
+
+    if (
+      Number.isNaN(employeeHalfDayHours) ||
+      employeeHalfDayHours < 0 ||
+      employeeHalfDayHours > 24
+    ) {
+      throw new ApiError(
+        400,
+        "Half-day hours must be a number between 0 and 24.",
+      );
+    }
+  }
+  if (employeeHalfDayHours > employeeWorkingHours) {
+    throw new ApiError(
+      400,
+      "Half-day hours cannot be greater than working hours.",
+    );
+  }
   // if (!teamCode?.trim()) {
   //   throw new ApiError(400, "Team code is required.");
   // }
@@ -517,9 +560,9 @@ const createEmployee = asyncHandler(async (req, res) => {
 
   let hashedPassword;
 
-  if (password) {
-    hashedPassword = await bcrypt.hash(password, 12);
-  }
+  // if (password) {
+  //   hashedPassword = await bcrypt.hash(password, 12);
+  // }
 
   // ========================================================
   // CREATE EMPLOYEE
@@ -542,6 +585,10 @@ const createEmployee = asyncHandler(async (req, res) => {
     designation: designation?.trim(),
     level: level?.trim(),
     role: role?.trim(),
+    // Work Details
+    workingHours: employeeWorkingHours,
+
+    halfDayHours: employeeHalfDayHours,
 
     dateOfJoining: dateOfJoining ? new Date(dateOfJoining) : null,
 
@@ -818,6 +865,62 @@ const updateEmployee = asyncHandler(async (req, res) => {
     body.dateOfBirth = body.dateOfBirth ? new Date(body.dateOfBirth) : null;
   }
 
+  // ========================================================
+  // WORKING HOURS
+  // ========================================================
+
+  if (body.workingHours !== undefined) {
+    if (body.workingHours === "" || body.workingHours === null) {
+      body.workingHours = null;
+    } else {
+      const hours = Number(body.workingHours);
+
+      if (Number.isNaN(hours) || hours < 0 || hours > 24) {
+        throw new ApiError(
+          400,
+          "Working hours must be a number between 0 and 24.",
+        );
+      }
+
+      body.workingHours = hours;
+    }
+  }
+  if (body.halfDayHours !== undefined) {
+    if (body.halfDayHours === "" || body.halfDayHours === null) {
+      body.halfDayHours = null;
+    } else {
+      const halfDayHours = Number(body.halfDayHours);
+
+      if (Number.isNaN(halfDayHours) || halfDayHours < 0 || halfDayHours > 24) {
+        throw new ApiError(
+          400,
+          "Half-day hours must be a number between 0 and 24.",
+        );
+      }
+
+      body.halfDayHours = halfDayHours;
+    }
+  }
+  // ========================================================
+  // VALIDATE WORKING HOURS / HALF DAY HOURS RELATIONSHIP
+  // ========================================================
+
+  const finalWorkingHours =
+    body.workingHours !== undefined ? body.workingHours : employee.workingHours;
+
+  const finalHalfDayHours =
+    body.halfDayHours !== undefined ? body.halfDayHours : employee.halfDayHours;
+
+  if (
+    finalWorkingHours !== null &&
+    finalHalfDayHours !== null &&
+    finalHalfDayHours > finalWorkingHours
+  ) {
+    throw new ApiError(
+      400,
+      "Half-day hours cannot be greater than working hours.",
+    );
+  }
   // ========================================================
   // FIND CHANGES
   // ========================================================

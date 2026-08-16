@@ -83,17 +83,15 @@ const Property = require("../models/property.model");
 //   }
 // };
 
+//pooja code
 exports.getAllAvailableBeds = async (req, res) => {
   try {
     const now = new Date();
 
-    // ================= Pagination =================
     const page = Math.max(parseInt(req.query.page) || 1, 1);
     const limit = Math.max(parseInt(req.query.limit) || 10, 1);
     const skip = (page - 1) * limit;
 
-    // ================= Query Params =================
-    //pooja
     const {
       search,
       propertyId,
@@ -112,39 +110,8 @@ exports.getAllAvailableBeds = async (req, res) => {
       hasCvd,
       sortByRent,
     } = req.query;
-    //
-    // ================= Clients =================
-    const clients = await Client.find().lean();
 
-    // ================= Occupied Beds =================
-    const occupiedBedIds = [];
-
-    clients.forEach((client) => {
-      if (!client.bedId) return;
-
-      if (client.isBookingCancelled) return;
-
-      const vacatingDate = client.clientVacatingDate
-        ? new Date(client.clientVacatingDate)
-        : null;
-
-      const noticeDate = client.noticeStartDate
-        ? new Date(client.noticeStartDate)
-        : null;
-
-      if (noticeDate) return;
-
-      if (vacatingDate && now >= vacatingDate) return;
-
-      occupiedBedIds.push(client.bedId);
-    });
-
-    // ================= Build Bed Query =================
-    const query = {
-      _id: {
-        $nin: occupiedBedIds,
-      },
-    };
+    const query = {};
 
     if (propertyId) query.propertyId = propertyId;
     if (gender) query.gender = gender;
@@ -155,45 +122,29 @@ exports.getAllAvailableBeds = async (req, res) => {
     if (roomNo) query.roomNo = roomNo;
     if (bedNo) query.bedNo = bedNo;
 
-    // ================= Rent Filter =================
     if (monthlyRentMin || monthlyRentMax) {
       query.monthlyRent = {};
-
       if (monthlyRentMin) query.monthlyRent.$gte = Number(monthlyRentMin);
-
       if (monthlyRentMax) query.monthlyRent.$lte = Number(monthlyRentMax);
     }
 
-    // ================= Deposit Filter =================
     if (depositAmountMin || depositAmountMax) {
       query.depositAmount = {};
-
       if (depositAmountMin) query.depositAmount.$gte = Number(depositAmountMin);
-
       if (depositAmountMax) query.depositAmount.$lte = Number(depositAmountMax);
     }
 
-    // ================= Property Location =================
     if (propertyLocation) {
-      const properties = await Property.find({
-        propertyLocation,
-      }).select("_id");
-
-      query.propertyId = {
-        $in: properties.map((p) => p._id),
-      };
+      const properties = await Property.find({ propertyLocation }).select("_id").lean();
+      query.propertyId = { $in: properties.map(p => p._id) };
     }
 
-    // ================= Search =================
     if (search?.trim()) {
       const regex = new RegExp(search.trim(), "i");
-
       const properties = await Property.find({
-        $or: [{ propertyCode: regex }, { propertyLocation: regex }],
-      }).select("_id");
-
-      const propertyIds = properties.map((p) => p._id);
-
+        $or: [{ propertyCode: regex }, { propertyLocation: regex }]
+      }).select("_id").lean();
+      
       query.$or = [
         { roomNo: regex },
         { bedNo: regex },
@@ -202,117 +153,107 @@ exports.getAllAvailableBeds = async (req, res) => {
         { bathAttached: regex },
         { acRoom: regex },
         { status: regex },
-        ...(propertyIds.length ? [{ propertyId: { $in: propertyIds } }] : []),
+        ...(properties.length ? [{ propertyId: { $in: properties.map(p => p._id) } }] : [])
       ];
     }
 
-    // ================= Total Count =================
-    const totalRecords = await Bed.countDocuments(query);
-
-    // ================= Fetch Beds =================
-    let beds;
-
-    if (hasCvd === "true" || sortByRent === "true") {
-      // Fetch all records for global sorting
-      beds = await Bed.find(query)
-        .populate("propertyId", "propertyCode propertyLocation")
-        .lean();
-    } else {
-      // Existing behavior
-      beds = await Bed.find(query)
-        .populate("propertyId", "propertyCode propertyLocation")
-        .sort({ createdAt: -1 })
-        .skip(skip)
-        .limit(limit)
-        .lean();
-    }
-    // ================= Map Clients =================
-    const clientMap = new Map();
-
-    clients.forEach((client) => {
-      if (!client.bedId) return;
-
-      clientMap.set(String(client.bedId), client);
+    // ================= 💨 STEP 1: Get occupied bed IDs using distinct (FAST) =================
+    // 🔥 Yeh 40K clients pe bhi < 100ms me kaam karega agar index hai
+    const occupiedBedIds = await Client.distinct("bedId", {
+      bedId: { $exists: true, $ne: null },
+      isBookingCancelled: { $ne: true },
+      noticeStartDate: { $exists: false },
+      $or: [
+        { clientVacatingDate: { $exists: false } },
+        { clientVacatingDate: { $gt: now } }
+      ]
     });
 
-    // ================= Response =================
-    const data = beds.map((bed) => {
-      const client = clientMap.get(String(bed._id));
+    if (occupiedBedIds.length > 0) {
+      query._id = { $nin: occupiedBedIds };
+    }
 
+    // ================= 💨 STEP 2: Parallel queries (FASTER) =================
+    let sortOption = { createdAt: -1 };
+    if (sortByRent === "true") {
+      sortOption = { monthlyRent: 1 };
+    }
+
+    // 🔥 Dono queries parallel me chal rahi hain
+    const [totalRecords, beds] = await Promise.all([
+      Bed.countDocuments(query),
+      Bed.find(query)
+        .populate("propertyId", "propertyCode propertyLocation")
+        .sort(sortOption)
+        .skip(skip)
+        .limit(limit)
+        .lean()
+    ]);
+
+    // ================= 💨 STEP 3: Get clients for these beds only =================
+    const bedIds = beds.map(b => b._id);
+    
+    // 🔥 Sirf 10-20 clients fetch ho rahe hain, 40K nahi
+    let clients = [];
+    if (bedIds.length > 0) {
+      clients = await Client.find({
+        bedId: { $in: bedIds }
+        // ❌ Koi extra filter nahi - sab clients chahiye
+      })
+      .select("_id bedId fullName callingNo whatsappNo noticeStartDate noticeLastDate clientVacatingDate clientDoj isBookingCancelled")
+      .lean();
+    }
+
+    // ================= 💨 STEP 4: Map for O(1) lookup =================
+    const clientMap = new Map();
+    clients.forEach(c => {
+      clientMap.set(String(c.bedId), c);
+    });
+
+    // ================= 💨 STEP 5: Format response =================
+    let data = beds.map(bed => {
+      const client = clientMap.get(String(bed._id));
       return {
         ...bed,
-        client: client
-          ? {
-              _id: client._id,
-              fullName: client.fullName,
-              callingNo: client.callingNo,
-              whatsappNo: client.whatsappNo,
-              noticeStartDate: client.noticeStartDate,
-              noticeLastDate: client.noticeLastDate,
-              clientVacatingDate: client.clientVacatingDate,
-              clientDoj: client.clientDoj,
-              isBookingCancelled: client.isBookingCancelled,
-            }
-          : null,
+        client: client ? {
+          _id: client._id,
+          fullName: client.fullName,
+          callingNo: client.callingNo,
+          whatsappNo: client.whatsappNo,
+          noticeStartDate: client.noticeStartDate,
+          noticeLastDate: client.noticeLastDate,
+          clientVacatingDate: client.clientVacatingDate,
+          clientDoj: client.clientDoj,
+          isBookingCancelled: client.isBookingCancelled
+        } : null
       };
     });
 
-    // pooja
-    data.sort((a, b) => {
-      if (hasCvd === "true") {
-        const aHasDate = !!a.client?.clientVacatingDate;
-        const bHasDate = !!b.client?.clientVacatingDate;
-
-        // Records without CVD should come first
-        if (!aHasDate && bHasDate) return -1;
-        if (aHasDate && !bHasDate) return 1;
-
-        // If both have dates, compare them
-        if (aHasDate && bHasDate) {
-          const dateDiff =
-            new Date(a.client.clientVacatingDate) -
-            new Date(b.client.clientVacatingDate);
-
-          if (dateDiff !== 0) return dateDiff;
+    // ================= 💨 STEP 6: CVD sorting (Sirf 10-20 records pe) =================
+    if (hasCvd === "true") {
+      data.sort((a, b) => {
+        const aDate = a.client?.clientVacatingDate ? new Date(a.client.clientVacatingDate) : null;
+        const bDate = b.client?.clientVacatingDate ? new Date(b.client.clientVacatingDate) : null;
+        
+        if (aDate === null && bDate !== null) return -1;
+        if (aDate !== null && bDate === null) return 1;
+        if (aDate === null && bDate === null) {
+          if (sortByRent === "true") {
+            return a.monthlyRent - b.monthlyRent;
+          }
+          return 0;
         }
-      }
-
-      // Rent sorting (if enabled)
-      if (sortByRent === "true") {
-        return a.monthlyRent - b.monthlyRent;
-      }
-
-      return 0;
-    });
-    let finalData = data;
-
-    if (hasCvd === "true" || sortByRent === "true") {
-      finalData = data.slice(skip, skip + limit);
+        
+        const dateDiff = aDate - bDate;
+        if (dateDiff !== 0) return dateDiff;
+        
+        if (sortByRent === "true") {
+          return a.monthlyRent - b.monthlyRent;
+        }
+        return 0;
+      });
     }
-    // data.sort((a, b) => {
-    //   // CVD sorting (if enabled)
-    //   if (hasCvd === "true") {
-    //     const aDate = a.client?.clientVacatingDate
-    //       ? new Date(a.client.clientVacatingDate)
-    //       : new Date("9999-12-31");
 
-    //     const bDate = b.client?.clientVacatingDate
-    //       ? new Date(b.client.clientVacatingDate)
-    //       : new Date("9999-12-31");
-
-    //     const dateDiff = aDate - bDate;
-
-    //     if (dateDiff !== 0) return dateDiff;
-    //   }
-
-    //   // Rent sorting (if enabled)
-    //   if (sortByRent === "true") {
-    //     return a.monthlyRent - b.monthlyRent;
-    //   }
-
-    //   return 0;
-    // });
-    //pooja
     return res.status(200).json({
       success: true,
       page,
@@ -321,20 +262,18 @@ exports.getAllAvailableBeds = async (req, res) => {
       totalPages: Math.ceil(totalRecords / limit),
       hasNextPage: page < Math.ceil(totalRecords / limit),
       hasPrevPage: page > 1,
-      count: finalData.length,
-      data: finalData,
-      // count: data.length,
-      // data,
+      count: data.length,
+      data
     });
+
   } catch (error) {
+    console.error('Error:', error);
     return res.status(500).json({
       success: false,
-      message: error.message,
+      message: error.message
     });
   }
 };
-
-
 
 // };
 // PROPERTY WISE AVAILABLE

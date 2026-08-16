@@ -209,7 +209,22 @@ const employeeSchema = new mongoose.Schema(
       type: String,
       select: false,
     },
+    // =========================
+    // WORK DETAILS
+    // =========================
 
+    workingHours: {
+      type: Number,
+      min: 0,
+      max: 24,
+      default: 9,
+    },
+    halfDayHours: {
+      type: Number,
+      min: 0,
+      max: 24,
+      default: 5,
+    },
     // =========================
     // SYSTEM
     // =========================

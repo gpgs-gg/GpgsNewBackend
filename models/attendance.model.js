@@ -69,21 +69,27 @@ const attendanceSchema = new mongoose.Schema(
     totalMinutes: {
       type: Number,
       default: 0,
+      min: 0,
     },
 
     overtimeMinutes: {
       type: Number,
       default: 0,
+      min: 0,
     },
 
     deficitMinutes: {
       type: Number,
       default: 0,
+      min: 0,
     },
 
     // =========================
     // STATUS
     // =========================
+    // 1   = Present
+    // 0.5 = Half Day
+    // 0   = Absent
 
     status: {
       type: Number,
@@ -92,15 +98,61 @@ const attendanceSchema = new mongoose.Schema(
     },
 
     // =========================
-    // ADMIN REMARK
+    // ATTENDANCE SOURCE
+    // =========================
+    // SELF   -> Employee checked in/out
+    // ADMIN  -> Admin created/updated
+    // HR     -> HR created/updated
+    // SYSTEM -> System generated
+
+    attendanceSource: {
+      type: String,
+      enum: ["EMPLOYEE", "ADMIN", "HR", "SYSTEM"],
+      default: "EMPLOYEE",
+    },
+    // =========================
+    // REMARKS
     // =========================
 
     remarks: {
       type: String,
       default: "",
       trim: true,
+      maxlength: 500,
     },
+    // ==========================================
+    // REGULARIZATION DOCUMENTS
+    // Maximum 5 documents per attendance
+    // ==========================================
 
+    regularizationDocuments: [
+      {
+        publicId: {
+          type: String,
+          required: true,
+        },
+
+        url: {
+          type: String,
+          required: true,
+        },
+
+        originalName: {
+          type: String,
+          required: true,
+        },
+
+        mimeType: {
+          type: String,
+          required: true,
+        },
+
+        size: {
+          type: Number,
+          required: true,
+        },
+      },
+    ],
     // =========================
     // AUDIT
     // =========================
@@ -121,7 +173,10 @@ const attendanceSchema = new mongoose.Schema(
   },
 );
 
-// One attendance record per employee per day
+// ======================================================
+// ONE ATTENDANCE RECORD PER EMPLOYEE PER DAY
+// ======================================================
+
 attendanceSchema.index(
   {
     employeeId: 1,
@@ -131,6 +186,10 @@ attendanceSchema.index(
     unique: true,
   },
 );
+
+// ======================================================
+// QUERY INDEXES
+// ======================================================
 
 attendanceSchema.index({
   attendanceDate: -1,

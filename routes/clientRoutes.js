@@ -11,7 +11,9 @@ const {
   deleteClient,
   getAvailableBeds,
   createClientFromBooking,
-  createDummyClients
+  createDummyClients,
+  getNoticeClients,
+  getClientsWithLatestRentHistory
 } = require("../controllers/ClientController");
 const upload = require("../middleware/uploadMiddleware");
 
@@ -20,7 +22,11 @@ router.post("/", createClient);
 
 // Get All Clients
 router.get("/", getClients);
-
+router.get("/notice", getNoticeClients);
+router.get(
+  "/rent-not-received",
+  getClientsWithLatestRentHistory
+);
 // Get Single Client
 router.get("/:id", getClientById);
 
@@ -41,7 +47,7 @@ router.post(
   "/create-from-booking",
   createClientFromBooking
 );
-// router.post("/dummy-clients", createDummyClients);
+router.post("/dummy-clients", createDummyClients);
 
 module.exports = router;
 
