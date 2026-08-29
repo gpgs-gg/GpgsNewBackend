@@ -1344,274 +1344,60 @@ const createOrRegularizeAttendance = async (req, res) => {
     });
   }
 };
-// const createOrRegularizeAttendance = async (req, res) => {
-//   try {
-//     const { employeeId, attendanceDate, status, remarks } = req.body;
-//     // ================================================
-//     // UPLOAD REGULARIZATION DOCUMENT
-//     // ================================================
+// ======================================================
+// 7. ADMIN / HR - DELETE ATTENDANCE
+// ======================================================
 
-//     let regularizationDocument = null;
+const deleteAttendance = async (req, res) => {
+  try {
+    const { id } = req.params;
 
-//     if (req.file) {
-//       regularizationDocument = await uploadRegularizationDocument(req.file);
-//     }
-//     // ==================================================
-//     // 1. VALIDATE EMPLOYEE ID
-//     // ==================================================
+    // ==================================================
+    // VALIDATE ATTENDANCE ID
+    // ==================================================
 
-//     if (!employeeId || !mongoose.Types.ObjectId.isValid(employeeId)) {
-//       return res.status(400).json({
-//         success: false,
-//         message: "Valid employeeId is required",
-//       });
-//     }
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid attendance ID",
+      });
+    }
 
-//     // ==================================================
-//     // 2. FIND EMPLOYEE
-//     // ==================================================
+    // ==================================================
+    // FIND ATTENDANCE
+    // ==================================================
 
-//     const employee = await Employee.findById(employeeId);
+    const attendance = await Attendance.findById(id);
 
-//     if (!employee) {
-//       return res.status(404).json({
-//         success: false,
-//         message: "Employee not found",
-//       });
-//     }
+    if (!attendance) {
+      return res.status(404).json({
+        success: false,
+        message: "Attendance record not found",
+      });
+    }
 
-//     // ==================================================
-//     // 3. VALIDATE ATTENDANCE DATE
-//     // ==================================================
+    // ==================================================
+    // DELETE ATTENDANCE
+    // ==================================================
 
-//     if (!attendanceDate) {
-//       return res.status(400).json({
-//         success: false,
-//         message: "Attendance date is required",
-//       });
-//     }
+    await Attendance.findByIdAndDelete(id);
 
-//     const attendanceDateObj = new Date(`${attendanceDate}T00:00:00+05:30`);
+    return res.status(200).json({
+      success: true,
+      message: "Attendance deleted successfully",
+      data: {
+        id,
+      },
+    });
+  } catch (error) {
+    console.error("Delete Attendance Error:", error);
 
-//     if (isNaN(attendanceDateObj.getTime())) {
-//       return res.status(400).json({
-//         success: false,
-//         message: "Invalid attendance date",
-//       });
-//     }
-
-//     // ==================================================
-//     // 4. VALIDATE STATUS
-//     // ==================================================
-
-//     if (status === undefined || status === null || status === "") {
-//       return res.status(400).json({
-//         success: false,
-//         message: "Attendance status is required",
-//       });
-//     }
-
-//     const numericStatus = Number(status);
-
-//     if (![0, 0.5, 1].includes(numericStatus)) {
-//       return res.status(400).json({
-//         success: false,
-//         message: "Invalid attendance status. Allowed values are 0, 0.5 and 1",
-//       });
-//     }
-//     // ==================================================
-//     // 5. VALIDATE DOCUMENT COUNT
-//     // ==================================================
-
-//     const files = req.files || [];
-
-//     if (files.length > 5) {
-//       return res.status(400).json({
-//         success: false,
-//         message: "Maximum 5 supporting documents are allowed",
-//       });
-//     }
-//     // ==================================================
-//     // 5. FIND EXISTING ATTENDANCE
-//     // ==================================================
-
-//     let attendance = await Attendance.findOne({
-//       employeeId: employee._id,
-//       attendanceDate: attendanceDateObj,
-//     });
-
-//     // ==================================================
-//     // 7. UPLOAD NEW DOCUMENTS
-//     // ==================================================
-
-//     let uploadedDocuments = [];
-
-//     if (files.length > 0) {
-//       uploadedDocuments = await Promise.all(
-//         files.map((file) => uploadRegularizationDocument(file)),
-//       );
-//     }
-
-//     // ==================================================
-//     // 6. CREATE NEW ATTENDANCE
-//     // ==================================================
-
-//     if (!attendance) {
-//       attendance = new Attendance({
-//         employeeId: employee._id,
-
-//         attendanceDate: attendanceDateObj,
-
-//         // Admin regularization does NOT create
-//         // check-in / check-out times
-//         inTime: null,
-//         outTime: null,
-
-//         // No working time because there is no
-//         // check-in / check-out
-//         totalMinutes: 0,
-//         overtimeMinutes: 0,
-//         deficitMinutes: 0,
-
-//         // Admin-selected status
-//         status: numericStatus,
-
-//         attendanceSource: "ADMIN",
-
-//         remarks: remarks?.trim() || "Attendance created by Admin",
-//         // ================================================
-//         // REGULARIZATION DOCUMENT
-//         // ================================================
-
-//         regularizationDocuments: uploadedDocuments,
-
-//         editedBy: req.user?._id || null,
-//         editedAt: new Date(),
-//       });
-
-//       await attendance.save();
-
-//       // -----------------------------------------------
-//       // Populate response
-//       // -----------------------------------------------
-
-//       const populatedAttendance = await Attendance.findById(attendance._id)
-//         .populate(
-//           "employeeId",
-//           "employeeId employeeName department designation workingHours halfDayHours",
-//         )
-//         .populate("editedBy", "name email role");
-
-//       return res.status(201).json({
-//         success: true,
-
-//         message: "Attendance created successfully",
-
-//         data: {
-//           ...populatedAttendance.toObject(),
-
-//           statusLabel: getAttendanceStatusLabel(populatedAttendance.status),
-
-//           totalHours: formatMinutes(populatedAttendance.totalMinutes || 0),
-
-//           overtime: formatMinutes(populatedAttendance.overtimeMinutes || 0),
-
-//           deficitHours: formatMinutes(populatedAttendance.deficitMinutes || 0),
-//         },
-//       });
-//     }
-
-//     // ==================================================
-//     // 7. EXISTING ATTENDANCE
-//     // ==================================================
-//     //
-//     // IMPORTANT:
-//     //
-//     // Only update:
-//     //   status
-//     //   remarks
-//     //   attendanceSource
-//     //   editedBy
-//     //   editedAt
-//     //
-//     // NEVER update:
-//     //   inTime
-//     //   outTime
-//     //   totalMinutes
-//     //   overtimeMinutes
-//     //   deficitMinutes
-//     //
-//     // ==================================================
-
-//     attendance.status = numericStatus;
-
-//     attendance.attendanceSource = "ADMIN";
-
-//     attendance.remarks =
-//       remarks !== undefined ? remarks.trim() : attendance.remarks;
-//     // ================================================
-//     // UPDATE REGULARIZATION DOCUMENT
-//     // ================================================
-
-//     if (regularizationDocument) {
-//       attendance.regularizationDocument = regularizationDocument;
-//     }
-//     attendance.editedBy = req.user?._id || null;
-
-//     attendance.editedAt = new Date();
-
-//     // Do NOT touch these fields:
-//     //
-//     // attendance.inTime
-//     // attendance.outTime
-//     // attendance.totalMinutes
-//     // attendance.overtimeMinutes
-//     // attendance.deficitMinutes
-
-//     await attendance.save();
-
-//     // ==================================================
-//     // 8. POPULATE RESPONSE
-//     // ==================================================
-
-//     const populatedAttendance = await Attendance.findById(attendance._id)
-//       .populate(
-//         "employeeId",
-//         "employeeId employeeName department designation workingHours halfDayHours",
-//       )
-//       .populate("editedBy", "name email role");
-
-//     // ==================================================
-//     // 9. RESPONSE
-//     // ==================================================
-
-//     return res.status(200).json({
-//       success: true,
-
-//       message: "Attendance status updated successfully",
-
-//       data: {
-//         ...populatedAttendance.toObject(),
-
-//         statusLabel: getAttendanceStatusLabel(populatedAttendance.status),
-
-//         totalHours: formatMinutes(populatedAttendance.totalMinutes || 0),
-
-//         overtime: formatMinutes(populatedAttendance.overtimeMinutes || 0),
-
-//         deficitHours: formatMinutes(populatedAttendance.deficitMinutes || 0),
-//       },
-//     });
-//   } catch (error) {
-//     console.error("Create / Regularize Attendance Error:", error);
-
-//     return res.status(500).json({
-//       success: false,
-//       message: error.message || "Failed to update attendance status",
-//     });
-//   }
-// };
-
+    return res.status(500).json({
+      success: false,
+      message: error.message || "Failed to delete attendance",
+    });
+  }
+};
 // ======================================================
 // EXPORT
 // ======================================================
@@ -1623,6 +1409,6 @@ module.exports = {
   getMyAttendance,
   getAllAttendance,
   getAttendanceById,
-
+  deleteAttendance,
   createOrRegularizeAttendance,
 };

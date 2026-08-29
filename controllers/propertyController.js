@@ -80,12 +80,20 @@ const createProperty = asyncHandler(async (req, res) => {
     )
   );
 
+  const agreementUploads = await Promise.all(
+    getFiles("agreement[attachment]").map((file) =>
+      uploadFile(file, `properties/${propertyCode}`),
+    ),
+  );
+
   // assign
   owner.photo = photoUploads;
   owner.aadharCard = aadharUploads;
+  agreement.attachment = agreementUploads;
 
   const property = await Property.create({
     ...req.body,
+    status: "Active",
     owner,
     internet,
     utility,
@@ -202,6 +210,11 @@ const updateProperty = asyncHandler(async (req, res) => {
       ? req.body.owner.photoExisting
       : [req.body.owner.photoExisting])
     : [];
+  const existingAgreement = req.body.agreement?.attachmentExisting
+    ? Array.isArray(req.body.agreement.attachmentExisting)
+      ? req.body.agreement.attachmentExisting
+      : [req.body.agreement.attachmentExisting]
+    : [];
 
   // 📸 PHOTO UPDATE
   if (getFiles("owner[photo]").length > 0) {
@@ -232,6 +245,21 @@ const updateProperty = asyncHandler(async (req, res) => {
     // ✅ ADD
     owner.aadharCard = existingAadhar;
   }
+
+// 📎 AGREEMENT ATTACHMENT UPDATE
+  if (getFiles("agreement[attachment]").length > 0) {
+    const agreementUploads = await Promise.all(
+      getFiles("agreement[attachment]").map((file) =>
+        uploadFile(file, `properties/${propertyCode}`),
+      ),
+    );
+
+    agreement.attachment = [...existingAgreement, ...agreementUploads];
+  } else {
+    agreement.attachment = existingAgreement;
+  }
+
+
   // UPDATE FINAL DATA
   const updatedProperty = await Property.findByIdAndUpdate(
     req.params.id,

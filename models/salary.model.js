@@ -1,5 +1,110 @@
 const mongoose = require("mongoose");
 
+// =====================================================
+// ADJUSTMENT ITEM SCHEMA
+// =====================================================
+
+const adjustmentItemSchema = new mongoose.Schema(
+  {
+    label: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+
+    amount: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+
+    comments: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+  },
+  {
+    _id: false,
+  },
+);
+
+// =====================================================
+// ADJUSTMENT DETAILS SCHEMA
+// =====================================================
+
+const adjustmentDetailsSchema = new mongoose.Schema(
+  {
+    specialPerks: {
+      type: [adjustmentItemSchema],
+      default: [],
+    },
+
+    deductions: {
+      type: [adjustmentItemSchema],
+      default: [],
+    },
+  },
+  {
+    _id: false,
+  },
+);
+
+// =====================================================
+// PAYMENT DETAIL SCHEMA
+// =====================================================
+
+const paymentDetailSchema = new mongoose.Schema(
+  {
+    label: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+
+    amount: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+
+    comments: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+  },
+  {
+    _id: false,
+  },
+);
+
+// =====================================================
+// PAID AMOUNT DETAILS SCHEMA
+// =====================================================
+
+const paidAmountDetailsSchema = new mongoose.Schema(
+  {
+    // Multiple advance payment history
+    advanceAmount: {
+      type: [paymentDetailSchema],
+      default: [],
+    },
+
+    // Single deduction
+    deductedAmount: {
+      type: paymentDetailSchema,
+      default: () => ({}),
+    },
+  },
+  {
+    _id: false,
+  },
+);
+// =====================================================
+// SALARY SCHEMA
+// =====================================================
+
 const salarySchema = new mongoose.Schema(
   {
     // =====================================================
@@ -13,12 +118,11 @@ const salarySchema = new mongoose.Schema(
       index: true,
     },
 
-    // Snapshot values
     employeeId: {
       type: String,
       required: true,
-      index: true,
       trim: true,
+      index: true,
     },
 
     employeeName: {
@@ -48,31 +152,27 @@ const salarySchema = new mongoose.Schema(
     },
 
     // =====================================================
-    // ATTENDANCE DETAILS
+    // ATTENDANCE
     // =====================================================
 
-    // Total present days (all days including Thursday)
     totalPresentDays: {
       type: Number,
       default: 0,
       min: 0,
     },
 
-    // Eligible attendance days (present on non-Thursday days)
     eligibleAttendanceDays: {
       type: Number,
       default: 0,
       min: 0,
     },
 
-    // Applicable absent days (absent on non-Thursday days)
     applicableAbsentDays: {
       type: Number,
       default: 0,
       min: 0,
     },
 
-    // Weekly off eligibility (0-4)
     weeklyOffEligibility: {
       type: Number,
       default: 0,
@@ -81,7 +181,7 @@ const salarySchema = new mongoose.Schema(
     },
 
     // =====================================================
-    // PAID LEAVES (Optional)
+    // PAID LEAVE
     // =====================================================
 
     paidLeaveDays: {
@@ -96,21 +196,19 @@ const salarySchema = new mongoose.Schema(
 
     monthlySalary: {
       type: Number,
-      required: true,
+      default: 0,
       min: 0,
     },
 
-    // monthlySalary / 30
     perDaySalary: {
       type: Number,
-      required: true,
+      default: 0,
       min: 0,
     },
 
-    // Payable days (30 - applicableAbsentDays)
     payableDays: {
       type: Number,
-      default: 0,
+      default: 30,
       min: 0,
       max: 30,
     },
@@ -126,7 +224,7 @@ const salarySchema = new mongoose.Schema(
     },
 
     // =====================================================
-    // ADJUSTMENT
+    // ADJUSTMENTS
     // =====================================================
 
     adjustedAmount: {
@@ -135,13 +233,12 @@ const salarySchema = new mongoose.Schema(
     },
 
     adjustmentDetails: {
-      type: String,
-      trim: true,
-      default: "",
+      type: adjustmentDetailsSchema,
+      default: () => ({}),
     },
 
     // =====================================================
-    // PAYABLE
+    // PAYABLE SALARY
     // =====================================================
 
     payableSalary: {
@@ -161,9 +258,8 @@ const salarySchema = new mongoose.Schema(
     },
 
     paidAmountDetails: {
-      type: String,
-      trim: true,
-      default: "",
+      type: paidAmountDetailsSchema,
+      default: () => ({}),
     },
 
     // =====================================================
@@ -186,8 +282,8 @@ const salarySchema = new mongoose.Schema(
 
     comments: {
       type: String,
-      trim: true,
       default: "",
+      trim: true,
     },
 
     // =====================================================
@@ -197,11 +293,13 @@ const salarySchema = new mongoose.Schema(
     createdBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
+      default: null,
     },
 
     updatedBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
+      default: null,
     },
   },
   {
@@ -210,7 +308,7 @@ const salarySchema = new mongoose.Schema(
 );
 
 // =====================================================
-// ONE SALARY RECORD PER EMPLOYEE PER MONTH
+// UNIQUE SALARY PER EMPLOYEE / MONTH / YEAR
 // =====================================================
 
 salarySchema.index(
@@ -225,16 +323,22 @@ salarySchema.index(
 );
 
 // =====================================================
-// SEARCH INDEX
+// SEARCH
 // =====================================================
 
-salarySchema.index({ employeeName: "text", employeeId: "text" });
+salarySchema.index({
+  employeeName: "text",
+  employeeId: "text",
+});
 
 // =====================================================
-// COMPOUND INDEX FOR PERFORMANCE
+// PERFORMANCE INDEXES
 // =====================================================
 
-salarySchema.index({ employeeId: 1, month: 1, year: 1 });
-salarySchema.index({ employee: 1, month: 1 });
+salarySchema.index({
+  employeeId: 1,
+  month: 1,
+  year: 1,
+});
 
 module.exports = mongoose.model("Salary", salarySchema);

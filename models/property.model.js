@@ -9,6 +9,7 @@ const PropertySchema = new mongoose.Schema(
     propertyLocation: String,
     bedCount: Number,
     propertyAddress: String,
+    subMeterDetails : String,
     // ---------------- INTERNET DETAILS ----------------
     internet: {
       vendorLoginId: String,
@@ -29,31 +30,52 @@ const PropertySchema = new mongoose.Schema(
     utility: {
       ebConsumerNo: String,
       ebBillingUnit: String,
-      ebStartDate: {
-        type: String,
+
+      ebStartCycle: {
+        type: Number,
+        min: 1,
+        max: 31,
         default: null,
       },
-      ebEndDate: {
-        type: String,
+
+      ebEndCycle: {
+        type: Number,
+        min: 1,
+        max: 31,
         default: null,
       },
+
       ebPcWebLink: String,
+
       gasConsumerNo: String,
-      gasBillStartDate: {
-        type: String,
+
+      gasBillStartCycle: {
+        type: Number,
+        min: 1,
+        max: 31,
         default: null,
       },
-      gasBillEndDate: {
-        type: String,
+
+      gasBillEndCycle: {
+        type: Number,
+        min: 1,
+        max: 31,
         default: null,
       },
+
       waterBillConsumerNo: String,
-        waterBillStartDate: {
-        type: String,
+
+      waterBillStartCycle: {
+        type: Number,
+        min: 1,
+        max: 31,
         default: null,
       },
-      waterBillEndDate: {
-        type: String,
+
+      waterBillEndCycle: {
+        type: Number,
+        min: 1,
+        max: 31,
         default: null,
       },
     },
@@ -72,19 +94,19 @@ const PropertySchema = new mongoose.Schema(
     // ---------------- AGREEMENT ----------------
     agreement: {
 
-        propertyStartDate: {
+      propertyStartDate: {
         type: String,
         default: null,
       },
-        propertyEndDate: {
+      propertyEndDate: {
         type: String,
         default: null,
       },
-        propertyEndDate: {
+      agreementStartDate: {
         type: String,
         default: null,
       },
-        agreementEndDate: {
+      agreementEndDate: {
         type: String,
         default: null,
       },
@@ -92,7 +114,12 @@ const PropertySchema = new mongoose.Schema(
       policeNocNo: String,
       policeNocStatus: String,
       dealDetails: String,
+      attachment: {
+        type: [String],
+        default: [],
+      },
       comment: String,
+
     },
 
     // ---------------- WORKLOGS ----------------

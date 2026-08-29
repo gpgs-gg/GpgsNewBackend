@@ -144,6 +144,18 @@ const clientRentHistorySchema = new mongoose.Schema(
         }
       },
     ],
+    adjustedAmountHistory: [
+      {
+        amount: {
+          type: Number,
+          required: true,
+        },
+        date: {
+          type: Date,
+          default: Date.now,
+        }
+      },
+    ],
 
     currentDue: {
       type: Number,
@@ -156,10 +168,19 @@ const clientRentHistorySchema = new mongoose.Schema(
       default: "Pending",
     },
 
-    paymentComments: {
-      type: String,
-      default: "",
-    },
+    paymentComments: [
+      {
+        comment: {
+          type: String,
+          trim: true,
+          default: "",
+        },
+        date: {
+          type: Date,
+          default: Date.now,
+        },
+      },
+    ],
 
     startDate: {
       type: String,

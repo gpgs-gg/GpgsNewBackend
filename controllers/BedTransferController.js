@@ -87,6 +87,8 @@ const transferBed = async (req, res) => {
         message: "New bed not found",
       });
     }
+const newMonthlyRent = Number(newBed.monthlyRent || 0);
+const newDepositAmount = Number(newBed.depositAmount || 0);
 
     // Occupied Check
     const occupied = await Client.findOne({
@@ -154,7 +156,9 @@ const transferBed = async (req, res) => {
     // Current Bed Change
     client.propertyId = newPropertyId;
     client.bedId = newBedId;
-
+    // New bed ka rent/deposit Client me update
+    client.monthlyRent = newMonthlyRent;
+    client.depositAmount = newDepositAmount;
     client.worklogs.push({
       message: `Client shifted from Property ${oldPropertyId} Bed ${oldBedId} to Property ${newPropertyId} Bed ${newBedId}`,
       createdAt: now,
@@ -255,161 +259,161 @@ const transferBed = async (req, res) => {
       0
     );
 
- let daysCount;
+    let daysCount;
 
-if (client.noticeLastDate) {
-  const cvd = new Date(client.noticeLastDate);
+    if (client.noticeLastDate) {
+      const cvd = new Date(client.noticeLastDate);
 
-  if (
-    cvd.getMonth() + 1 === month &&
-    cvd.getFullYear() === year
-  ) {
-    rentEndDate = cvd;
-  }
-}
-
-if (!rentEndDate) {
-  const actualLastDay = new Date(year, month, 0).getDate();
-
-  const billingLastDay = actualLastDay === 31 ? 30 : actualLastDay;
-
-  rentEndDate = new Date(
-    year,
-    month - 1,
-    billingLastDay
-  );
-}
-
-historyEndDate = new Date(rentEndDate);
-
-if (oldHistory) {
-  const currentBedHistory = client.bedHistory
-    .filter(
-      (h) =>
-        String(h.bedId) === String(oldBedId) &&
-        new Date(h.fromDate).getMonth() + 1 === month &&
-        new Date(h.fromDate).getFullYear() === year
-    )
-    .sort(
-      (a, b) =>
-        new Date(b.fromDate) - new Date(a.fromDate)
-    )[0];
-
-  const calculationStartDate = currentBedHistory
-    ? new Date(currentBedHistory.fromDate)
-    : new Date(year, month - 1, 1);
-
-const shiftedDays = getDaysCount(
-  calculationStartDate,
-  new Date(endDate),
-  month,
-  year
-);
-
-
-const actualMonthDays = new Date(year, month, 0).getDate();
-
-const rentDivider =
-  actualMonthDays === 31 ? 30 : actualMonthDays;
-
-const oldCalculation = calculateRentHistory({
-  monthlyRent: oldHistory.monthlyRent,
-  depositAmount: oldHistory.depositAmount,
-  daysCount: shiftedDays,
-  previousDue: oldHistory.previousDue,
-  rentReceived: oldHistory.totalReceived,
-  ebAmt: oldHistory.ebAmt,
-  flatEB: oldHistory.flatEB,
-  adjEB: oldHistory.adjEB,
-  adjAmt: oldHistory.adjAmt,
-  processingFees: oldHistory.processingFees,
-  parkingCharges: oldHistory.parkingCharges,
-  processingFeesReceived: oldHistory.processingFeesReceived,
-  depositAmountReceived: oldHistory.depositAmountReceived,
-  rentDivider
-});
-
-Object.assign(oldHistory, oldCalculation);
-
-oldHistory.startDate = calculationStartDate;
-oldHistory.daysCount = shiftedDays;
-oldHistory.endDate = new Date(endDate);
-oldHistory.paymentStatus = "Shifted";
-
-await oldHistory.save();
-
-  const carriedDeposit = carryDeposit;
-
-  previousDue = oldHistory.currentDue;
-
-  const monthHistories = await ClientRentHistory.find({
-    clientId: client._id,
-    month,
-    year,
-    paymentStatus: "Shifted",
-  });
-
-  const consumedDays = monthHistories.reduce(
-    (sum, item) =>
-      sum + Number(item.daysCount || 0),
-    0
-  );
-
-  const totalEligibleDays = getDaysCount(
-    client.clientDoj,
-    rentEndDate,
-    month,
-    year
-  );
-
-  daysCount = Math.max(
-    totalEligibleDays - consumedDays,
-    0
-  );
-
-} else {
-  const lastHistory = await ClientRentHistory.findOne({
-    clientId: client._id,
-  }).sort({
-    year: -1,
-    month: -1,
-    createdAt: -1,
-  });
-
-  if (lastHistory) {
-    const carriedDeposit = Math.min(
-      Number(lastHistory.depositAmount || 0),
-      depositAmount
-    );
-
-    if (lastHistory.currentDue < 0) {
-      previousDue = 0;
-
-      extraReceived =
-        Math.abs(lastHistory.currentDue) +
-        carriedDeposit;
-    } else {
-      previousDue = lastHistory.currentDue;
-
-      extraReceived = carriedDeposit;
+      if (
+        cvd.getMonth() + 1 === month &&
+        cvd.getFullYear() === year
+      ) {
+        rentEndDate = cvd;
+      }
     }
-  }
 
-  daysCount = getDaysCount(
-    new Date(startDate),
-    rentEndDate,
-    month,
-    year
-  );
-}
+    if (!rentEndDate) {
+      const actualLastDay = new Date(year, month, 0).getDate();
+
+      const billingLastDay = actualLastDay === 31 ? 30 : actualLastDay;
+
+      rentEndDate = new Date(
+        year,
+        month - 1,
+        billingLastDay
+      );
+    }
+
+    historyEndDate = new Date(rentEndDate);
+
+    if (oldHistory) {
+      const currentBedHistory = client.bedHistory
+        .filter(
+          (h) =>
+            String(h.bedId) === String(oldBedId) &&
+            new Date(h.fromDate).getMonth() + 1 === month &&
+            new Date(h.fromDate).getFullYear() === year
+        )
+        .sort(
+          (a, b) =>
+            new Date(b.fromDate) - new Date(a.fromDate)
+        )[0];
+
+      const calculationStartDate = currentBedHistory
+        ? new Date(currentBedHistory.fromDate)
+        : new Date(year, month - 1, 1);
+
+      const shiftedDays = getDaysCount(
+        calculationStartDate,
+        new Date(endDate),
+        month,
+        year
+      );
+
+
+      const actualMonthDays = new Date(year, month, 0).getDate();
+
+      const rentDivider =
+        actualMonthDays === 31 ? 30 : actualMonthDays;
+
+      const oldCalculation = calculateRentHistory({
+        monthlyRent: oldHistory.monthlyRent,
+        depositAmount: oldHistory.depositAmount,
+        daysCount: shiftedDays,
+        previousDue: oldHistory.previousDue,
+        rentReceived: oldHistory.totalReceived,
+        ebAmt: oldHistory.ebAmt,
+        flatEB: oldHistory.flatEB,
+        adjEB: oldHistory.adjEB,
+        adjAmt: oldHistory.adjAmt,
+        processingFees: oldHistory.processingFees,
+        parkingCharges: oldHistory.parkingCharges,
+        processingFeesReceived: oldHistory.processingFeesReceived,
+        depositAmountReceived: oldHistory.depositAmountReceived,
+        rentDivider
+      });
+
+      Object.assign(oldHistory, oldCalculation);
+
+      oldHistory.startDate = calculationStartDate;
+      oldHistory.daysCount = shiftedDays;
+      oldHistory.endDate = new Date(endDate);
+      oldHistory.paymentStatus = "Shifted";
+
+      await oldHistory.save();
+
+      const carriedDeposit = carryDeposit;
+
+      previousDue = oldHistory.currentDue;
+
+      const monthHistories = await ClientRentHistory.find({
+        clientId: client._id,
+        month,
+        year,
+        paymentStatus: "Shifted",
+      });
+
+      const consumedDays = monthHistories.reduce(
+        (sum, item) =>
+          sum + Number(item.daysCount || 0),
+        0
+      );
+
+      const totalEligibleDays = getDaysCount(
+        client.clientDoj,
+        rentEndDate,
+        month,
+        year
+      );
+
+      daysCount = Math.max(
+        totalEligibleDays - consumedDays,
+        0
+      );
+
+    } else {
+      const lastHistory = await ClientRentHistory.findOne({
+        clientId: client._id,
+      }).sort({
+        year: -1,
+        month: -1,
+        createdAt: -1,
+      });
+
+      if (lastHistory) {
+        const carriedDeposit = Math.min(
+          Number(lastHistory.depositAmount || 0),
+          depositAmount
+        );
+
+        if (lastHistory.currentDue < 0) {
+          previousDue = 0;
+
+          extraReceived =
+            Math.abs(lastHistory.currentDue) +
+            carriedDeposit;
+        } else {
+          previousDue = lastHistory.currentDue;
+
+          extraReceived = carriedDeposit;
+        }
+      }
+
+      daysCount = getDaysCount(
+        new Date(startDate),
+        rentEndDate,
+        month,
+        year
+      );
+    }
     const newBedDeposit = Number(newBed.depositAmount || 0);
     const carriedDeposit = carryDeposit;
     const remainingDeposit = newBedDeposit - carriedDeposit
 
-const actualMonthDays = new Date(year, month, 0).getDate();
+    const actualMonthDays = new Date(year, month, 0).getDate();
 
-const rentDivider =
-  actualMonthDays === 31 ? 30 : actualMonthDays;
+    const rentDivider =
+      actualMonthDays === 31 ? 30 : actualMonthDays;
 
     const calculation = calculateRentHistory({
       monthlyRent,
@@ -445,7 +449,7 @@ const rentDivider =
       startDate: startDate,
       endDate: historyEndDate,
       ...calculation,
-      paymentComments: "",
+      // paymentComments: "",
       remarks: "",
     });
     // ................................................

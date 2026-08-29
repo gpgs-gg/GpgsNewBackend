@@ -4,6 +4,7 @@ const Bed = require("../models/bed.model");
 const User = require("../models/user.model");
 const Property = require("../models/property.model");
 const Booking = require("../models/newBooking.model");
+const ClientVacationHistory = require("../models/clientVacationHistory.model");
 const { recalculateRentHistory } = require("../services/rentHistory.service");
 const { enableClientLogin } = require("../services/clientLogin.service");
 const {
@@ -77,8 +78,8 @@ exports.createClientFromBooking = async (
   res
 ) => {
   try {
-    const { bookingId } = req.body;
-
+    const {bookingId , narration , paidAmount} = req.body;
+    
     const booking =
       await Booking.findById(bookingId);
 
@@ -118,85 +119,62 @@ exports.createClientFromBooking = async (
     });
 
     if (existingClients.length > 0) {
-
       // Booking ki latest values client me update karo
       for (const client of existingClients) {
-
         if (client.stayType === "P. Booked") {
-
           client.bookingId = booking._id;
-
           client.fullName = booking.fullName;
           client.emailId = booking.emailId;
           client.callingNo = booking.callingNo;
           client.whatsappNo = booking.whatsappNo;
-
           client.propertyId = booking.propertyId;
           client.bedId = booking.bedId;
-
           client.processingFees = booking.processingFees;
           client.parkingCharges = booking.parkingCharges;
-
           client.monthlyRent = booking.monthlyRent;
           client.depositAmount = booking.depositAmount;
-
           client.totalAmount = booking.totalAmount;
-          client.bookingAmount = booking.bookingAmount;
+          client.bookingAmount = paidAmount;
           client.balanceAmount = booking.balanceAmount;
           client.temporaryTotalAmount = booking.temporaryTotalAmount;
           client.clientDoj = booking.clientDoj;
-          // client.clientVacatingDate = booking.clientLastDate;
-          // client.noticeStartDate = booking.clientDoj;
-          // client.noticeLastDate = booking.clientLastDate;
+          client.narration = narration;
           client.comments = booking.comments;
           client.loginEnabled = true;
           client.isBookingCancelled = false;
         }
-
         if (client.stayType === "T. Booked") {
-
           client.bookingId = booking._id;
-
+          client.bookingType = booking?.bookingType
           client.fullName = booking.fullName;
           client.emailId = booking.emailId;
           client.callingNo = booking.callingNo;
-          client.whatsappNo = booking.whatsappNo;
-
+          client.whatsappNo = booking.whatsap
           client.propertyId = booking.temporaryPropertyId;
           client.bedId = booking.temporaryBedId;
-
           client.monthlyRent = booking.temporaryMonthlyRent;
-
           client.temporaryParkingCharges =
             booking.temporaryParkingCharges;
-
           client.temporaryTotalAmount =
             booking.temporaryTotalAmount;
-
           client.clientDoj =
             booking.temporaryClientDoj;
-
           client.clientVacatingDate =
             booking.temporaryClientLastDate;
-
           client.noticeStartDate =
             booking.temporaryClientDoj;
-
           client.noticeLastDate =
             booking.temporaryClientLastDate;
-
           client.comments =
             booking.temporaryComments;
-
           client.loginEnabled = true;
           client.isBookingCancelled = false;
+           client.narration = narration;
+          client.bookingAmount = paidAmount;
         }
-
         await client.save();
-
         await createClientRentHistory(client, true);
       }
-
       await User.findOneAndUpdate(
         { bookingId },
         {
@@ -205,7 +183,6 @@ exports.createClientFromBooking = async (
           },
         }
       );
-
       booking.loginEnabled = true;
       booking.isCancelled = false;
       booking.cancelledDate = null;
@@ -283,10 +260,11 @@ exports.createClientFromBooking = async (
         monthlyRent: booking.monthlyRent,
         depositAmount: booking.depositAmount,
         totalAmount: booking.totalAmount,
-        bookingAmount: booking.bookingAmount,
+        bookingAmount: paidAmount,
         balanceAmount: booking.balanceAmount,
         temporaryTotalAmount: booking.temporaryTotalAmount,
         clientDoj: booking.clientDoj,
+        narration: narration,
         // clientVacatingDate: booking.clientLastDate,
         // noticeStartDate: booking.clientDoj,
         // noticeLastDate: booking.clientLastDate,
@@ -336,6 +314,7 @@ exports.createClientFromBooking = async (
       clientsToCreate.push({
         stayType: "T. Booked",
         bookingId: booking._id,
+        bookingType: booking?.bookingType,
         fullName: booking.fullName,
         emailId: booking.emailId,
         callingNo: booking.callingNo,
@@ -349,10 +328,13 @@ exports.createClientFromBooking = async (
         clientVacatingDate: booking.temporaryClientLastDate,
         noticeStartDate: booking.temporaryClientDoj,
         noticeLastDate: booking.temporaryClientLastDate,
+        narration: narration,
         comments:
           booking.temporaryComments,
         loginEnabled: true,
         isBookingCancelled: false,
+        bookingAmount: paidAmount
+        
       });
     }
 
@@ -1168,14 +1150,126 @@ exports.getClients = async (req, res) => {
 
     const clients = await Client.find(query)
       .populate("propertyId", "propertyCode propertyName propertyLocation")
-      .populate("bedId", "bedCode roomNo bedNo monthlyRent depositAmount")
+      .populate("bedId", "bedCode roomNo bedNo monthlyRent depositAmount freeEbAsPerBed acRoom")
       .populate("bedHistory.propertyId", "propertyCode propertyName")
       .populate("bedHistory.bedId", "bedCode roomNo bedNo")
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limit);
 
-    // ================= Response =================
+// ==========================================
+// GET VACATION HISTORY FOR CURRENT CLIENTS
+// ==========================================
+const clientIds = clients.map((client) => client._id);
+const vacations = await ClientVacationHistory.find({
+  clientId: { $in: clientIds },
+}).lean();
+// ==========================================
+// CREATE VACATION MAP
+// ==========================================
+const vacationMap = new Map();
+
+vacations.forEach((vacation) => {
+    const clientId = vacation.clientId.toString();
+
+    if (!vacationMap.has(clientId)) {
+        vacationMap.set(clientId, []);
+    }
+
+    vacationMap.get(clientId).push(vacation);
+});
+// ==========================================
+// Temporary Client -> Permanent Booking Details
+// ==========================================
+
+const bookingIds = [
+  ...new Set(
+    clients
+      .filter(
+        (client) =>
+          client.stayType === "T. Booked" &&
+          client.bookingId
+      )
+      .map((client) => client.bookingId.toString())
+  ),
+];
+
+const permanentClients = await Client.find({
+  bookingId: { $in: bookingIds },
+  stayType: "P. Booked",
+  isBookingCancelled: false,
+})
+  .populate(
+    "propertyId",
+    "propertyCode propertyName propertyLocation"
+  )
+  .populate(
+    "bedId",
+    "bedCode roomNo bedNo monthlyRent depositAmount"
+  )
+  .lean();
+
+const permanentMap = new Map();
+
+permanentClients.forEach((permanent) => {
+  permanentMap.set(
+    permanent.bookingId?.toString(),
+    permanent
+  );
+});
+
+const responseClients = clients.map((client) => {
+  const data = client.toObject();
+  // ==========================================
+  // VACATION DATA
+  // ==========================================
+    const vacations = vacationMap.get(
+        client._id.toString()
+    ) || [];
+
+    data.vacations = vacations.map((vacation) => ({
+        _id: vacation._id,
+        month: vacation.month,
+        year: vacation.year,
+        vacationStartDate1: vacation.vacationStartDate1 || null,
+        vacationLastDate1: vacation.vacationLastDate1 || null,
+        vacationStartDate2: vacation.vacationStartDate2 || null,
+        vacationLastDate2: vacation.vacationLastDate2 || null,
+    }));
+   
+  if (
+    client.stayType === "T. Booked" &&
+    client.bookingId
+  ) {
+    const permanent = permanentMap.get(
+      client.bookingId.toString()
+    );
+
+    data.permanentBooking = permanent
+      ? {
+          clientId: permanent._id,
+
+          propertyId: permanent.propertyId?._id,
+          propertyCode:
+            permanent.propertyId?.propertyCode,
+          propertyName:
+            permanent.propertyId?.propertyName,
+          propertyLocation:
+            permanent.propertyId?.propertyLocation,
+
+          bedId: permanent.bedId?._id,
+          bedCode: permanent.bedId?.bedCode,
+          roomNo: permanent.bedId?.roomNo,
+          bedNo: permanent.bedId?.bedNo,
+
+          monthlyRent: permanent.monthlyRent,
+          depositAmount: permanent.depositAmount,
+        }
+      : null;
+  }
+
+  return data;
+});
 
     return res.status(200).json({
       success: true,
@@ -1186,7 +1280,7 @@ exports.getClients = async (req, res) => {
       hasNextPage: page < Math.ceil(totalRecords / limit),
       hasPrevPage: page > 1,
       count: clients.length,
-      data: clients,
+      data: responseClients,
     });
   } catch (error) {
     console.error("Get Clients Error:", error);
@@ -1801,7 +1895,8 @@ exports.getNoticeClients = async (req, res) => {
           noticeStartDate: 1,
           noticeLastDate: 1,
           clientVacatingDate: 1,
-
+          fnf: 1,
+   
           stayType: 1,
           status: 1,
           isBookingCancelled: 1,

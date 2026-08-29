@@ -56,13 +56,66 @@ const ClientSchema = new mongoose.Schema(
             ref: "Bed",
             default: null,
         },
-
+       
         stayType: {
             type: String,
-            enum: ["P. Booked", "T. Booked"],
+            enum: ["P. Booked", "T. Booked", "Daily"],
             default: "P. Booked",
         },
-        status: String,
+
+        narration : {
+            type: String,
+        },
+        
+        bookingType : {
+            type: String,
+        },
+        // ===================================
+        // FNF Details DETAILS
+        // ===================================
+        fnf: {
+            currentDue: {
+                type: Number,
+                default: 0,
+            },
+
+            totalPaidDeposit: {
+                type: Number,
+                default: 0,
+            },
+
+            adjustmentAmount: {
+                type: Number,
+                default: 0,
+            },
+
+            adjustmentEB: {
+                type: Number,
+                default: 0,
+            },
+
+            fnfAmount: {
+                type: Number,
+                default: 0,
+            },
+
+            bankDetailReceived: {
+                type: String,
+                trim: true,
+                default: "",
+            },
+
+            remarks: {
+                type: String,
+                trim: true,
+                default: "",
+            },
+
+            status: {
+                type: String,
+            },
+        },
+
         // ===================================
         // CLIENT DETAILS
         // ===================================

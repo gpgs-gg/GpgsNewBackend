@@ -20,6 +20,7 @@ exports.createBed = async (req, res) => {
       previousRentHikeDate,
       bedAvailable,
       bedAdditionalStatus,
+      freeEbAsPerBed,
       comment,
     } = req.body;
 
@@ -34,14 +35,13 @@ exports.createBed = async (req, res) => {
 
     const existingBed = await Bed.findOne({
       propertyId,
-      roomNo,
       bedNo,
     });
 
     if (existingBed) {
       return res.status(400).json({
         success: false,
-        message: "Bed already exists in this room",
+        message: `Bed ${bedNo} already exists in this Property`,
       });
     }
 
@@ -61,6 +61,7 @@ exports.createBed = async (req, res) => {
       previousRentHikeDate,
       bedAvailable,
       bedAdditionalStatus,
+      freeEbAsPerBed,
       comment,
       worklogs: [
         {
@@ -323,10 +324,14 @@ exports.getSingleBed = async (req, res) => {
   }
 };
 // Update Bed
+// Update Bed
 exports.updateBed = async (req, res) => {
   try {
     const bed = await Bed.findById(req.params.id);
 
+    // --------------------------------------------------
+    // 1. Check bed exists
+    // --------------------------------------------------
     if (!bed) {
       return res.status(404).json({
         success: false,
@@ -334,7 +339,74 @@ exports.updateBed = async (req, res) => {
       });
     }
 
-    Object.assign(bed, req.body);
+    const {
+      propertyId,
+      roomNo,
+      bedNo,
+      gender,
+      sharingType,
+      bathAttached,
+      acRoom,
+      monthlyRent,
+      securityDepositMultiplicationFactor,
+      upcomingRentHikeDate,
+      upcomingRentHikeAmount,
+      previousRentHikeDate,
+      bedAvailable,
+      bedAdditionalStatus,
+      freeEbAsPerBed,
+      comment,
+    } = req.body;
+
+    // --------------------------------------------------
+    // 2. Check property exists
+    // --------------------------------------------------
+    const property = await Property.findById(propertyId);
+
+    if (!property) {
+      return res.status(404).json({
+        success: false,
+        message: "Property not found",
+      });
+    }
+    // --------------------------------------------------
+    // 3. Check duplicate bed number in same property
+    //    Exclude the current bed being updated
+    // --------------------------------------------------
+    const existingBed = await Bed.findOne({
+      propertyId,
+      bedNo,
+      _id: { $ne: bed._id },
+    });
+
+    if (existingBed) {
+      return res.status(400).json({
+        success: false,
+        message: `Bed ${bedNo} already exists in this property`,
+      });
+    }
+
+    // --------------------------------------------------
+    // 4. Update bed
+    // --------------------------------------------------
+    Object.assign(bed, {
+      propertyId,
+      roomNo,
+      bedNo,
+      gender,
+      sharingType,
+      bathAttached,
+      acRoom,
+      monthlyRent,
+      securityDepositMultiplicationFactor,
+      upcomingRentHikeDate,
+      upcomingRentHikeAmount,
+      previousRentHikeDate,
+      bedAvailable,
+      bedAdditionalStatus,
+      freeEbAsPerBed,
+      comment,
+    });
 
     bed.worklogs.push({
       message: "Bed Updated",
@@ -348,13 +420,19 @@ exports.updateBed = async (req, res) => {
       data: bed,
     });
   } catch (error) {
+    // MongoDB duplicate key error
+    if (error.code === 11000) {
+      return res.status(400).json({
+        success: false,
+        message: "This bed number already exists in this property",
+      });
+    }
     return res.status(500).json({
       success: false,
       message: error.message,
     });
   }
 };
-// Delete Bed
 // Delete Bed
 exports.deleteBed = async (req, res) => {
   try {

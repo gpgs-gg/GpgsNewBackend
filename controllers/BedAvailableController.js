@@ -158,16 +158,33 @@ exports.getAllAvailableBeds = async (req, res) => {
     }
 
     // ================= 💨 STEP 1: Get occupied bed IDs using distinct (FAST) =================
-    // 🔥 Yeh 40K clients pe bhi < 100ms me kaam karega agar index hai
-    const occupiedBedIds = await Client.distinct("bedId", {
-      bedId: { $exists: true, $ne: null },
-      isBookingCancelled: { $ne: true },
-      noticeStartDate: { $exists: false },
+ const occupiedBedIds = await Client.distinct("bedId", {
+  bedId: { $exists: true, $ne: null },
+  isBookingCancelled: { $ne: true },
+
+  // Normal active client = occupied
+  $or: [
+    // Notice start nahi hua
+    {
+      $or: [
+        { noticeStartDate: { $exists: false } },
+        { noticeStartDate: "" },
+        { noticeStartDate: null }
+      ]
+    },
+
+    // Notice hai but vacating date future ki hai
+    {
+      noticeStartDate: { $nin: ["", null] },
       $or: [
         { clientVacatingDate: { $exists: false } },
+        { clientVacatingDate: "" },
+        { clientVacatingDate: null },
         { clientVacatingDate: { $gt: now } }
       ]
-    });
+    }
+  ]
+});
 
     if (occupiedBedIds.length > 0) {
       query._id = { $nin: occupiedBedIds };

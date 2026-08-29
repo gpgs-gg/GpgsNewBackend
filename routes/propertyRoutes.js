@@ -18,9 +18,11 @@ const {
 router.get("/dropdown", getPropertyDropdown);
 
 router.post("/", upload.fields([
-    { name: "owner[photo]", maxCount: 10 },
-    { name: "owner[aadharCard]", maxCount: 10 },
-  ]),createProperty
+  { name: "owner[photo]", maxCount: 10 },
+  { name: "owner[aadharCard]", maxCount: 10 },
+  { name: "agreement[attachment]", maxCount: 10, }
+
+]), createProperty
 );
 router.get("/", getAllProperties);
 router.get("/:id", getPropertyById);
@@ -29,6 +31,7 @@ router.put(
   upload.fields([
     { name: "owner[photo]", maxCount: 10 },
     { name: "owner[aadharCard]", maxCount: 10 },
+    { name: "agreement[attachment]", maxCount: 10, }
   ]),
   updateProperty
 );

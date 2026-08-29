@@ -17,9 +17,10 @@ const calculateRentHistory = ({
   processingFeesReceived = 0,
   depositAmountReceived = 0,
   rentReceived = 0,
+  bookingType,
 }) => {
   monthlyRent = Number(monthlyRent);
-  depositAmount = Number(depositAmount);
+ 
   daysCount = Number(daysCount);
 
   previousDue = Number(previousDue);
@@ -45,10 +46,20 @@ const calculateRentHistory = ({
   rentReceived = Number(rentReceived);
 
   // Rent
-  const rentAmt = Math.round(
-    (monthlyRent / rentDivider) * daysCount
-  );
+  // const rentAmt = Math.round(
+  //   (monthlyRent / rentDivider) * daysCount
+  // );
 
+const rentAmt = Math.round(
+  ((monthlyRent / rentDivider) * daysCount) *
+    (bookingType === "Daily" ? 2 : 1)
+);
+// Daily booking me deposit = rent amount
+if (bookingType === "Daily") {
+  depositAmount = rentAmt;
+} else {
+  depositAmount = Number(depositAmount);
+}
   const depositAmountDue =
     depositAmount -
     depositAmountReceived;

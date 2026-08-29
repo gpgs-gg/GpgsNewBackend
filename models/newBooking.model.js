@@ -154,6 +154,10 @@ const bookingSchema = new mongoose.Schema(
             default: false,
         },
 
+        bookingType: {
+            type: String,
+            default: null,
+        },
         cancelledDate: {
             type: String,
             default: null,
@@ -164,6 +168,61 @@ const bookingSchema = new mongoose.Schema(
             enum: ["Booked", "Not Booked"],
             default: "Not Booked",
         },
+        // Daily Booking
+// dailyPropertyId: {
+//     type: mongoose.Schema.Types.ObjectId,
+//     ref: "Property",
+// },
+
+// dailyBedId: {
+//     type: mongoose.Schema.Types.ObjectId,
+//     ref: "Bed",
+// },
+
+// dailyRoomNo: {
+//     type: String,
+//     default: null,
+// },
+
+// dailyAcRoom: {
+//     type: String,
+//     default: null,
+// },
+
+// dailyRentPerDay: {
+//     type: Number,
+//     default: 0,
+// },
+
+// dailyclientCalculatedRent: {
+//     type: Number,
+//     default: 0,
+// },
+
+// dailyDepositAmount: {
+//     type: Number,
+//     default: 0,
+// },
+
+// dailyClientDoj: {
+//     type: String,
+//     default: null,
+// },
+
+// dailyClientLastDate: {
+//     type: String,
+//     default: null,
+// },
+
+// dailyComments: {
+//     type: String,
+//     default: null,
+// },
+
+// dailyTotalAmount: {
+//     type: Number,
+//     default: 0,
+// },
     },
     {
         timestamps: true,

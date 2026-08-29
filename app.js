@@ -22,6 +22,16 @@ const housekeepingRoutes = require("./routes/houseKeepingRoutes");
 const maintenanceRoutes = require("./routes/maintenanceRoutes");
 const rentNotReceivedRoutes = require("./routes/rentNotReceivedCommentRoutes");
 const salaryRoutes = require("./routes/salaryRoutes");
+const acebAreaRoutes = require("./routes/acebAreaRoutes");
+const acebReadingRoutes = require("./routes/acebReadingRoutes");
+const ebInfoRoutes = require("./routes/ebInfoRoutes");
+const clientTicketsRoutes = require("./clientRoutes/clientTIcketRouets");
+const otpRoutes = require("./routes/otpRoutes.js");
+const sidebarModuleRoutes = require("./routes/sidebarModuleRoutes.js");
+const rolePermissionRoutes = require("./routes/rolePermissionRoutes");
+const clientVacationRoutes = require('./routes/clientVacationRoutes');
+const ebCalculatorRoutes = require('./routes/ebCalculatorRoutes.js');
+
 const ApiError = require("./utils/ApiError");
 const cors = require("cors");
 const cookieParser = require("cookie-parser");
@@ -69,6 +79,15 @@ app.use("/api/attendance", attendanceRoutes);
 app.use("/api/attendance", attendanceRoutes);
 app.use("/api", rentNotReceivedRoutes);
 app.use("/api/salaries", salaryRoutes);
+app.use("/api/aceb-area", acebAreaRoutes);
+app.use("/api/aceb-reading", acebReadingRoutes);
+app.use("/api/electricity-bill-info", ebInfoRoutes);
+app.use("/api/client-tickets", clientTicketsRoutes);
+app.use("/api/otp", otpRoutes)
+app.use("/api/modules", sidebarModuleRoutes);
+app.use("/api/permissions", rolePermissionRoutes);
+app.use('/api/vacation-history', clientVacationRoutes);
+app.use("/api", ebCalculatorRoutes);
 
 app.use((req, res, next) => {
   next(new ApiError(404, `Route Not Found - ${req.originalUrl}`));

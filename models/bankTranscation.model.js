@@ -53,6 +53,46 @@ const bankTransactionSchema = new mongoose.Schema(
       index: true,
     },
 
+    assignee: {
+      type: String,
+      default: "",
+      index: true,
+    },
+
+    reviewer: {
+      type: String,
+      default: "",
+      index: true,
+    },
+
+    auditor: {
+      type: String,
+      default: "",
+      index: true,
+    },
+
+    expenseCategory: {
+      type: String,
+      default: "",
+      index: true,
+    },
+
+    status: {
+      type: String,
+      default: "Open",
+      index: true,
+    },
+
+    workLogs: [
+      {
+        message: String,
+        createdBy: String,
+        createdAt: {
+          type: String,
+          default: String,
+        },
+      },
+    ],
     // ===========================
     // Mapping Details
     // ===========================
@@ -75,6 +115,11 @@ const bankTransactionSchema = new mongoose.Schema(
     propertyId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Property",
+    },
+
+    expenseCode: {
+      type: mongoose.Schema.Types.ObjectId,
+      default: null,
     },
 
     bedId: {
@@ -105,7 +150,59 @@ bankTransactionSchema.index({
   narration: "text",
 });
 
-module.exports = mongoose.model(
+// module.exports = mongoose.model(
+//   "BankTransaction",
+//   bankTransactionSchema
+// );
+
+const BankTransaction = mongoose.model(
   "BankTransaction",
   bankTransactionSchema
 );
+
+// =====================================================
+// NEW ACCOUNT-WISE MODELS
+// =====================================================
+
+const AC1Transaction = mongoose.model(
+  "AC1Transaction",
+  bankTransactionSchema,
+  "ac1Transactions"
+);
+
+const AC2Transaction = mongoose.model(
+  "AC2Transaction",
+  bankTransactionSchema,
+  "ac2Transactions"
+);
+
+const AC3Transaction = mongoose.model(
+  "AC3Transaction",
+  bankTransactionSchema,
+  "ac3Transactions"
+);
+
+const AC4Transaction = mongoose.model(
+  "AC4Transaction",
+  bankTransactionSchema,
+  "ac4Transactions"
+);
+
+const AC5Transaction = mongoose.model(
+  "AC5Transaction",
+  bankTransactionSchema,
+  "ac5Transactions"
+);
+
+// =====================================================
+// EXPORTS
+// =====================================================
+
+module.exports = {
+  BankTransaction,
+  AC1Transaction,
+  AC2Transaction,
+  AC3Transaction,
+  AC4Transaction,
+  AC5Transaction,
+};

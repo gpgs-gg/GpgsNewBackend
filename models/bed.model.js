@@ -76,6 +76,11 @@ const BedSchema = new mongoose.Schema(
       default: 0,
     },
 
+    freeEbAsPerBed: {
+      type: Number,
+      default: 0,
+    },
+
     previousRentHikeDate: {
       type: Date,
     },

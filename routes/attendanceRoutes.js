@@ -10,6 +10,7 @@ const {
   getAllAttendance,
   createOrRegularizeAttendance,
   getAttendanceById,
+  deleteAttendance,
 } = require("../controllers/AttendanceController");
 
 const { verifyJWT } = require("../middleware/verifyJWT");
@@ -47,7 +48,8 @@ router.get("/", verifyJWT, getAllAttendance);
 
 // Single attendance
 router.get("/:id", verifyJWT, getAttendanceById);
-
+// Delete attendance
+router.delete("/:id", verifyJWT, deleteAttendance);
 // Regularise attendance
 router.post(
   "/admin/regularize",

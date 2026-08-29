@@ -53,7 +53,26 @@ const getMonthDateRange = (month, year) => {
     endDate,
   };
 };
+// ============================================================
+// GET PREVIOUS SALARY PERIOD
+// ============================================================
 
+const getPreviousMonthYear = (month, year) => {
+  const currentMonth = Number(month);
+  const currentYear = Number(year);
+
+  if (currentMonth === 1) {
+    return {
+      month: 12,
+      year: currentYear - 1,
+    };
+  }
+
+  return {
+    month: currentMonth - 1,
+    year: currentYear,
+  };
+};
 // ============================================================
 // CALCULATE PRESENT DAYS (All days including Thursday)
 // ============================================================
@@ -242,7 +261,26 @@ const calculateCurrentDue = ({
       (Number(paidAmount) || 0),
   );
 };
+// ============================================================
+// GET PREVIOUS MONTH CURRENT DUE
+// ============================================================
 
+const getPreviousMonthDue = async (employeeObjectId, month, year) => {
+  const { month: previousMonth, year: previousYear } = getPreviousMonthYear(
+    month,
+    year,
+  );
+
+  const previousSalary = await Salary.findOne({
+    employee: employeeObjectId,
+    month: previousMonth,
+    year: previousYear,
+  })
+    .select("currentDue")
+    .lean();
+
+  return roundAmount(previousSalary?.currentDue || 0);
+};
 // ============================================================
 // ESCAPE REGEX
 // ============================================================
@@ -659,129 +697,153 @@ const getSalaries = asyncHandler(async (req, res) => {
   // NORMALIZE RESPONSE
   // ==========================================================
 
-  const salaries = employees.map((employee) => {
-    const salary = employee.salary || {};
-    const attendance = employee.attendance || [];
+  const salaries = await Promise.all(
+    employees.map(async (employee) => {
+      const salary = employee.salary || {};
+      const attendance = employee.attendance || [];
 
-    // --------------------------------------------------------
-    // CALCULATE EVERYTHING DYNAMICALLY
-    // --------------------------------------------------------
+      // ========================================================
+      // GET PREVIOUS MONTH DUE DYNAMICALLY
+      // ========================================================
 
-    const calculated = calculateSalaryData({
-      attendance,
-      paidLeaveDays: salary.paidLeaveDays || 0,
-      monthlySalary: salary.monthlySalary || 0,
-      adjustedAmount: salary.adjustedAmount || 0,
-      paidAmount: salary.paidAmount || 0,
-      previousDue: salary.previousDue || 0,
-      month: selectedMonth,
-      year: selectedYear,
-    });
+      const previousMonthDue = await getPreviousMonthDue(
+        employee._id,
+        selectedMonth,
+        selectedYear,
+      );
 
-    // --------------------------------------------------------
-    // ATTENDANCE BY DAY
-    // --------------------------------------------------------
+      // ========================================================
+      // CALCULATE EVERYTHING DYNAMICALLY
+      // ========================================================
 
-    const attendanceByDay = createAttendanceByDay(attendance);
+      const calculated = calculateSalaryData({
+        attendance,
+        paidLeaveDays: salary.paidLeaveDays || 0,
+        monthlySalary: salary.monthlySalary || 0,
+        adjustedAmount: salary.adjustedAmount || 0,
+        paidAmount: salary.paidAmount || 0,
 
-    // --------------------------------------------------------
-    // RESPONSE
-    // --------------------------------------------------------
+        // Previous month's currentDue
+        previousDue: previousMonthDue,
 
-    return {
-      // Salary ID
-      _id: salary._id || null,
+        month: selectedMonth,
+        year: selectedYear,
+      });
 
-      // ======================================================
-      // EMPLOYEE
-      // ======================================================
+      // ========================================================
+      // RETURN SALARY DATA
+      // ========================================================
 
-      employee: {
-        _id: employee._id,
+      return {
+        _id: salary._id || null,
+
+        employee: {
+          _id: employee._id,
+          employeeId: employee.employeeId,
+          employeeName: employee.employeeName,
+          department: employee.department,
+          designation: employee.designation,
+          level: employee.level,
+          role: employee.role,
+          status: employee.status,
+        },
+
         employeeId: employee.employeeId,
         employeeName: employee.employeeName,
-        department: employee.department,
-        designation: employee.designation,
-        status: employee.status,
-      },
 
-      employeeId: employee.employeeId,
-      employeeName: employee.employeeName,
+        month: selectedMonth,
+        year: selectedYear,
 
-      // ======================================================
-      // PERIOD
-      // ======================================================
+        totalDays: calculated.totalDaysInMonth,
 
-      month: selectedMonth,
-      year: selectedYear,
-      totalDays: calculated.totalDaysInMonth,
+        // ======================================================
+        // ATTENDANCE
+        // ======================================================
 
-      // ======================================================
-      // ATTENDANCE DETAILS
-      // ======================================================
+        attendance,
 
-      attendance,
-      attendanceByDay,
-      totalPresentDays: calculated.totalPresentDays,
-      eligibleAttendanceDays: calculated.eligibleAttendanceDays,
-      applicableAbsentDays: calculated.applicableAbsentDays,
-      weeklyOffEligibility: calculated.weeklyOffEligibility,
+        attendanceByDay: createAttendanceByDay(attendance),
 
-      // ======================================================
-      // SALARY
-      // ======================================================
+        totalPresentDays: calculated.totalPresentDays,
 
-      monthlySalary: calculated.monthlySalary,
-      perDaySalary: calculated.perDaySalary,
-      payableDays: calculated.payableDays,
+        eligibleAttendanceDays: calculated.eligibleAttendanceDays,
 
-      // ======================================================
-      // DEDUCTIONS
-      // ======================================================
+        applicableAbsentDays: calculated.applicableAbsentDays,
 
-      absenceDeduction: calculated.absenceDeduction,
-      paidLeaveDays: calculated.paidLeaveDays,
+        weeklyOffEligibility: calculated.weeklyOffEligibility,
 
-      // ======================================================
-      // ADJUSTMENT
-      // ======================================================
+        // ======================================================
+        // SALARY
+        // ======================================================
 
-      adjustedAmount: calculated.adjustedAmount,
-      adjustmentDetails: salary.adjustmentDetails || "",
+        monthlySalary: calculated.monthlySalary,
 
-      // ======================================================
-      // PAYABLE
-      // ======================================================
+        perDaySalary: calculated.perDaySalary,
 
-      payableSalary: calculated.payableSalary,
+        payableDays: calculated.payableDays,
 
-      // ======================================================
-      // PAYMENT
-      // ======================================================
+        // ======================================================
+        // DEDUCTIONS
+        // ======================================================
 
-      paidAmount: calculated.paidAmount,
-      paidAmountDetails: salary.paidAmountDetails || "",
+        absenceDeduction: calculated.absenceDeduction,
 
-      // ======================================================
-      // DUE
-      // ======================================================
+        paidLeaveDays: calculated.paidLeaveDays,
 
-      previousDue: calculated.previousDue,
-      currentDue: calculated.currentDue,
+        // ======================================================
+        // ADJUSTMENT
+        // ======================================================
 
-      // ======================================================
-      // COMMENTS
-      // ======================================================
+        adjustedAmount: calculated.adjustedAmount,
 
-      comments: salary.comments || "",
+        adjustmentDetails: salary.adjustmentDetails || {
+          specialPerks: [],
+          deductions: [],
+        },
 
-      // ======================================================
-      // STATUS
-      // ======================================================
+        // ======================================================
+        // PAYABLE
+        // ======================================================
 
-      salaryExists: !!salary._id,
-    };
-  });
+        payableSalary: calculated.payableSalary,
+
+        // ======================================================
+        // PAYMENT
+        // ======================================================
+
+        paidAmount: calculated.paidAmount,
+
+        paidAmountDetails: salary.paidAmountDetails || {
+          advanceAmount: [],
+          deductedAmount: {
+            label: "",
+            amount: 0,
+            comments: "",
+          },
+        },
+
+        // ======================================================
+        // DUE
+        // ======================================================
+
+        previousDue: calculated.previousDue,
+
+        currentDue: calculated.currentDue,
+
+        // ======================================================
+        // COMMENTS
+        // ======================================================
+
+        comments: salary.comments || "",
+
+        // ======================================================
+        // STATUS
+        // ======================================================
+
+        salaryExists: !!salary._id,
+      };
+    }),
+  );
 
   // ==========================================================
   // PAGINATION
@@ -876,14 +938,18 @@ const getEmployeeSalary = asyncHandler(async (req, res) => {
   // --------------------------------------------------------
   // CALCULATE SALARY
   // --------------------------------------------------------
-
+  const previousMonthDue = await getPreviousMonthDue(
+    employee._id,
+    salaryMonth,
+    salaryYear,
+  );
   const calculated = calculateSalaryData({
     attendance,
     paidLeaveDays: salary?.paidLeaveDays || 0,
     monthlySalary: salary?.monthlySalary || 0,
     adjustedAmount: salary?.adjustedAmount || 0,
     paidAmount: salary?.paidAmount || 0,
-    previousDue: salary?.previousDue || 0,
+    previousDue: previousMonthDue,
     month: salaryMonth,
     year: salaryYear,
   });
@@ -949,27 +1015,119 @@ const getEmployeeSalary = asyncHandler(async (req, res) => {
 // ============================================================
 // CREATE / UPDATE SALARY
 // ============================================================
+// ============================================================
+// SAFE SALARY DETAIL NORMALIZERS
+// ============================================================
 
+const normalizeAdjustmentDetails = (details) => {
+  if (!details || typeof details !== "object" || Array.isArray(details)) {
+    return {
+      specialPerks: [],
+      deductions: [],
+    };
+  }
+
+  return {
+    specialPerks: Array.isArray(details.specialPerks)
+      ? details.specialPerks
+      : [],
+
+    deductions: Array.isArray(details.deductions) ? details.deductions : [],
+  };
+};
+
+const normalizePaidAmountDetails = (details = {}) => {
+  // ============================================================
+  // NORMALIZE ADVANCE AMOUNT
+  // ============================================================
+
+  let advanceAmount = [];
+
+  // New format: array
+  if (Array.isArray(details?.advanceAmount)) {
+    advanceAmount = details.advanceAmount
+      .map((item) => ({
+        label: typeof item?.label === "string" ? item.label.trim() : "",
+
+        amount: Math.max(Number(item?.amount) || 0, 0),
+
+        comments:
+          typeof item?.comments === "string" ? item.comments.trim() : "",
+      }))
+      .filter((item) => item.label || item.amount > 0 || item.comments);
+  }
+
+  // Legacy format: object
+  else if (
+    details?.advanceAmount &&
+    typeof details.advanceAmount === "object"
+  ) {
+    const legacyAdvance = {
+      label:
+        typeof details.advanceAmount.label === "string"
+          ? details.advanceAmount.label.trim()
+          : "",
+
+      amount: Math.max(Number(details.advanceAmount.amount) || 0, 0),
+
+      comments:
+        typeof details.advanceAmount.comments === "string"
+          ? details.advanceAmount.comments.trim()
+          : "",
+    };
+
+    // Only add legacy object when it actually contains data
+    if (
+      legacyAdvance.label ||
+      legacyAdvance.amount > 0 ||
+      legacyAdvance.comments
+    ) {
+      advanceAmount.push(legacyAdvance);
+    }
+  }
+
+  // ============================================================
+  // NORMALIZE DEDUCTED AMOUNT
+  // ============================================================
+
+  const deductedAmount = {
+    label:
+      typeof details?.deductedAmount?.label === "string"
+        ? details.deductedAmount.label.trim()
+        : "",
+
+    amount: Math.max(Number(details?.deductedAmount?.amount) || 0, 0),
+
+    comments:
+      typeof details?.deductedAmount?.comments === "string"
+        ? details.deductedAmount.comments.trim()
+        : "",
+  };
+
+  return {
+    advanceAmount,
+    deductedAmount,
+  };
+};
 const upsertEmployeeSalary = asyncHandler(async (req, res) => {
   const { employeeId } = req.params;
+
   const {
     month,
     year,
     paidLeaveDays,
     monthlySalary,
-    adjustedAmount,
     adjustmentDetails,
-    paidAmount,
     paidAmountDetails,
-    previousDue,
+
     comments,
   } = req.body;
 
-  // ========================================================
+  // ============================================================
   // VALIDATION
-  // ========================================================
+  // ============================================================
 
-  if (!employeeId) {
+  if (!employeeId || typeof employeeId !== "string") {
     throw new ApiError(400, "Employee ID is required.");
   }
 
@@ -984,21 +1142,21 @@ const upsertEmployeeSalary = asyncHandler(async (req, res) => {
     throw new ApiError(400, "Valid year is required.");
   }
 
-  // ========================================================
+  // ============================================================
   // FIND EMPLOYEE
-  // ========================================================
+  // ============================================================
 
   const employee = await Employee.findOne({
     employeeId: employeeId.trim(),
-  });
+  }).lean();
 
   if (!employee) {
     throw new ApiError(404, "Employee not found.");
   }
 
-  // ========================================================
+  // ============================================================
   // GET MONTH ATTENDANCE
-  // ========================================================
+  // ============================================================
 
   const attendance = await getEmployeeMonthlyAttendance(
     employee._id,
@@ -1006,9 +1164,9 @@ const upsertEmployeeSalary = asyncHandler(async (req, res) => {
     salaryYear,
   );
 
-  // ========================================================
+  // ============================================================
   // FIND EXISTING SALARY
-  // ========================================================
+  // ============================================================
 
   let salary = await Salary.findOne({
     employee: employee._id,
@@ -1016,173 +1174,458 @@ const upsertEmployeeSalary = asyncHandler(async (req, res) => {
     year: salaryYear,
   });
 
-  // ========================================================
-  // CREATE NEW SALARY IF NOT EXISTS
-  // ========================================================
+  // ============================================================
+  // CREATE SALARY IF NOT EXISTS
+  // ============================================================
 
   if (!salary) {
     salary = new Salary({
       employee: employee._id,
+
       employeeId: employee.employeeId,
+
       employeeName: employee.employeeName,
+
       month: salaryMonth,
+
       year: salaryYear,
+
       paidLeaveDays: 0,
+
       monthlySalary: 0,
+
       perDaySalary: 0,
+
+      payableDays: 30,
+
+      absenceDeduction: 0,
+
       adjustedAmount: 0,
-      adjustmentDetails: "",
+
+      adjustmentDetails: {
+        specialPerks: [],
+        deductions: [],
+      },
+
       payableSalary: 0,
+
       paidAmount: 0,
-      paidAmountDetails: "",
+
+      paidAmountDetails: {
+        advanceAmount: [],
+
+        deductedAmount: {
+          label: "",
+          amount: 0,
+          comments: "",
+        },
+      },
+
       previousDue: 0,
+
       currentDue: 0,
+
       comments: "",
+
       createdBy: req.user?._id || null,
     });
   }
 
-  // ========================================================
-  // UPDATE ONLY PROVIDED VALUES
-  // ========================================================
+  // ============================================================
+  // IMPORTANT:
+  // NORMALIZE LEGACY / CORRUPTED DATA
+  // ============================================================
 
-  // Paid Leave Days (Optional)
+  const safeAdjustmentDetails = normalizeAdjustmentDetails(
+    salary.adjustmentDetails,
+  );
+
+  const safePaidAmountDetails = normalizePaidAmountDetails(
+    salary.paidAmountDetails,
+  );
+
+  // ============================================================
+  // PAID LEAVE DAYS
+  // ============================================================
+
   if (paidLeaveDays !== undefined) {
     const value = Number(paidLeaveDays);
-    if (value < 0) {
-      throw new ApiError(400, "Paid leave days cannot be negative.");
+
+    if (!Number.isFinite(value) || value < 0) {
+      throw new ApiError(
+        400,
+        "Paid leave days must be a valid non-negative number.",
+      );
     }
+
     salary.paidLeaveDays = value;
   }
 
-  // Monthly Salary
+  // ============================================================
+  // MONTHLY SALARY
+  // ============================================================
+
   if (monthlySalary !== undefined) {
     const value = Number(monthlySalary);
-    if (value < 0) {
-      throw new ApiError(400, "Monthly salary cannot be negative.");
+
+    if (!Number.isFinite(value) || value < 0) {
+      throw new ApiError(
+        400,
+        "Monthly salary must be a valid non-negative number.",
+      );
     }
+
     salary.monthlySalary = value;
   }
 
-  // Adjustment
-  if (adjustedAmount !== undefined) {
-    salary.adjustedAmount = Number(adjustedAmount) || 0;
-  }
+  // ============================================================
+  // ADJUSTMENT DETAILS
+  // ============================================================
 
   if (adjustmentDetails !== undefined) {
-    salary.adjustmentDetails = adjustmentDetails?.trim() || "";
+    if (
+      !adjustmentDetails ||
+      typeof adjustmentDetails !== "object" ||
+      Array.isArray(adjustmentDetails)
+    ) {
+      throw new ApiError(400, "Invalid adjustment details.");
+    }
+
+    const specialPerks = Array.isArray(adjustmentDetails.specialPerks)
+      ? adjustmentDetails.specialPerks
+          .map((item) => ({
+            label: typeof item?.label === "string" ? item.label.trim() : "",
+
+            amount: Math.max(Number(item?.amount) || 0, 0),
+
+            comments:
+              typeof item?.comments === "string" ? item.comments.trim() : "",
+          }))
+          .filter((item) => item.label || item.amount > 0 || item.comments)
+      : safeAdjustmentDetails.specialPerks;
+
+    const deductions = Array.isArray(adjustmentDetails.deductions)
+      ? adjustmentDetails.deductions
+          .map((item) => ({
+            label: typeof item?.label === "string" ? item.label.trim() : "",
+
+            amount: Math.max(Number(item?.amount) || 0, 0),
+
+            comments:
+              typeof item?.comments === "string" ? item.comments.trim() : "",
+          }))
+          .filter((item) => item.label || item.amount > 0 || item.comments)
+      : safeAdjustmentDetails.deductions;
+
+    // IMPORTANT:
+    // Replace the entire object.
+    // Do NOT do:
+    // salary.adjustmentDetails.specialPerks = ...
+
+    salary.adjustmentDetails = {
+      specialPerks,
+      deductions,
+    };
+  } else {
+    // Repair legacy corrupted data even when frontend
+    // doesn't send adjustmentDetails.
+    salary.adjustmentDetails = {
+      specialPerks: safeAdjustmentDetails.specialPerks,
+      deductions: safeAdjustmentDetails.deductions,
+    };
   }
 
-  // Paid Amount
-  if (paidAmount !== undefined) {
-    const value = Number(paidAmount);
-    if (value < 0) {
-      throw new ApiError(400, "Paid amount cannot be negative.");
-    }
-    salary.paidAmount = value;
-  }
+  // ============================================================
+  // CALCULATE ADJUSTMENT
+  // ============================================================
+
+  const specialPerksTotal = salary.adjustmentDetails.specialPerks.reduce(
+    (total, item) => total + (Number(item?.amount) || 0),
+    0,
+  );
+
+  const deductionsTotal = salary.adjustmentDetails.deductions.reduce(
+    (total, item) => total + (Number(item?.amount) || 0),
+    0,
+  );
+
+  salary.adjustedAmount = roundAmount(specialPerksTotal - deductionsTotal);
+
+  // ============================================================
+  // PAID AMOUNT DETAILS
+  // ============================================================
 
   if (paidAmountDetails !== undefined) {
-    salary.paidAmountDetails = paidAmountDetails?.trim() || "";
+    if (
+      !paidAmountDetails ||
+      typeof paidAmountDetails !== "object" ||
+      Array.isArray(paidAmountDetails)
+    ) {
+      throw new ApiError(400, "Invalid paid amount details.");
+    }
+
+    // ==========================================================
+    // ADVANCE AMOUNT - MULTIPLE PAYMENTS
+    // ==========================================================
+
+    let advanceAmount = [];
+
+    if (Array.isArray(paidAmountDetails.advanceAmount)) {
+      advanceAmount = paidAmountDetails.advanceAmount
+        .map((item) => ({
+          label: typeof item?.label === "string" ? item.label.trim() : "",
+
+          amount: Math.max(Number(item?.amount) || 0, 0),
+
+          comments:
+            typeof item?.comments === "string" ? item.comments.trim() : "",
+        }))
+        .filter((item) => item.label || item.amount > 0 || item.comments);
+    } else if (
+      paidAmountDetails.advanceAmount &&
+      typeof paidAmountDetails.advanceAmount === "object"
+    ) {
+      // ========================================================
+      // LEGACY SINGLE ADVANCE SUPPORT
+      // ========================================================
+
+      const legacyAdvance = {
+        label:
+          typeof paidAmountDetails.advanceAmount.label === "string"
+            ? paidAmountDetails.advanceAmount.label.trim()
+            : "",
+
+        amount: Math.max(
+          Number(paidAmountDetails.advanceAmount.amount) || 0,
+          0,
+        ),
+
+        comments:
+          typeof paidAmountDetails.advanceAmount.comments === "string"
+            ? paidAmountDetails.advanceAmount.comments.trim()
+            : "",
+      };
+
+      if (
+        legacyAdvance.label ||
+        legacyAdvance.amount > 0 ||
+        legacyAdvance.comments
+      ) {
+        advanceAmount.push(legacyAdvance);
+      }
+    }
+
+    // ==========================================================
+    // DEDUCTED AMOUNT
+    // ==========================================================
+
+    const deductedAmount = {
+      label:
+        typeof paidAmountDetails?.deductedAmount?.label === "string"
+          ? paidAmountDetails.deductedAmount.label.trim()
+          : "",
+
+      amount: Math.max(
+        Number(paidAmountDetails?.deductedAmount?.amount) || 0,
+        0,
+      ),
+
+      comments:
+        typeof paidAmountDetails?.deductedAmount?.comments === "string"
+          ? paidAmountDetails.deductedAmount.comments.trim()
+          : "",
+    };
+
+    // ==========================================================
+    // REPLACE ENTIRE PAYMENT DETAILS OBJECT
+    // ==========================================================
+
+    salary.paidAmountDetails = {
+      advanceAmount,
+      deductedAmount,
+    };
+  } else {
+    // ============================================================
+    // REPAIR LEGACY / CORRUPTED PAYMENT DETAILS
+    // ============================================================
+
+    salary.paidAmountDetails = safePaidAmountDetails;
   }
 
-  // Previous Due
-  if (previousDue !== undefined) {
-    salary.previousDue = Number(previousDue) || 0;
+  // ============================================================
+  // CALCULATE PAID AMOUNT
+  // ============================================================
+
+  const totalAdvanceAmount = (
+    salary.paidAmountDetails?.advanceAmount || []
+  ).reduce((total, item) => total + (Number(item?.amount) || 0), 0);
+
+  const deductedAmount =
+    Number(salary.paidAmountDetails?.deductedAmount?.amount) || 0;
+
+  // ============================================================
+  // VALIDATION
+  // ============================================================
+
+  if (deductedAmount > totalAdvanceAmount) {
+    throw new ApiError(
+      400,
+      "Deducted amount cannot be greater than total advance amount.",
+    );
   }
 
-  // Comments
+  // ============================================================
+  // FINAL PAID AMOUNT
+  // ============================================================
+
+  salary.paidAmount = roundAmount(totalAdvanceAmount - deductedAmount);
+  // ============================================================
+  // PREVIOUS DUE
+  // ============================================================
+  // ============================================================
+  // PREVIOUS DUE - AUTOMATICALLY CARRY FORWARD
+  // ============================================================
+
+  const previousMonthDue = await getPreviousMonthDue(
+    employee._id,
+    salaryMonth,
+    salaryYear,
+  );
+
+  salary.previousDue = previousMonthDue;
+
+  // ============================================================
+  // COMMENTS
+  // ============================================================
+
   if (comments !== undefined) {
-    salary.comments = comments?.trim() || "";
+    salary.comments = typeof comments === "string" ? comments.trim() : "";
   }
 
-  // ========================================================
-  // SNAPSHOT EMPLOYEE DATA
-  // ========================================================
+  // ============================================================
+  // EMPLOYEE SNAPSHOT
+  // ============================================================
 
   salary.employeeId = employee.employeeId;
+
   salary.employeeName = employee.employeeName;
 
-  // ========================================================
-  // RECALCULATE EVERYTHING
-  // ========================================================
+  // ============================================================
+  // RECALCULATE SALARY
+  // ============================================================
 
   const calculated = calculateSalaryData({
     attendance,
-    paidLeaveDays: salary.paidLeaveDays,
-    monthlySalary: salary.monthlySalary,
-    adjustedAmount: salary.adjustedAmount,
-    paidAmount: salary.paidAmount,
-    previousDue: salary.previousDue,
+    paidLeaveDays: salary.paidLeaveDays || 0,
+    monthlySalary: salary.monthlySalary || 0,
+    adjustedAmount: salary.adjustedAmount || 0,
+    paidAmount: salary.paidAmount || 0,
+
+    // IMPORTANT:
+    // Previous month's currentDue becomes
+    // current month's previousDue
+    previousDue: previousMonthDue,
+
     month: salaryMonth,
     year: salaryYear,
   });
 
-  // ========================================================
-  // SAVE CALCULATED VALUES
-  // ========================================================
+  // ============================================================
+  // SAVE ATTENDANCE CALCULATIONS
+  // ============================================================
 
-  // Attendance
   salary.totalPresentDays = calculated.totalPresentDays;
+
   salary.eligibleAttendanceDays = calculated.eligibleAttendanceDays;
+
   salary.applicableAbsentDays = calculated.applicableAbsentDays;
+
   salary.weeklyOffEligibility = calculated.weeklyOffEligibility;
 
-  // Salary
+  // ============================================================
+  // SAVE SALARY CALCULATIONS
+  // ============================================================
+
   salary.monthlySalary = calculated.monthlySalary;
+
   salary.perDaySalary = calculated.perDaySalary;
+
   salary.payableDays = calculated.payableDays;
 
-  // Deductions
   salary.absenceDeduction = calculated.absenceDeduction;
+
   salary.paidLeaveDays = calculated.paidLeaveDays;
 
-  // Adjustment
   salary.adjustedAmount = calculated.adjustedAmount;
 
-  // Payable
   salary.payableSalary = calculated.payableSalary;
 
-  // Payment
   salary.paidAmount = calculated.paidAmount;
+
   salary.previousDue = calculated.previousDue;
+
   salary.currentDue = calculated.currentDue;
 
-  // ========================================================
+  // ============================================================
   // AUDIT
-  // ========================================================
+  // ============================================================
 
   salary.updatedBy = req.user?._id || null;
 
-  // ========================================================
+  // ============================================================
   // SAVE
-  // ========================================================
+  // ============================================================
 
   await salary.save();
 
-  // ========================================================
+  // ============================================================
   // RESPONSE
-  // ========================================================
+  // ============================================================
+
+  const salaryData = salary.toObject();
 
   return res.status(200).json({
     success: true,
+
     message: "Salary saved successfully.",
+
     data: {
-      ...salary.toObject(),
+      ...salaryData,
+
       attendance,
+
       attendanceByDay: createAttendanceByDay(attendance),
+
       totalDays: calculated.totalDaysInMonth,
+
       totalPresentDays: calculated.totalPresentDays,
+
       eligibleAttendanceDays: calculated.eligibleAttendanceDays,
+
       applicableAbsentDays: calculated.applicableAbsentDays,
+
       weeklyOffEligibility: calculated.weeklyOffEligibility,
+
       absenceDeduction: calculated.absenceDeduction,
+
       payableDays: calculated.payableDays,
+
       paidLeaveDays: calculated.paidLeaveDays,
+
       monthlySalary: calculated.monthlySalary,
+
       perDaySalary: calculated.perDaySalary,
+
       payableSalary: calculated.payableSalary,
+
+      adjustedAmount: calculated.adjustedAmount,
+
+      paidAmount: calculated.paidAmount,
+
+      previousDue: calculated.previousDue,
+
       currentDue: calculated.currentDue,
+
       salaryExists: true,
     },
   });

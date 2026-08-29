@@ -256,6 +256,24 @@ exports.createClientRentHistory = async (client) => {
     const adjAmt = 0;
     const processingFees = 0;
 
+    // ==========================================
+    // Create time received amount
+    // ==========================================
+    const totalReceived = Number(client.totalReceived || 0);
+
+    // ==========================================
+    // Total Received History
+    // ==========================================
+    const totalReceivedHistory =
+      totalReceived !== 0
+        ? [
+          {
+            amount: totalReceived,
+            date: new Date(),
+          },
+        ]
+        : [];
+
     // Final Calculation
     const totalReceivable =
       previousDue +
@@ -266,8 +284,6 @@ exports.createClientRentHistory = async (client) => {
       adjAmt -
       adjEB;
 
-    const totalReceived = 0;
-
     const currentDue =
       totalReceivable - totalReceived;
 
@@ -277,55 +293,57 @@ exports.createClientRentHistory = async (client) => {
         : "Pending";
 
     // Create History
-    const history =
-      await ClientRentHistory.create({
-        clientId: client._id,
+    const history = await ClientRentHistory.create({
+      clientId: client._id,
 
-        bookingId: client.bookingId || null,
+      bookingId: client.bookingId || null,
 
-        propertyId: client.propertyId,
+      propertyId: client.propertyId,
 
-        bedId: client.bedId,
+      bedId: client.bedId,
 
-        stayType: client.stayType,
+      stayType: client.stayType,
 
-        month,
+      month,
 
-        year,
+      year,
 
-        monthName: new Date().toLocaleString(
-          "default",
-          {
-            month: "long",
-          }
-        ),
+      monthName: new Date().toLocaleString(
+        "default",
+        {
+          month: "long",
+        }
+      ),
 
-        rentAmt,
+      rentAmt,
 
-        ebAmt,
+      ebAmt,
 
-        flatEB,
+      flatEB,
 
-        adjEB,
+      adjEB,
 
-        adjAmt,
+      adjAmt,
 
-        processingFees,
+      processingFees,
 
-        previousDue,
+      previousDue,
 
-        totalReceivable,
+      totalReceivable,
 
-        totalReceived,
+      totalReceived,
 
-        currentDue,
+      currentDue,
 
-        paymentStatus,
+      paymentStatus,
 
-        paymentComments: "",
+      // ==========================================
+      // ✅ Create time received payment history
+      // ==========================================
+      totalReceivedHistory,
 
-        remarks: "",
-      });
+      remarks: "",
+    });
 
     return history;
   } catch (err) {
@@ -356,7 +374,7 @@ exports.updateClientRentHistory = async (req, res) => {
       depositAmount = 0,
       totalReceived = 0,
       monthlyRent = 0,
-      paymentComments = "",
+      paymentComments,
       remarks = "",
     } = req.body;
 
@@ -370,7 +388,7 @@ exports.updateClientRentHistory = async (req, res) => {
 
     // Latest Client Data
     const client = await Client.findById(history.clientId)
-      .select("clientDoj noticeLastDate")
+      .select("clientDoj noticeLastDate bookingType")
       .lean();
 
     if (!client) {
@@ -380,23 +398,26 @@ exports.updateClientRentHistory = async (req, res) => {
       });
     }
 
-   
-  const daysCount = history.daysCount;
+
+    const daysCount = history.daysCount;
 
     const receivedAmount = Number(totalReceived || 0);
+
     const cumulativeReceived =
       (history.totalReceived || 0) + receivedAmount;
-    // Recalculate Complete Rent
+      
+const cumulativeAdjAmt =
+  Number(history.adjAmt || 0) + Number(adjAmt || 0);
 
 
-const actualLastDay = new Date(
-  history.year,
-  history.month,
-  0
-).getDate();
+    const actualLastDay = new Date(
+      history.year,
+      history.month,
+      0
+    ).getDate();
 
-const rentDivider =
-  actualLastDay === 31 ? 30 : actualLastDay;
+    const rentDivider =
+      actualLastDay === 31 ? 30 : actualLastDay;
 
 
     const calculation = calculateRentHistory({
@@ -417,7 +438,7 @@ const rentDivider =
 
       adjEB: Number(adjEB),
 
-      adjAmt: Number(adjAmt),
+      adjAmt: cumulativeAdjAmt,
 
       processingFees: history.processingFees,
 
@@ -426,7 +447,8 @@ const rentDivider =
       depositAmount: Number(depositAmount),
 
       rentReceived: cumulativeReceived,
-       rentDivider,
+      rentDivider,
+      bookingType: client.bookingType,
     });
     Object.assign(history, calculation);
     if (!isNaN(receivedAmount) && receivedAmount !== 0) {
@@ -435,90 +457,106 @@ const rentDivider =
         date: new Date(),
       });
     }
+    if (!isNaN(adjAmt) && adjAmt !== 0) {
+      history.adjustedAmountHistory.push({
+        amount: adjAmt,
+        date: new Date(),
+      });
+    }
     history.daysCount = daysCount;
     // Snapshot bhi update kar do
     history.clientDoj = client.clientDoj;
     history.noticeLastDate = client.noticeLastDate;
 
-    history.paymentComments = paymentComments;
     history.remarks = remarks;
+    // Payment Comment append
+    if (!Array.isArray(history.paymentComments)) {
+      history.paymentComments = [];
+    }
 
+    if (paymentComments?.trim()) {
+      history.paymentComments.push({
+        comment: paymentComments.trim(),
+        date: new Date(),
+      });
+    }
     await history.save();
-await history.save();
+    // await history.save();
 
-const futureHistories = await ClientRentHistory.find({
-  clientId: history.clientId,
-  $or: [
-    { year: { $gt: history.year } },
-    {
-      year: history.year,
-      month: { $gt: history.month },
-    },
-  ],
-}).sort({
-  year: 1,
-  month: 1,
-  createdAt: 1,
-});
+    const futureHistories = await ClientRentHistory.find({
+      clientId: history.clientId,
+      $or: [
+        { year: { $gt: history.year } },
+        {
+          year: history.year,
+          month: { $gt: history.month },
+        },
+      ],
+    }).sort({
+      year: 1,
+      month: 1,
+      createdAt: 1,
+    });
 
-let previousDue = Number(history.currentDue || 0);
+    let previousDue = Number(history.currentDue || 0);
 
-for (const futureHistory of futureHistories) {
-  const actualLastDay = new Date(
-    futureHistory.year,
-    futureHistory.month,
-    0
-  ).getDate();
+    for (const futureHistory of futureHistories) {
+      const actualLastDay = new Date(
+        futureHistory.year,
+        futureHistory.month,
+        0
+      ).getDate();
 
-  const rentDivider =
-    actualLastDay === 31 ? 30 : actualLastDay;
+      const rentDivider =
+        actualLastDay === 31 ? 30 : actualLastDay;
 
-  const futureCalculation = calculateRentHistory({
-    monthlyRent: Number(futureHistory.monthlyRent || 0),
-    depositAmount: Number(futureHistory.depositAmount || 0),
+      const futureCalculation = calculateRentHistory({
+        monthlyRent: Number(futureHistory.monthlyRent || 0),
+        depositAmount: Number(futureHistory.depositAmount || 0),
 
-    daysCount: Number(futureHistory.daysCount || 0),
+        daysCount: Number(futureHistory.daysCount || 0),
 
-    previousDue,
+        previousDue,
 
-    ebAmt: Number(futureHistory.ebAmt || 0),
-    flatEB: Number(futureHistory.flatEB || 0),
-    adjEB: Number(futureHistory.adjEB || 0),
-    adjAmt: Number(futureHistory.adjAmt || 0),
+        ebAmt: Number(futureHistory.ebAmt || 0),
+        flatEB: Number(futureHistory.flatEB || 0),
+        adjEB: Number(futureHistory.adjEB || 0),
+        adjAmt: Number(futureHistory.adjAmt || 0),
 
-    processingFees: Number(
-      futureHistory.processingFees || 0
-    ),
+        processingFees: Number(
+          futureHistory.processingFees || 0
+        ),
 
-    parkingCharges: Number(
-      futureHistory.parkingCharges || 0
-    ),
+        parkingCharges: Number(
+          futureHistory.parkingCharges || 0
+        ),
 
-    processingFeesReceived: Number(
-      futureHistory.processingFeesReceived || 0
-    ),
+        processingFeesReceived: Number(
+          futureHistory.processingFeesReceived || 0
+        ),
 
-    depositAmountReceived: Number(
-      futureHistory.depositAmountReceived || 0
-    ),
+        depositAmountReceived: Number(
+          futureHistory.depositAmountReceived || 0
+        ),
 
-    rentReceived: Number(
-      futureHistory.totalReceived || 0
-    ),
+        rentReceived: Number(
+          futureHistory.totalReceived || 0
+        ),
 
-    rentDivider,
-  });
+        rentDivider,
+        bookingType: client.bookingType,
+      });
 
-  Object.assign(futureHistory, futureCalculation);
+      Object.assign(futureHistory, futureCalculation);
 
-  futureHistory.previousDue = previousDue;
+      futureHistory.previousDue = previousDue;
 
-  await futureHistory.save();
+      await futureHistory.save();
 
-  previousDue = Number(
-    futureHistory.currentDue || 0
-  );
-}
+      previousDue = Number(
+        futureHistory.currentDue || 0
+      );
+    }
     return res.status(200).json({
       success: true,
       message: "Rent history updated successfully",

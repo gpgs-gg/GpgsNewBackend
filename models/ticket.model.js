@@ -15,7 +15,8 @@ const TicketSchema = new mongoose.Schema(
     title: String,
     description: String,
     targetDate: String,
-    
+    bedNo: String,
+    roomNo: String,
     // attachment: [String],
     attachment: [
   {
@@ -90,7 +91,7 @@ const TicketSchema = new mongoose.Schema(
 
 // Explicit indexes
 // TicketSchema.index({ ticketId: 1 }, { unique: true });
-TicketSchema.index({ createdAt: -1 });
+TicketSchema.index({ createdAt: -1, _id: -1 });
 TicketSchema.index({ propertyCode: 1 }); 
 TicketSchema.index({ status: 1 });
 TicketSchema.index({ priority: 1 });
