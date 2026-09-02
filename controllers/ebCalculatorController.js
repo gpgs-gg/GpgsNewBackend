@@ -1,27 +1,261 @@
 const Client = require("../models/client.model");
 const Property = require("../models/property.model");
+const ClientVacationHistory = require("../models/clientVacationHistory.model");
 
-exports.getPropertyEbCalculationData = async (req, res) => {
+// exports.getPropertyEbClients = async (req, res) => {
+//   try {
+//     const { propertyId } = req.params;
+
+//     // ==========================================
+//     // PROPERTY
+//     // ==========================================
+//     const property = await Property.findById(propertyId)
+//       .select("propertyCode propertyLocation utility")
+//       .lean();
+
+//     if (!property) {
+//       return res.status(404).json({
+//         success: false,
+//         message: "Property not found",
+//       });
+//     }
+// // ==========================================
+// // EB CYCLE DATE CALCULATION
+// // ==========================================
+
+// const ebStartCycle = property.utility?.ebStartCycle;
+// const ebEndCycle = property.utility?.ebEndCycle;  
+
+// if (!ebStartCycle || !ebEndCycle) {
+//   return res.status(400).json({
+//     success: false,
+//     message: "EB start cycle and EB end cycle are not configured",
+//   });
+// }
+
+// const today = new Date();
+
+// const currentYear = today.getFullYear();
+// const currentMonth = today.getMonth();
+// const currentDay = today.getDate();
+
+// const formatDate = (date) => {
+//   const year = date.getFullYear();
+//   const month = String(date.getMonth() + 1).padStart(2, "0");
+//   const day = String(date.getDate()).padStart(2, "0");
+
+//   return `${year}-${month}-${day}`;
+// };
+
+// let cycleStart;
+// let cycleEnd;
+
+// if (currentDay >= ebStartCycle) {
+//   cycleStart = new Date(
+//     currentYear,
+//     currentMonth,
+//     ebStartCycle
+//   );
+
+//   cycleEnd = new Date(
+//     currentYear,
+//     currentMonth + 1,
+//     ebEndCycle
+//   );
+// } else {
+//   cycleStart = new Date(
+//     currentYear,
+//     currentMonth - 1,
+//     ebStartCycle
+//   );
+
+//   cycleEnd = new Date(
+//     currentYear,
+//     currentMonth,
+//     ebEndCycle
+//   );
+// }
+
+// const cycleStartDate = formatDate(cycleStart);
+// const cycleEndDate = formatDate(cycleEnd);
+
+// console.log("EB CYCLE:", {
+//   cycleStartDate,
+//   cycleEndDate,
+// });
+
+// // ==========================================
+// // ACTIVE CLIENTS FOR EB CYCLE
+// // ==========================================
+
+// const clients = await Client.find({
+//   propertyId,
+
+//   isBookingCancelled: false,
+
+//   // Client joined before EB cycle ended
+//   clientDoj: {
+//     $lte: cycleEndDate,
+//   },
+
+//   // Client stayed at least some part
+//   // of the EB cycle
+//   $or: [
+//     {
+//       clientVacatingDate: {
+//         $gte: cycleStartDate,
+//       },
+//     },
+//     {
+//       clientVacatingDate: null,
+//     },
+//     {
+//       clientVacatingDate: "",
+//     },
+//     {
+//       clientVacatingDate: {
+//         $exists: false,
+//       },
+//     },
+//   ],
+// })
+//   .select(
+//     "fullName clientDoj clientVacatingDate ebDoj propertyId bedId stayType"
+//   )
+//   .populate(
+//     "bedId",
+//     "roomNo bedNo monthlyRent depositAmount freeEbAsPerBed acRoom"
+//   )
+//   .lean();    // ==========================================
+//     // CLIENT IDS
+//     // ==========================================
+//     const clientIds = clients.map(
+//       (client) => client._id
+//     );
+
+//     // ==========================================
+//     // VACATION HISTORY
+//     // ==========================================
+//     let vacations = [];
+
+//     if (clientIds.length > 0) {
+//       vacations = await ClientVacationHistory.find({
+//         clientId: {
+//           $in: clientIds,
+//         },
+//       })
+//         .select(
+//           "clientId month year vacationStartDate1 vacationLastDate1 vacationStartDate2 vacationLastDate2"
+//         )
+//         .lean();
+//     }
+
+//     // ==========================================
+//     // VACATION MAP
+//     // ==========================================
+//     const vacationMap = new Map();
+
+//     vacations.forEach((vacation) => {
+//       const clientId = vacation.clientId.toString();
+
+//       if (!vacationMap.has(clientId)) {
+//         vacationMap.set(clientId, []);
+//       }
+
+//       vacationMap.get(clientId).push({
+//         _id: vacation._id,
+
+//         month: vacation.month,
+
+//         year: vacation.year,
+
+//         vacationStartDate1:
+//           vacation.vacationStartDate1 || null,
+
+//         vacationLastDate1:
+//           vacation.vacationLastDate1 || null,
+
+//         vacationStartDate2:
+//           vacation.vacationStartDate2 || null,
+
+//         vacationLastDate2:
+//           vacation.vacationLastDate2 || null,
+//       });
+//     });
+
+//     // ==========================================
+//     // FINAL CLIENT DATA
+//     // ==========================================
+//     const responseClients = clients.map((client) => ({
+//       ...client,
+
+//       vacations:
+//         vacationMap.get(
+//           client._id.toString()
+//         ) || [],
+//     }));
+
+//     // ==========================================
+//     // RESPONSE
+//     // ==========================================
+//     return res.status(200).json({
+//       success: true,
+
+//       data: {
+//         property: {
+//           _id: property._id,
+
+//           propertyCode:
+//             property.propertyCode,
+
+//           propertyLocation:
+//             property.propertyLocation,
+
+//           utility: {
+//             ebStartCycle:
+//               property.utility?.ebStartCycle || null,
+
+//             ebEndCycle:
+//               property.utility?.ebEndCycle || null,
+//           },
+
+//           // Useful for frontend / calculation
+//           currentEbCycle: {
+//             startDate: cycleStartDate,
+//             endDate: cycleEndDate,
+//           },
+//         },
+
+//         clients: responseClients,
+//       },
+//     });
+//   } catch (error) {
+//     console.error(
+//       "Get Property EB Clients Error:",
+//       error
+//     );
+
+//     return res.status(500).json({
+//       success: false,
+//       message: error.message,
+//     });
+//   }
+// };
+
+
+exports.getPropertyEbClients = async (req, res) => {
   try {
-    const { propertyCode, billStartDate, billEndDate } = req.query;
+    const { propertyId } = req.params;
 
-    if (!propertyCode) {
-      return res.status(400).json({
-        success: false,
-        message: "Property code is required",
-      });
-    }
-
-    // =====================================================
+    // Frontend se optional dates
+    const { startDate, endDate } = req.query;
+   console.log("startDate, endDate" , startDate, endDate)
+    // ==========================================
     // PROPERTY
-    // =====================================================
+    // ==========================================
 
-    const property = await Property.findOne({
-      propertyCode: propertyCode.trim(),
-    })
-      .select(
-        "_id propertyCode propertyName propertyLocation utility bedCount"
-      )
+    const property = await Property.findById(propertyId)
+      .select("propertyCode propertyLocation utility")
       .lean();
 
     if (!property) {
@@ -31,229 +265,266 @@ exports.getPropertyEbCalculationData = async (req, res) => {
       });
     }
 
-    // =====================================================
-    // BILL DATE
-    // =====================================================
+    // ==========================================
+    // EB CYCLE DATE
+    // ==========================================
 
-    if (!billStartDate || !billEndDate) {
-      return res.status(400).json({
-        success: false,
-        message: "Bill start date and bill end date are required",
+    let cycleStartDate;
+    let cycleEndDate;
+
+    // ==========================================
+    // CASE 1:
+    // FRONTEND SE DATE AAYI HAI
+    // ==========================================
+
+    if (startDate && endDate) {
+      cycleStartDate = startDate;
+      cycleEndDate = endDate;
+
+      console.log("EB CYCLE FROM FRONTEND:", {
+        cycleStartDate,
+        cycleEndDate,
       });
     }
 
-    const startDate = new Date(`${billStartDate}T00:00:00`);
-    const endDate = new Date(`${billEndDate}T00:00:00`);
+    // ==========================================
+    // CASE 2:
+    // FRONTEND SE DATE NAHI AAYI
+    // OLD / EXISTING LOGIC
+    // ==========================================
 
-    if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid bill dates",
-      });
-    }
+    else {
+      const ebStartCycle = property.utility?.ebStartCycle;
+      const ebEndCycle = property.utility?.ebEndCycle;
 
-    if (startDate > endDate) {
-      return res.status(400).json({
-        success: false,
-        message: "Bill start date cannot be greater than bill end date",
-      });
-    }
-
-    // Inclusive total days
-    const totalDays =
-      Math.floor(
-        (endDate.getTime() - startDate.getTime()) /
-          (1000 * 60 * 60 * 24)
-      ) + 1;
-
-    // =====================================================
-    // CLIENTS
-    // =====================================================
-
-    const clients = await Client.find({
-      propertyId: property._id,
-      isBookingCancelled: false,
-
-      // Vacated clients can be excluded if their vacating
-      // date is before the billing cycle.
-    })
-      .populate(
-        "bedId",
-        "bedCode roomNo bedNo monthlyRent depositAmount freeEbAsPerBed"
-      )
-      .lean();
-
-    // =====================================================
-    // CLIENT CALCULATION
-    // =====================================================
-
-    const responseClients = clients.map((client) => {
-      const dailyData = [];
-
-      let eligibleDays = 0;
-      let vacationDays = 0;
-
-      const clientDoj = client.clientDoj
-        ? new Date(`${client.clientDoj}T00:00:00`)
-        : null;
-
-      const clientVacatingDate = client.clientVacatingDate
-        ? new Date(`${client.clientVacatingDate}T00:00:00`)
-        : null;
-
-      const freeEbPerDay = Number(
-        client.bedId?.freeEbAsPerBed || 0
-      );
-
-      // -----------------------------------------------------
-      // Vacation helper
-      // -----------------------------------------------------
-
-      const vacations = client.vacations || [];
-
-      const isVacationDate = (dateString) => {
-        return vacations.some((vacation) => {
-          const ranges = [
-            [
-              vacation.vacationStartDate1,
-              vacation.vacationLastDate1,
-            ],
-            [
-              vacation.vacationStartDate2,
-              vacation.vacationLastDate2,
-            ],
-          ];
-
-          return ranges.some(([from, to]) => {
-            if (!from || !to) return false;
-
-            return (
-              dateString >= from &&
-              dateString <= to
-            );
-          });
-        });
-      };
-
-      // -----------------------------------------------------
-      // Calculate each day
-      // -----------------------------------------------------
-
-      for (
-        let date = new Date(startDate);
-        date <= endDate;
-        date.setDate(date.getDate() + 1)
-      ) {
-        const year = date.getFullYear();
-        const month = String(date.getMonth() + 1).padStart(2, "0");
-        const day = String(date.getDate()).padStart(2, "0");
-
-        const dateString = `${year}-${month}-${day}`;
-
-        let present = true;
-
-        // Client DOJ
-        if (clientDoj && date < clientDoj) {
-          present = false;
-        }
-
-        // Client vacating date
-        if (clientVacatingDate && date > clientVacatingDate) {
-          present = false;
-        }
-
-        // Vacation
-        const onVacation = isVacationDate(dateString);
-
-        if (onVacation) {
-          present = false;
-          vacationDays++;
-        }
-
-        const freeEb = present ? freeEbPerDay : 0;
-
-        if (present) {
-          eligibleDays++;
-        }
-
-        dailyData.push({
-          date: dateString,
-          present: present ? 1 : 0,
-          freeEb,
-          vacation: onVacation,
+      if (!ebStartCycle || !ebEndCycle) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "EB start cycle and EB end cycle are not configured",
         });
       }
 
-      const totalFreeEb = eligibleDays * freeEbPerDay;
+      const today = new Date();
 
-      return {
-        clientId: client._id,
+      const currentYear = today.getFullYear();
+      const currentMonth = today.getMonth();
+      const currentDay = today.getDate();
 
-        fullName: client.fullName,
+      const formatDate = (date) => {
+        const year = date.getFullYear();
 
-        propertyId: property._id,
-        propertyCode: property.propertyCode,
+        const month = String(
+          date.getMonth() + 1
+        ).padStart(2, "0");
 
-        bedId: client.bedId?._id,
-        bedCode: client.bedId?.bedCode,
-        roomNo: client.bedId?.roomNo,
-        bedNo: client.bedId?.bedNo,
+        const day = String(
+          date.getDate()
+        ).padStart(2, "0");
 
-        clientDoj: client.clientDoj || "",
-        clientVacatingDate:
-          client.clientVacatingDate || "",
-
-        freeEbPerDay,
-
-        totalDays,
-
-        eligibleDays,
-
-        vacationDays,
-
-        totalFreeEb,
-
-        dailyData,
+        return `${year}-${month}-${day}`;
       };
+
+      let cycleStart;
+      let cycleEnd;
+
+      if (currentDay >= ebStartCycle) {
+        cycleStart = new Date(
+          currentYear,
+          currentMonth,
+          ebStartCycle
+        );
+
+        cycleEnd = new Date(
+          currentYear,
+          currentMonth + 1,
+          ebEndCycle
+        );
+      } else {
+        cycleStart = new Date(
+          currentYear,
+          currentMonth - 1,
+          ebStartCycle
+        );
+
+        cycleEnd = new Date(
+          currentYear,
+          currentMonth,
+          ebEndCycle
+        );
+      }
+
+      cycleStartDate = formatDate(cycleStart);
+      cycleEndDate = formatDate(cycleEnd);
+
+      console.log("EB CYCLE FROM PROPERTY:", {
+        cycleStartDate,
+        cycleEndDate,
+      });
+    }
+
+    // ==========================================
+    // ACTIVE CLIENTS FOR EB CYCLE
+    // ==========================================
+
+    const clients = await Client.find({
+      propertyId,
+
+      isBookingCancelled: false,
+
+      // Client joined before EB cycle ended
+      clientDoj: {
+        $lte: cycleEndDate,
+      },
+
+      // Client stayed at least some part
+      // of EB cycle
+      $or: [
+        {
+          clientVacatingDate: {
+            $gte: cycleStartDate,
+          },
+        },
+
+        {
+          clientVacatingDate: null,
+        },
+
+        {
+          clientVacatingDate: "",
+        },
+
+        {
+          clientVacatingDate: {
+            $exists: false,
+          },
+        },
+      ],
+    })
+      .select(
+        "fullName clientDoj clientVacatingDate ebDoj propertyId bedId stayType"
+      )
+      .populate(
+        "bedId",
+        "roomNo bedNo monthlyRent depositAmount freeEbAsPerBed acRoom"
+      )
+      .lean();
+
+    // ==========================================
+    // CLIENT IDS
+    // ==========================================
+
+    const clientIds = clients.map(
+      (client) => client._id
+    );
+
+    // ==========================================
+    // VACATION HISTORY
+    // ==========================================
+
+    let vacations = [];
+
+    if (clientIds.length > 0) {
+      vacations = await ClientVacationHistory.find({
+        clientId: {
+          $in: clientIds,
+        },
+      })
+        .select(
+          "clientId month year vacationStartDate1 vacationLastDate1 vacationStartDate2 vacationLastDate2"
+        )
+        .lean();
+    }
+
+    // ==========================================
+    // VACATION MAP
+    // ==========================================
+
+    const vacationMap = new Map();
+
+    vacations.forEach((vacation) => {
+      const clientId =
+        vacation.clientId.toString();
+
+      if (!vacationMap.has(clientId)) {
+        vacationMap.set(clientId, []);
+      }
+
+      vacationMap.get(clientId).push({
+        _id: vacation._id,
+
+        month: vacation.month,
+
+        year: vacation.year,
+
+        vacationStartDate1:
+          vacation.vacationStartDate1 || null,
+
+        vacationLastDate1:
+          vacation.vacationLastDate1 || null,
+
+        vacationStartDate2:
+          vacation.vacationStartDate2 || null,
+
+        vacationLastDate2:
+          vacation.vacationLastDate2 || null,
+      });
     });
 
-    // =====================================================
-    // PROPERTY TOTAL
-    // =====================================================
+    // ==========================================
+    // FINAL CLIENT DATA
+    // ==========================================
 
-    const totalFreeEb = responseClients.reduce(
-      (sum, client) => sum + Number(client.totalFreeEb || 0),
-      0
+    const responseClients = clients.map(
+      (client) => ({
+        ...client,
+
+        vacations:
+          vacationMap.get(
+            client._id.toString()
+          ) || [],
+      })
     );
+
+    // ==========================================
+    // RESPONSE
+    // ==========================================
 
     return res.status(200).json({
       success: true,
 
-      property: {
-        _id: property._id,
-        propertyCode: property.propertyCode,
-        propertyName: property.propertyName,
-        propertyLocation: property.propertyLocation,
+      data: {
+        property: {
+          _id: property._id,
 
-        ebStartCycle: property.utility?.ebStartCycle || null,
-        ebEndCycle: property.utility?.ebEndCycle || null,
+          propertyCode:
+            property.propertyCode,
+
+          propertyLocation:
+            property.propertyLocation,
+
+          utility: {
+            ebStartCycle:
+              property.utility?.ebStartCycle ||
+              null,
+
+            ebEndCycle:
+              property.utility?.ebEndCycle ||
+              null,
+          },
+
+          currentEbCycle: {
+            startDate: cycleStartDate,
+            endDate: cycleEndDate,
+          },
+        },
+
+        clients: responseClients,
       },
-
-      billPeriod: {
-        startDate: billStartDate,
-        endDate: billEndDate,
-        totalDays,
-      },
-
-      totalClients: responseClients.length,
-
-      totalFreeEb,
-
-      clients: responseClients,
     });
   } catch (error) {
     console.error(
-      "Property EB Calculation Error:",
+      "Get Property EB Clients Error:",
       error
     );
 

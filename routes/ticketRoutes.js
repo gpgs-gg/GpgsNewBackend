@@ -11,6 +11,7 @@ const {
   deleteTicket,
   addWorkLog,
   getTicketNavigation,
+  exportTickets
 } = require("../controllers/ticketController");
 const { verifyJWT } = require("../middleware/verifyJWT");
 
@@ -40,5 +41,6 @@ router.delete("/:id", deleteTicket);
 
 // ADD WORKLOG
 router.post("/:id/worklog", addWorkLog);
+router.post("/export", exportTickets);
 
 module.exports = router;

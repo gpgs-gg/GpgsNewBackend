@@ -12,7 +12,6 @@ const AreaSchema = new mongoose.Schema(
             type: String,
             required: true
         },
-
         type: {
             type: String,
             enum: ["ROOM", "KITCHEN", "HALL", "COMMON"],
@@ -29,16 +28,14 @@ const AreaSchema = new mongoose.Schema(
 
 const PropertySchema = new mongoose.Schema(
     {
-        propertyCode: {
-            type: String,
-            required: true,
-            unique: true,
-            trim: true
+        propertyId: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: "Property",
+            required: true
         },
-
         lastMonth: {
-          type: String,
-           default: true
+            type: String,
+            default: true
         },
 
         location: {

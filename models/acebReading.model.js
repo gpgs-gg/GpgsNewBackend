@@ -38,6 +38,12 @@ const ACElectricityReadingSchema = new mongoose.Schema(
       required: true
     },
 
+    ACEBPropertyAreaId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "ACEBPropertyArea",
+      required: true
+    },
+
     month: {
       type: String,
       required: true
@@ -49,6 +55,11 @@ const ACElectricityReadingSchema = new mongoose.Schema(
     },
 
     flatTotalEB: {
+      type: Number,
+      default: 0
+    },
+
+    eBToBeRecovered: {
       type: Number,
       default: 0
     },

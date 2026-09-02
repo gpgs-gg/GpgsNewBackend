@@ -1,7 +1,8 @@
 const ElectricityReading = require("../models/acebReading.model");
-const Property = require("../models/acebArea.model");
+const ACEBPropertyArea = require("../models/acebArea.model");
 const asyncHandler = require("../middleware/asyncHandler");
 const ApiError = require("../utils/ApiError");
+const ACElectricityReading = require("../models/acebReading.model");
 const roundValue = (value, decimals = 2) => {
   return Number(Number(value).toFixed(decimals));
 };
@@ -9,13 +10,14 @@ const roundValue = (value, decimals = 2) => {
 
 const createElectricityReading = asyncHandler(async (req, res) => {
   const {
-    propertyId,
+    roomId,
     month,
     date,
     flatTotalEB,
+    eBToBeRecovered,
     flatTotalUnits,
     roomReadings = [],
-     lastMonth,
+    lastMonth,
   } = req.body;
 
   // ================= Validation =================
@@ -29,10 +31,10 @@ const createElectricityReading = asyncHandler(async (req, res) => {
 
   // ================= Check Property =================
 
-  const property = await Property.findById(propertyId);
+  const property = await ACEBPropertyArea.findById(roomId);
 
   if (!property) {
-    throw new ApiError(404, "Property not found");
+    throw new ApiError(404, "ACEBPropertyArea not found");
   }
 
 
@@ -68,7 +70,7 @@ const createElectricityReading = asyncHandler(async (req, res) => {
   // ================= Check Duplicate Month =================
 
   const existingReading = await ElectricityReading.findOne({
-    propertyId,
+    ACEBPropertyAreaId: roomId,
     month,
   });
 
@@ -82,11 +84,12 @@ const createElectricityReading = asyncHandler(async (req, res) => {
   // ================= Per Unit Cost =================
 
   const totalEB = Number(flatTotalEB) || 0;
+  const eBToBeRecoveredTotal = Number(eBToBeRecovered) || 0;
   const totalUnits = Number(flatTotalUnits) || 0;
 
   const perUnitCost =
     totalUnits > 0
-      ? roundValue(totalEB / totalUnits)
+      ? roundValue(eBToBeRecoveredTotal / totalUnits)
       : 0;
 
   // ================= Prepare Room Readings =================
@@ -131,7 +134,7 @@ const createElectricityReading = asyncHandler(async (req, res) => {
       // Otherwise find previous month's reading
       const previousMonthReading =
         await ElectricityReading.findOne({
-          propertyId,
+          roomId,
           "roomReadings.areaId": room.areaId,
         }).sort({
           date: -1,
@@ -196,10 +199,12 @@ const createElectricityReading = asyncHandler(async (req, res) => {
 
   const electricityReading =
     await ElectricityReading.create({
-      propertyId,
+      ACEBPropertyAreaId: roomId,
+      propertyId: property?.propertyId,
       month,
       date,
       flatTotalEB: totalEB,
+      eBToBeRecovered,
       flatTotalUnits: totalUnits,
       perUnitCost,
       roomReadings: calculatedRoomReadings,
@@ -220,18 +225,18 @@ const createElectricityReading = asyncHandler(async (req, res) => {
 
 const getElectricityReading = asyncHandler(
   async (req, res) => {
-    const { propertyId, month } = req.query;
+    const { roomId, month } = req.query;
 
-    if (!propertyId || !month) {
+    if (!roomId || !month) {
       throw new ApiError(
         400,
-        "propertyId and month are required"
+        "roomId and month are required"
       );
     }
 
     const reading =
       await ElectricityReading.findOne({
-        propertyId,
+        ACEBPropertyAreaId: roomId,
         month,
       })
         .populate(
@@ -258,13 +263,11 @@ const getElectricityReading = asyncHandler(
 
 const getPropertyElectricityReadings =
   asyncHandler(async (req, res) => {
-    const { propertyId } = req.params;
-
+    const { roomId } = req.params;
     const page = Math.max(
       Number(req.query.page) || 1,
       1
     );
-
     const limit = Math.max(
       Number(req.query.limit) || 10,
       1
@@ -273,7 +276,7 @@ const getPropertyElectricityReadings =
     const skip = (page - 1) * limit;
 
     const query = {
-      propertyId,
+      ACEBPropertyAreaId: roomId,
     };
 
     // ================= SEARCH =================
@@ -325,6 +328,7 @@ const updateElectricityReading = asyncHandler(
       date,
       flatTotalEB,
       flatTotalUnits,
+      eBToBeRecovered,
       roomReadings = [],
     } = req.body;
 
@@ -343,12 +347,15 @@ const updateElectricityReading = asyncHandler(
     const totalEB =
       Number(flatTotalEB) || 0;
 
+    const eBToBeRecoveredTotal =
+      Number(eBToBeRecovered) || 0;
+
     const totalUnits =
       Number(flatTotalUnits) || 0;
 
     const perUnitCost =
       totalUnits > 0
-        ? roundValue(totalEB / totalUnits)
+        ? roundValue(eBToBeRecoveredTotal / totalUnits)
         : 0;
 
     // ================= Calculate Room Readings =================
@@ -409,6 +416,8 @@ const updateElectricityReading = asyncHandler(
 
     existingReading.flatTotalEB =
       totalEB;
+    existingReading.eBToBeRecovered =
+      eBToBeRecoveredTotal;
 
     existingReading.flatTotalUnits =
       totalUnits;
@@ -469,12 +478,12 @@ const getElectricityReadingById =
 
 const getPreviousElectricityReading = asyncHandler(
   async (req, res) => {
-    const { propertyId, month } = req.query;
+    const { roomId, month } = req.query;
 
-    if (!propertyId || !month) {
+    if (!roomId || !month) {
       throw new ApiError(
         400,
-        "propertyId and month are required"
+        "roomId and month are required"
       );
     }
 
@@ -523,7 +532,7 @@ const getPreviousElectricityReading = asyncHandler(
 
     const readings =
       await ElectricityReading.find({
-        propertyId,
+        ACEBPropertyAreaId: roomId,
       }).lean();
 
     const previousReading = readings.find(
@@ -548,6 +557,113 @@ const getPreviousElectricityReading = asyncHandler(
   }
 );
 
+
+
+
+const getLatestACConsumptionData = async (req, res) => {
+  try {
+    const { propertyId } = req.params;
+
+    if (!propertyId) {
+      return res.status(400).json({
+        success: false,
+        message: "Property ID is required",
+      });
+    }
+
+    // Latest AC electricity reading
+    const latestRecord = await ACElectricityReading.findOne({
+      propertyId,
+    })
+      .sort({
+        createdAt: -1,
+        _id: -1,
+      })
+      .lean();
+
+    if (!latestRecord) {
+      return res.status(404).json({
+        success: false,
+        message: "No AC electricity reading found for this property",
+      });
+    }
+
+    // Get area names using ACEBPropertyAreaId
+    const areaData = await ACEBPropertyArea.findById(
+      latestRecord.ACEBPropertyAreaId
+    ).lean();
+
+    // Create areaId -> name mapping
+    const areaNameMap = {};
+
+    if (areaData?.areas && Array.isArray(areaData.areas)) {
+      areaData.areas.forEach((area) => {
+        if (area.areaId && area.name) {
+          areaNameMap[String(area.areaId)] = area.name;
+        }
+      });
+    }
+
+    // Default response
+    const responseData = {
+      FlatTotalEB: latestRecord.flatTotalEB || 0,
+
+      FlatTotalUnits: latestRecord.flatTotalUnits || 0,
+
+      PerUnitCost: latestRecord.perUnitCost || 0,
+
+      // Free EB
+      FreeEB:
+        (latestRecord.flatTotalEB || 0) -
+        (latestRecord.eBToBeRecovered || 0),
+
+      // EB To Be Recovered
+      EBToBeRecovered: latestRecord.eBToBeRecovered || 0,
+
+      // AC
+      ACTotalUnits: latestRecord.actualTotalUnits || 0,
+
+      ACTotalEB: latestRecord.actualTotalEB || 0,
+
+      // Common EB
+      CommonTotalEB: latestRecord.commonTotalEB || 0,
+    };
+
+    // Add room-wise AC EB
+    if (Array.isArray(latestRecord.roomReadings)) {
+      latestRecord.roomReadings.forEach((room) => {
+        if (!room.areaId) return;
+
+        // Find room name using areaId
+        const roomName = areaNameMap[String(room.areaId)];
+
+        if (!roomName) {
+          console.warn(
+            `Area name not found for areaId: ${room.areaId}`
+          );
+          return;
+        }
+
+        responseData[`${roomName}`] = room.aceb || 0;
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      data: responseData,
+    });
+  } catch (error) {
+    console.error("Get Latest AC Consumption Error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to get latest AC consumption data",
+      error: error.message,
+    });
+  }
+};
+
+
 module.exports = {
   createElectricityReading,
   getElectricityReading,
@@ -555,4 +671,5 @@ module.exports = {
   updateElectricityReading,
   getElectricityReadingById,
   getPreviousElectricityReading,
+  getLatestACConsumptionData
 };

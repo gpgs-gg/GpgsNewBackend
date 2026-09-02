@@ -5,14 +5,20 @@ const ApiError = require("../utils/ApiError");
 // ================= Create Property =================
 
 const createProperty = asyncHandler(async (req, res) => {
-    const { propertyCode, location, areas = [] } = req.body;
+    const { propertyId, location, areas = [] } = req.body;
 
-    if (!propertyCode) {
-        throw new ApiError(400, "Property Code and Property Name are required");
+    if (!propertyId) {
+        throw new ApiError(400, "Property is required");
     }
 
+    // const propertyExists = await Property.findById(propertyId);
+
+    // if (!propertyExists) {
+    //     throw new ApiError(404, "Selected property not found");
+    // }
+
     const existingProperty = await Property.findOne({
-        propertyCode: propertyCode.trim(),
+        propertyId,
     });
 
     if (existingProperty) {
@@ -20,7 +26,7 @@ const createProperty = asyncHandler(async (req, res) => {
     }
 
     const property = await Property.create({
-        propertyCode: propertyCode.trim(),
+        propertyId,
         location,
         areas,
     });
@@ -66,12 +72,16 @@ const getProperties = asyncHandler(async (req, res) => {
     }
 
     // Filters
-   
+
     // Count filtered records
     const totalRecords = await Property.countDocuments(query);
 
     // Fetch filtered + paginated data
     const properties = await Property.find(query)
+        .populate({
+            path: "propertyId",
+            select: "propertyCode propertyLocation",
+        })
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limit)
@@ -94,7 +104,12 @@ const getProperties = asyncHandler(async (req, res) => {
 // ================= Get Single Property =================
 
 const getPropertyById = asyncHandler(async (req, res) => {
-    const property = await Property.findById(req.params.id).lean();
+    const property = await Property.findById(req.params.id)
+        .populate({
+            path: "propertyId",
+            select: "propertyCode propertyLocation",
+        })
+        .lean();
 
     if (!property) {
         throw new ApiError(404, "Property not found");
@@ -105,7 +120,6 @@ const getPropertyById = asyncHandler(async (req, res) => {
         data: property,
     });
 });
-
 // ================= Update Property =================
 
 // const updateProperty = asyncHandler(async (req, res) => {

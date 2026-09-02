@@ -1,5 +1,5 @@
 const cron = require("node-cron");
-const GlobalSettings = require("../models/globalSettings.model");
+const GlobalSettings = require("../models/gobalSettings.model");
 
 const {
   LeadsConJob,

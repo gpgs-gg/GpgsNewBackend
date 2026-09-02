@@ -6,8 +6,8 @@ const {
   getPropertyElectricityReadings,
   updateElectricityReading,
   getElectricityReadingById,
-  getPreviousElectricityReading
-
+  getPreviousElectricityReading,
+  getLatestACConsumptionData
 } = require("../controllers/acebReadingController");
 
 
@@ -31,10 +31,9 @@ router.get(
 );
 // Get all months of property
 router.get(
-  "/property/:propertyId",
+  "/roomId/:roomId",
   getPropertyElectricityReadings
 );
-
 
 router.get(
   "/:id",
@@ -47,5 +46,9 @@ router.put(
   updateElectricityReading
 );
 
+router.get(
+  "/ac-consumption/:propertyId",
+  getLatestACConsumptionData
+);
 
 module.exports = router;

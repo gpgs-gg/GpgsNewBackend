@@ -3,7 +3,7 @@ const asyncHandler = require("../middleware/asyncHandler");
 const uploadFile = require("../services/uploadFile");
 const ApiError = require("../utils/ApiError");
 const { convertStringFormatDateTime, convertStringToDateTime } = require("../utils/dateFormatter");
-
+const { format } = require("@fast-csv/format");
 const createTicket = asyncHandler(async (req, res) => {
   // Generate Ticket ID
   const lastTicket = await Ticket.findOne().sort({ createdAt: -1 });
@@ -80,77 +80,24 @@ const getAllTickets = asyncHandler(async (req, res) => {
 
   const query = {};
 
-  // ================= Search =================
   if (req.query.search) {
     query.$or = [
-      {
-        ticketId: {
-          $regex: req.query.search,
-          $options: "i",
-        },
-      },
-      {
-        title: {
-          $regex: req.query.search,
-          $options: "i",
-        },
-      },
-      {
-        description: {
-          $regex: req.query.search,
-          $options: "i",
-        },
-      },
-      {
-        propertyCode: {
-          $regex: req.query.search,
-          $options: "i",
-        },
-      },
+      { ticketId: { $regex: req.query.search, $options: "i" } },
+      { title: { $regex: req.query.search, $options: "i" } },
+      { description: { $regex: req.query.search, $options: "i" } },
+      { "propertyId.propertyCode": { $regex: req.query.search, $options: "i" } },
+      { "propertyId.propertyLocation": { $regex: req.query.search, $options: "i" } },
     ];
   }
 
-  // ================= Filters =================
-
-  if (req.query.status) {
-    query.status = req.query.status;
-  }
-
-  if (req.query.priority) {
-    query.priority = req.query.priority;
-  }
-
-  if (req.query.category) {
-    query.category = req.query.category;
-  }
-
-  if (req.query.department) {
-    query.department = req.query.department;
-  }
-
-  if (req.query.assignee) {
-    query.assignee = req.query.assignee;
-  }
-
-  if (req.query.propertyLocation) {
-    query.propertyLocation = req.query.propertyLocation;
-  }
-
-  if (req.query.propertyCode) {
-    query.propertyCode = req.query.propertyCode;
-  }
-
-  if (req.query.customerImpacted) {
-    query.customerImpacted = req.query.customerImpacted;
-  }
-
-  if (req.query.escalated) {
-    query.escalated = req.query.escalated;
-  }
-
-  if (req.query.manager) {
-    query.manager = req.query.manager;
-  }
+  if (req.query.status) query.status = req.query.status;
+  if (req.query.priority) query.priority = req.query.priority;
+  if (req.query.category) query.category = req.query.category;
+  if (req.query.department) query.department = req.query.department;
+  if (req.query.assignee) query.assignee = req.query.assignee;
+  if (req.query.customerImpacted) query.customerImpacted = req.query.customerImpacted;
+  if (req.query.escalated) query.escalated = req.query.escalated;
+  if (req.query.manager) query.manager = req.query.manager;
 
   if (req.query.lateStatus === "LateAcknowledged") {
     query.lateAcknowledged = "Yes";
@@ -166,7 +113,6 @@ const getAllTickets = asyncHandler(async (req, res) => {
     if (req.query.dateFrom) {
       const fromDate = new Date(req.query.dateFrom);
       fromDate.setHours(0, 0, 0, 0);
-
       query.createdAt.$gte = fromDate;
     }
 
@@ -181,29 +127,116 @@ const getAllTickets = asyncHandler(async (req, res) => {
     }
   }
 
-  const totalRecords = await Ticket.countDocuments(query);
+  if (req.query.propertyCode) {
+    query["propertyId.propertyCode"] = {
+      $regex: req.query.propertyCode,
+      $options: "i",
+    };
+  }
 
-  const tickets = await Ticket.find(query)
-    .sort({ createdAt: -1 })
-    .skip(skip)
-    .limit(limit);
+  if (req.query.propertyLocation) {
+    query["propertyId.propertyLocation"] = {
+      $regex: req.query.propertyLocation,
+      $options: "i",
+    };
+  }
+
+  const pipeline = [
+    {
+      $lookup: {
+        from: "properties",
+        let: { propertyId: "$propertyId" },
+        pipeline: [
+          {
+            $match: {
+              $expr: {
+                $eq: ["$_id", "$$propertyId"],
+              },
+            },
+          },
+          {
+            $project: {
+              _id: 1,
+              propertyCode: 1,
+              propertyLocation: 1,
+            },
+          },
+        ],
+        as: "propertyId",
+      },
+    },
+    {
+      $unwind: {
+        path: "$propertyId",
+        preserveNullAndEmptyArrays: true,
+      },
+    },
+    { $match: query },
+    { $sort: { createdAt: -1, _id:-1 } },
+    { $skip: skip },
+    { $limit: limit },
+  ];
+
+  const tickets = await Ticket.aggregate(pipeline);
+
+  const countPipeline = [
+    {
+      $lookup: {
+        from: "properties",
+        let: { propertyId: "$propertyId" },
+        pipeline: [
+          {
+            $match: {
+              $expr: {
+                $eq: ["$_id", "$$propertyId"],
+              },
+            },
+          },
+          {
+            $project: {
+              _id: 1,
+              propertyCode: 1,
+              propertyLocation: 1,
+            },
+          },
+        ],
+        as: "propertyId",
+      },
+    },
+    {
+      $unwind: {
+        path: "$propertyId",
+        preserveNullAndEmptyArrays: true,
+      },
+    },
+    { $match: query },
+    { $count: "total" },
+  ];
+
+  const countResult = await Ticket.aggregate(countPipeline);
+
+  const totalRecords = countResult[0]?.total || 0;
+  const totalPages = Math.ceil(totalRecords / limit);
 
   res.status(200).json({
     success: true,
     page,
     limit,
     totalRecords,
-    totalPages: Math.ceil(totalRecords / limit),
-    hasNextPage: page < Math.ceil(totalRecords / limit),
+    totalPages,
+    hasNextPage: page < totalPages,
     hasPrevPage: page > 1,
     count: tickets.length,
     data: tickets,
   });
 });
 
-
 const getTicketById = asyncHandler(async (req, res) => {
-  const ticket = await Ticket.findById(req.params.id);
+  const ticket = await Ticket.findById(req.params.id)
+    .populate({
+      path: "propertyId",
+      select: "_id propertyCode propertyLocation",
+    });
 
   if (!ticket) {
     throw new ApiError(404, "Ticket not found");
@@ -949,6 +982,240 @@ const insertBulkTickets = async (req, res) => {
   }
 };
 
+const exportTickets = asyncHandler(async (req, res) => {
+  try {
+    const {
+      search = "",
+      filters = {},
+      ticketIds = [],
+      columns = [],
+    } = req.body;
+
+    const query = {};
+
+    // =========================
+    // SEARCH
+    // =========================
+    if (search?.trim()) {
+      const searchRegex = {
+        $regex: search.trim(),
+        $options: "i",
+      };
+
+      query.$or = [
+        { ticketId: searchRegex },
+        { title: searchRegex },
+        { propertyCode: searchRegex },
+        { description: searchRegex },
+        { category: searchRegex },
+        { priority: searchRegex },
+        { status: searchRegex },
+        { department: searchRegex },
+        { manager: searchRegex },
+        { assignee: searchRegex },
+      ];
+    }
+
+    // =========================
+    // FILTERS
+    // =========================
+
+    if (filters.propertyCode) {
+      query.propertyCode = filters.propertyCode;
+    }
+
+    if (filters.Location) {
+      query.propertyLocation = filters.Location;
+    }
+
+    if (filters.priority) {
+      query.priority = filters.priority;
+    }
+
+    if (filters.status) {
+      query.status = filters.status;
+    }
+
+    if (filters.department) {
+      query.department = filters.department;
+    }
+
+    if (filters.category) {
+      query.category = filters.category;
+    }
+
+    if (filters.assignee) {
+      query.assignee = filters.assignee;
+    }
+
+    if (filters.manager) {
+      query.manager = filters.manager;
+    }
+
+    if (filters.customerImpacted) {
+      query.customerImpacted = filters.customerImpacted;
+    }
+
+    if (filters.escalated) {
+      query.escalated = filters.escalated;
+    }
+
+    if (filters.lateStatus === "LateAcknowledged") {
+      query.lateAcknowledged = "Yes";
+    }
+
+    if (filters.lateStatus === "LateResolved") {
+      query.lateResolved = "Yes";
+    }
+
+    // =========================
+    // SELECTED TICKETS
+    // =========================
+
+    if (Array.isArray(ticketIds) && ticketIds.length > 0) {
+      query.ticketId = {
+        $in: ticketIds,
+      };
+    }
+
+    // =========================
+    // EXPORT COLUMNS
+    // =========================
+
+    const defaultColumns = [
+      "ticketId",
+      "dateCreated",
+      "propertyCode",
+      "title",
+      "status",
+      "customerImpacted",
+      "escalated",
+      "targetDate",
+      "category",
+      "priority",
+      "department",
+      "manager",
+      "ticketManager",
+      "assignee",
+      "bedNo",
+      "roomNo",
+      "createdBy",
+      "propertyLocation",
+    ];
+
+    const exportColumns =
+      Array.isArray(columns) && columns.length > 0
+        ? columns
+        : defaultColumns;
+
+    // =========================
+    // CSV HEADERS
+    // =========================
+
+    const headerMap = {
+      ticketId: "Ticket ID",
+      dateCreated: "Date Created",
+      propertyCode: "Property Code",
+      title: "Title",
+      status: "Status",
+      customerImpacted: "Customer Impacted",
+      escalated: "Escalated",
+      targetDate: "Target Date",
+      category: "Category",
+      priority: "Priority",
+      department: "Department",
+      manager: "Manager",
+      ticketManager: "Ticket Manager",
+      assignee: "Assignee",
+      bedNo: "Bed No",
+      roomNo: "Room No",
+      createdBy: "Created By",
+      propertyLocation: "Location",
+    };
+
+    const headers = exportColumns.map(
+      (column) => headerMap[column] || column
+    );
+
+    // =========================
+    // RESPONSE HEADERS
+    // =========================
+
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="tickets-${new Date()
+        .toISOString()
+        .split("T")[0]}.csv"`
+    );
+
+    res.setHeader("Content-Type", "text/csv; charset=utf-8");
+
+    // =========================
+    // CSV STREAM
+    // =========================
+
+    const csvStream = format({
+      headers,
+    });
+
+    csvStream.pipe(res);
+
+    // =========================
+    // MONGODB CURSOR
+    // =========================
+
+    const cursor = Ticket.find(query)
+      .select(exportColumns.join(" "))
+      .lean()
+      .cursor();
+
+    // =========================
+    // STREAM DATA
+    // =========================
+
+    for await (const ticket of cursor) {
+      const row = {};
+
+      exportColumns.forEach((column) => {
+        let value = ticket[column];
+
+        if (value === null || value === undefined) {
+          value = "";
+        }
+
+        // Date handling
+        if (value instanceof Date) {
+          value = value.toISOString();
+        }
+
+        // Array / Object handling
+        if (typeof value === "object") {
+          value = JSON.stringify(value);
+        }
+
+        row[headerMap[column] || column] = value;
+      });
+
+      csvStream.write(row);
+    }
+
+    csvStream.end();
+
+  } catch (error) {
+    console.error("Export Tickets Error:", error);
+
+    if (!res.headersSent) {
+      return res.status(500).json({
+        success: false,
+        message: "Failed to export tickets",
+        error: error.message,
+      });
+    }
+
+    res.end();
+  }
+});
+
 module.exports = {
   createTicket,
   getAllTickets,
@@ -959,4 +1226,5 @@ module.exports = {
   getTicketDropdown,
   insertBulkTickets,
   getTicketNavigation,
+  exportTickets
 };

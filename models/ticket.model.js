@@ -9,8 +9,13 @@ const TicketSchema = new mongoose.Schema(
       index: true, // <-- Add this
     },
 
+    propertyId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Property",
+      required: true,
+      index: true, // <-- Add this
+    },
     dateCreated: String,
-    propertyCode: String,
 
     title: String,
     description: String,
@@ -19,13 +24,13 @@ const TicketSchema = new mongoose.Schema(
     roomNo: String,
     // attachment: [String],
     attachment: [
-  {
-    url: String,
-    role:String,
-    uploadedBy: String,
-    uploadedAt: String,
-  }
-],
+      {
+        url: String,
+        role: String,
+        uploadedBy: String,
+        uploadedAt: String,
+      }
+    ],
 
     customerImpacted: String,
     escalated: String,
@@ -92,7 +97,7 @@ const TicketSchema = new mongoose.Schema(
 // Explicit indexes
 // TicketSchema.index({ ticketId: 1 }, { unique: true });
 TicketSchema.index({ createdAt: -1, _id: -1 });
-TicketSchema.index({ propertyCode: 1 }); 
+TicketSchema.index({ propertyCode: 1 });
 TicketSchema.index({ status: 1 });
 TicketSchema.index({ priority: 1 });
 TicketSchema.index({ department: 1 });

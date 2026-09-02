@@ -312,7 +312,7 @@ exports.getBatchOptions = async (req, res) => {
         .map((item) => ({
           label: item.label,
           value: item.value,
-          code: item.code,
+          id: item._id,
         }));
     });
 

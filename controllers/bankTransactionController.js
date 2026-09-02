@@ -1106,27 +1106,40 @@ exports.updateTransaction = async (req, res) => {
       updates.comment = req.body.comment;
     }
 
+    if (req.body.isMapped !== undefined) {
+      updates.isMapped = req.body.isMapped === true || req.body.isMapped === "true";
+    }
+
     // Work log changes
     const changes = [];
 
     const fields = [
       { key: "status", label: "Status" },
       { key: "expenseCategory", label: "Expense Category" },
+      { key: "isMapped", label: "Mapped" },
     ];
 
-    fields.forEach(({ key, label }) => {
-      const oldValue = transaction[key] ?? "";
-      const newValue = req.body[key];
+fields.forEach(({ key, label }) => {
+  const oldValue = transaction[key] ?? "";
+  const newValue = req.body[key];
 
-      if (
-        newValue !== undefined &&
-        String(oldValue) !== String(newValue)
-      ) {
-        changes.push(
-          `${label} changed from "${oldValue || "Blank"}" to "${newValue || "Blank"}"`
-        );
-      }
-    });
+  if (
+    newValue !== undefined &&
+    String(oldValue) !== String(newValue)
+  ) {
+    if (key === "isMapped") {
+      changes.push(
+        `${label} changed from "${oldValue ? "Yes" : "No"}" to "${
+          newValue === true || newValue === "true" ? "Yes" : "No"
+        }"`
+      );
+    } else {
+      changes.push(
+        `${label} changed from "${oldValue || "Blank"}" to "${newValue || "Blank"}"`
+      );
+    }
+  }
+});
 
     const oldPropertyId = transaction.propertyId
       ? String(transaction.propertyId)
@@ -1243,7 +1256,6 @@ exports.updateTransaction = async (req, res) => {
     });
   }
 };
-
 
 
 exports.deleteTransaction = async (req, res) => {

@@ -45,7 +45,7 @@ const createTicket = asyncHandler(async (req, res) => {
         ...req.body,
         ticketId,
         status: "Open",
-        customerImpacted:"Yes",
+        customerImpacted: "Yes",
         attachment: attachments,
         dateCreated: convertStringFormatDateTime(new Date())
     });
@@ -92,12 +92,7 @@ const getAllClientTickets = asyncHandler(async (req, res) => {
                     $options: "i",
                 },
             },
-            {
-                propertyCode: {
-                    $regex: req.query.search,
-                    $options: "i",
-                },
-            },
+
         ];
     }
 
@@ -119,37 +114,9 @@ const getAllClientTickets = asyncHandler(async (req, res) => {
         query.department = req.query.department;
     }
 
-    if (req.query.assignee) {
-        query.assignee = req.query.assignee;
-    }
 
-    if (req.query.propertyLocation) {
-        query.propertyLocation = req.query.propertyLocation;
-    }
 
-    if (req.query.propertyCode) {
-        query.propertyCode = req.query.propertyCode;
-    }
 
-    if (req.query.customerImpacted) {
-        query.customerImpacted = req.query.customerImpacted;
-    }
-
-    if (req.query.escalated) {
-        query.escalated = req.query.escalated;
-    }
-
-    if (req.query.manager) {
-        query.manager = req.query.manager;
-    }
-
-    if (req.query.lateStatus === "LateAcknowledged") {
-        query.lateAcknowledged = "Yes";
-    }
-
-    if (req.query.lateStatus === "LateResolved") {
-        query.lateResolved = "Yes";
-    }
 
     // ================= Count =================
 
@@ -158,11 +125,14 @@ const getAllClientTickets = asyncHandler(async (req, res) => {
     // ================= DB Pagination + Sorting =================
 
     const tickets = await Ticket.find(query)
+        .populate({
+            path: "propertyId",
+            select: "_id propertyCode",
+        })
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limit)
         .lean();
-
     const totalPages = Math.ceil(totalRecords / limit);
 
     res.status(200).json({
@@ -179,36 +149,36 @@ const getAllClientTickets = asyncHandler(async (req, res) => {
 });
 
 const getClientDetailsById = async (req, res) => {
-  try {
-    const { clientId } = req.params;
+    try {
+        const { clientId } = req.params;
 
-    const client = await Client.findById(clientId)
-      .select("propertyId bedId")
-      .populate("propertyId", "_id propertyCode")
-      .populate("bedId", "_id roomNo bedNo");
+        const client = await Client.findById(clientId)
+            .select("propertyId bedId")
+            .populate("propertyId", "_id propertyCode")
+            .populate("bedId", "_id roomNo bedNo");
 
-    if (!client) {
-      return res.status(404).json({
-        success: false,
-        message: "Client not found",
-      });
+        if (!client) {
+            return res.status(404).json({
+                success: false,
+                message: "Client not found",
+            });
+        }
+
+        return res.status(200).json({
+            success: true,
+            data: {
+                propertyId: client.propertyId || null,
+                bedId: client.bedId || null,
+            },
+        });
+    } catch (error) {
+        console.error("Get Client Details Error:", error);
+
+        return res.status(500).json({
+            success: false,
+            message: error.message,
+        });
     }
-
-    return res.status(200).json({
-      success: true,
-      data: {
-        propertyId: client.propertyId || null,
-        bedId: client.bedId || null,
-      },
-    });
-  } catch (error) {
-    console.error("Get Client Details Error:", error);
-
-    return res.status(500).json({
-      success: false,
-      message: error.message,
-    });
-  }
 };
 const getTicketById = asyncHandler(async (req, res) => {
     const ticket = await Ticket.findById(req.params.id);
@@ -475,119 +445,6 @@ const deleteTicket = asyncHandler(async (req, res) => {
         message: "Ticket deleted successfully",
     });
 });
-
-// const addWorkLog = asyncHandler(async (req, res) => {
-//     const ticket = await Ticket.findByIdAndUpdate(
-//         req.params.id,
-//         {
-//             $push: {
-//                 workLogs: {
-//                     message: req.body.message,
-//                     createdBy: req.body.createdBy,
-//                     createdAt: new Date(),
-//                 },
-//             },
-//         },
-//         {
-//             returnDocument: "after",
-//         }
-//     );
-
-//     if (!ticket) {
-//         throw new ApiError(404, "Ticket not found");
-//     }
-
-//     res.status(200).json({
-//         success: true,
-//         message: "WorkLog added successfully",
-//         data: ticket,
-//     });
-// });
-
-// const getTicketDropdown = asyncHandler(async (req, res) => {
-//     const page = Number(req.query.page) || 1;
-//     const limit = Number(req.query.limit) || 10;
-//     const search = req.query.search?.trim() || "";
-
-//     const query = {};
-
-//     if (search) {
-//         query.ticketId = {
-//             $regex: search,
-//             $options: "i",
-//         };
-//     }
-
-//     const [
-//         statuses,
-//         priorities,
-//         departments,
-//         categories,
-//         assignees,
-//         managers,
-//         propertyLocations,
-//         propertyCodes,
-//         totalRecords,
-//         tickets,
-//     ] = await Promise.all([
-//         Ticket.distinct("status"),
-//         Ticket.distinct("priority"),
-//         Ticket.distinct("department"),
-//         Ticket.distinct("category"),
-//         Ticket.distinct("assignee"),
-//         Ticket.distinct("manager"),
-//         Ticket.distinct("propertyLocation"),
-//         Ticket.distinct("propertyCode"),
-
-//         Ticket.countDocuments(query),
-
-//         Ticket.find(query)
-//             .select(
-//                 "_id ticketId propertyCode propertyLocation status priority department category assignee manager"
-//             )
-//             .sort({ createdAt: -1 })
-//             .skip((page - 1) * limit)
-//             .limit(limit)
-//             .lean(),
-//     ]);
-
-//     res.status(200).json({
-//         success: true,
-
-//         data: tickets,
-
-//         propertyCodes,
-//         propertyLocations,
-//         statuses,
-//         priorities,
-//         departments,
-//         categories,
-//         assignees,
-//         managers,
-
-//         customerImpacted: ["Yes", "No"],
-//         escalated: ["Yes", "No"],
-
-//         lateStatus: [
-//             {
-//                 value: "LateAcknowledged",
-//                 label: "Late Acknowledged",
-//             },
-//             {
-//                 value: "LateResolved",
-//                 label: "Late Resolved",
-//             },
-//         ],
-
-//         page,
-//         limit,
-//         totalRecords,
-//         totalPages: Math.ceil(totalRecords / limit),
-//         hasMore: page * limit < totalRecords,
-//     });
-// });
-
-
 
 module.exports = {
     createTicket,

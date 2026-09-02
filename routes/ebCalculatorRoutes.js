@@ -2,12 +2,12 @@ const express = require("express");
 const router = express.Router();
 
 const {
-  getPropertyEbCalculationData,
+  getPropertyEbClients ,
 } = require("../controllers/ebCalculatorController");
 
 router.get(
-  "/property-eb-calculation",
-  getPropertyEbCalculationData
+  "/eb-calculator/property/:propertyId",
+  getPropertyEbClients 
 );
 
 module.exports = router;
