@@ -245,10 +245,33 @@ const createClientRentHistory = async (client) => {
 const generateMonthlyRent = async () => {
   // const month = new Date().getMonth() + 1;
   // const year = new Date().getFullYear();
-  const month = 10;
-  const year = 2026;
-  const todayFilterDate = "2026-8-03";
- 
+  // const month = 10;
+  // const year = 2026;
+  // const todayFilterDate = "2026-8-03";
+  const today = new Date();
+  let month = today.getMonth() + 1;
+  let year = today.getFullYear();
+  // 27th ko next month's rent history generate hogi
+  if (today.getDate() >= 27) {
+    month++;
+
+    if (month > 12) {
+      month = 1;
+      year++;
+    }
+  }
+  // Client filtering ke liye bhi next month ki 1st date use hogi
+  let todayFilterDate;
+  if (today.getDate() >= 27) {
+    const filterDate = new Date(
+      today.getFullYear(),
+      today.getMonth() + 1,
+      1
+    );
+    todayFilterDate = filterDate.toISOString().split("T")[0];
+  } else {
+    todayFilterDate = today.toISOString().split("T")[0];
+  }
   // const todayFilterDate = new Date().toISOString().split("T")[0];
   const clients = await Client.find({
     isBookingCancelled: false,
@@ -287,8 +310,6 @@ const generateMonthlyRent = async () => {
   })
     .populate("bedId")
     .lean();
-
-
   const clientIds = clients.map((client) => client._id);
   const rentHistoryData = [];
   // Already Generated

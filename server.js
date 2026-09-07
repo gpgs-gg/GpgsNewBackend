@@ -10,7 +10,7 @@ const startServer = async () => {
     // MongoDB Connect
     await connectDB();
     // Load Cron Jobs
-    // require("./cron/generateMonthlyRent");
+    require("./cron/generateMonthlyRent");
     // require("./cron/reassignLeads");
     app.listen(PORT, () => {
       console.log(`🚀 Server running on port ${PORT}`);

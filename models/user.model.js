@@ -29,11 +29,16 @@ const userSchema = new mongoose.Schema(
       default: null,
     },
 
-    clientId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "Booking",
-      default: null,
-    },
+    // clientId: {
+    //   type: mongoose.Schema.Types.ObjectId,
+    //   ref: "Booking",
+    //   default: null,
+    // },
+
+clientId: {
+  type: mongoose.Schema.Types.ObjectId,
+  ref: "Client",
+},
 
     employeeId: {
     type: String,

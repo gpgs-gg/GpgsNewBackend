@@ -56,18 +56,18 @@ const ClientSchema = new mongoose.Schema(
             ref: "Bed",
             default: null,
         },
-       
+
         stayType: {
             type: String,
             enum: ["P. Booked", "T. Booked", "Daily"],
             default: "P. Booked",
         },
 
-        narration : {
+        narration: {
             type: String,
         },
-        
-        bookingType : {
+
+        bookingType: {
             type: String,
         },
         // ===================================
@@ -109,6 +109,11 @@ const ClientSchema = new mongoose.Schema(
                 type: String,
                 trim: true,
                 default: "",
+            },
+
+            handoverAttachment: {
+                type: [String],
+                default: [],
             },
 
             status: {

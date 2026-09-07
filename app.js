@@ -31,6 +31,8 @@ const sidebarModuleRoutes = require("./routes/sidebarModuleRoutes.js");
 const rolePermissionRoutes = require("./routes/rolePermissionRoutes");
 const clientVacationRoutes = require('./routes/clientVacationRoutes');
 const ebCalculatorRoutes = require('./routes/ebCalculatorRoutes.js');
+const updateEbAmtRoutes = require('./routes/UpdateEbAmtRoutes.js')
+const propertyAndPersonalRoutes = require('./clientRoutes/propertyAndPersonalRoutes.js')
 
 const ApiError = require("./utils/ApiError");
 const cors = require("cors");
@@ -88,6 +90,8 @@ app.use("/api/modules", sidebarModuleRoutes);
 app.use("/api/permissions", rolePermissionRoutes);
 app.use('/api/vacation-history', clientVacationRoutes);
 app.use("/api", ebCalculatorRoutes);
+app.use("/api", updateEbAmtRoutes);
+app.use("/api", propertyAndPersonalRoutes);
 
 app.use((req, res, next) => {
   next(new ApiError(404, `Route Not Found - ${req.originalUrl}`));

@@ -192,7 +192,7 @@ const createElectricityReading = asyncHandler(async (req, res) => {
 
   // ================= Common Total EB =================
   const commonTotalEB = roundValue(
-    totalEB - actualTotalEB
+    eBToBeRecoveredTotal - actualTotalEB
   );
 
   // ================= Save =================
@@ -406,7 +406,7 @@ const updateElectricityReading = asyncHandler(
     // ================= Common EB =================
 
     const commonTotalEB = roundValue(
-      totalEB - actualTotalEB
+      eBToBeRecovered - actualTotalEB
     );
 
     // ================= Update =================

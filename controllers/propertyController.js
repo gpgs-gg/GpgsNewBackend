@@ -4,7 +4,8 @@ const ApiError = require("../utils/ApiError");
 // CREATE
 const safeParse = require("../utils/safeParse");
 const uploadFile = require("../services/uploadFile");
-
+const mongoose = require("mongoose");
+const { generateWorkLogs } = require("../utils/worklog");
 // const createProperty = asyncHandler(async (req, res) => {
 //   const files = req.files;
 //   const getFile = (key) => files?.[key]?.[0] || null;
@@ -90,7 +91,7 @@ const createProperty = asyncHandler(async (req, res) => {
   owner.photo = photoUploads;
   owner.aadharCard = aadharUploads;
   agreement.attachment = agreementUploads;
-
+  const user = req.body.createdByName || req.body.updatedByName || "System";
   const property = await Property.create({
     ...req.body,
     status: "Active",
@@ -99,7 +100,15 @@ const createProperty = asyncHandler(async (req, res) => {
     utility,
     agreement,
   });
+  // Simple worklog for property creation
+  property.workLogs.push(
+    createWorkLog({
+      message: `Property created by ${user}`,
+      createdBy: user,
+    }),
+  );
 
+  await property.save();
   res.status(201).json({
     success: true,
     message: "Property created successfully",
@@ -191,7 +200,8 @@ const updateProperty = asyncHandler(async (req, res) => {
   }
 
   const propertyCode = req.body.propertyCode || property.propertyCode;
-
+  const user = req.body.updatedByName || req.body.createdByName || "System";
+  let workLogs = property.workLogs || [];
   const owner = safeParse(req.body.owner) || property.owner;
   const internet = safeParse(req.body.internet) || property.internet;
   const utility = safeParse(req.body.utility) || property.utility;
@@ -246,7 +256,7 @@ const updateProperty = asyncHandler(async (req, res) => {
     owner.aadharCard = existingAadhar;
   }
 
-// 📎 AGREEMENT ATTACHMENT UPDATE
+  // 📎 AGREEMENT ATTACHMENT UPDATE
   if (getFiles("agreement[attachment]").length > 0) {
     const agreementUploads = await Promise.all(
       getFiles("agreement[attachment]").map((file) =>
@@ -259,6 +269,61 @@ const updateProperty = asyncHandler(async (req, res) => {
     agreement.attachment = existingAgreement;
   }
 
+// ============================================================
+  // PREPARE FINAL DATA FOR WORKLOG COMPARISON
+  // ============================================================
+
+  const newPropertyData = {
+    ...req.body,
+    owner,
+    internet,
+    utility,
+    agreement,
+  };
+
+  // ============================================================
+  // AUTOMATIC WORKLOG FOR EVERY CHANGED FIELD
+  // ============================================================
+
+  const automaticWorkLogs = generateWorkLogs({
+    oldData: property.toObject(),
+    newData: newPropertyData,
+    createdBy: user,
+
+    ignoredFields: [
+      "newWorkLog",
+      "workLogs",
+
+      // System fields
+      "createdAt",
+      "updatedAt",
+      "__v",
+      "_id",
+
+      // User/helper fields
+      "createdByName",
+      "updatedByName",
+
+      // Existing file references
+      "aadharCardExisting",
+      "photoExisting",
+      "attachmentExisting",
+    ],
+  });
+
+  workLogs.push(...automaticWorkLogs);
+  const newWorkLog = String(req.body.newWorkLog || "").trim();
+
+  if (newWorkLog) {
+    workLogs.push(
+      createWorkLog({
+        message: newWorkLog,
+        createdBy: user,
+      }),
+    );
+  }
+
+  delete req.body.newWorkLog;
 
   // UPDATE FINAL DATA
   const updatedProperty = await Property.findByIdAndUpdate(
@@ -269,13 +334,14 @@ const updateProperty = asyncHandler(async (req, res) => {
       internet,
       utility,
       agreement,
+      workLogs
     },
     {
       new: true,
       runValidators: true,
     }
   );
-  console.timeEnd("Total Update");
+
   res.status(200).json({
     success: true,
     message: "Property updated successfully",
@@ -283,7 +349,6 @@ const updateProperty = asyncHandler(async (req, res) => {
   });
 });
 
-const mongoose = require("mongoose");
 // DELETE
 const deleteProperty = asyncHandler(async (req, res) => {
   const property = await Property.findByIdAndDelete(req.params.id);
@@ -360,7 +425,7 @@ const getPropertyDropdown = async (req, res) => {
     const limit = Number(req.query.limit) || 10;
     const search = req.query.search?.trim() || "";
 
-    const query = {};
+    const query = { status: "Active" };
 
     if (search) {
       query.propertyCode = {

@@ -1,181 +1,189 @@
-const IGNORED_FIELDS = new Set([
-  "_id",
-  "__v",
-  "password",
-  "worklogs",
-  "createdAt",
-  "updatedAt",
-  "createdBy",
-  "updatedBy",
-]);
+const { convertStringFormatDateTime } = require("./dateFormatter");
 
-const isObject = (value) =>
-  value !== null && typeof value === "object" && !Array.isArray(value);
-
-const normalizeValue = (value) => {
-  if (value === undefined) {
-    return null;
-  }
-
-  if (value === null) {
-    return null;
-  }
-
-  if (value instanceof Date) {
-    return value.toISOString();
-  }
-
-  // Mongoose ObjectId
-  if (
-    value?._bsontype === "ObjectId" ||
-    value?.constructor?.name === "ObjectId"
-  ) {
-    return value.toString();
-  }
-
-  if (Array.isArray(value)) {
-    return value.map(normalizeValue);
-  }
-
-  if (isObject(value)) {
-    const result = {};
-
-    Object.keys(value)
-      .sort()
-      .forEach((key) => {
-        result[key] = normalizeValue(value[key]);
-      });
-
-    return result;
-  }
-
-  return value;
+/**
+ * Convert field name to readable format
+ */
+const formatFieldName = (key) => {
+  return key
+    .replace(/Id$/i, "")
+    .replace(/([a-z])([A-Z])/g, "$1 $2")
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (char) => char.toUpperCase())
+    .trim();
 };
 
-const valuesEqual = (oldValue, newValue) => {
-  return (
-    JSON.stringify(normalizeValue(oldValue)) ===
-    JSON.stringify(normalizeValue(newValue))
+/**
+ * Check whether field should be ignored
+ */
+const shouldIgnoreField = (key, ignoredFields = []) => {
+  const ignored = [
+    "_id",
+    "__v",
+    "worklogs",
+    "createdat",
+    "updatedat",
+    "newworklog",
+    "createdbyname",
+    "updatedbyname",
+    "aadharcardexisting",
+    "photoexisting",
+    "attachmentexisting",
+    ...ignoredFields,
+  ];
+
+  return ignored.some(
+    (field) => String(field).toLowerCase() === String(key).toLowerCase(),
   );
 };
 
-const getChangedFields = (oldData, newData) => {
+/**
+ * Convert date/value into comparable display value
+ */
+const normalizeValue = (value) => {
+  if (value === undefined || value === null || value === "") {
+    return "";
+  }
+
+  // Date object from MongoDB
+  if (value instanceof Date) {
+    return convertStringFormatDateTime(value);
+  }
+
+  // Date only: 2026-09-30
+  if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    const [year, month, day] = value.split("-").map(Number);
+
+    const date = new Date(year, month - 1, day);
+
+    return convertStringFormatDateTime(date);
+  }
+
+  // ISO date: 2026-09-30T00:00:00.000Z
+  if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}T/.test(value)) {
+    const date = new Date(value);
+
+    if (!isNaN(date.getTime())) {
+      return convertStringFormatDateTime(date);
+    }
+  }
+
+  if (Array.isArray(value)) {
+    return JSON.stringify(value);
+  }
+
+  if (typeof value === "object") {
+    return JSON.stringify(value);
+  }
+
+  return String(value);
+};
+
+/**
+ * Recursively compare old and new objects
+ */
+const getChangedFields = (
+  oldData,
+  newData,
+  parentPath = "",
+  ignoredFields = [],
+) => {
   const changes = [];
 
-  const oldObject = oldData?.toObject ? oldData.toObject() : oldData || {};
+  const oldObject = oldData && typeof oldData === "object" ? oldData : {};
 
-  const newObject = newData?.toObject ? newData.toObject() : newData || {};
-
-  const compare = (oldValue, newValue, path) => {
-    // Ignore audit/system fields
-    if (IGNORED_FIELDS.has(path)) {
-      return;
-    }
-
-    // Arrays are treated as one field.
-    // This is usually preferable for fields such as:
-    // additionalAccess
-    // emergencyContacts
-    // documents.aadharCard
-    if (Array.isArray(oldValue) || Array.isArray(newValue)) {
-      if (!valuesEqual(oldValue, newValue)) {
-        changes.push({
-          field: path,
-          oldValue: normalizeValue(oldValue),
-          newValue: normalizeValue(newValue),
-        });
-      }
-
-      return;
-    }
-
-    // Nested objects
-    if (isObject(oldValue) || isObject(newValue)) {
-      const oldObjectValue = isObject(oldValue) ? oldValue : {};
-      const newObjectValue = isObject(newValue) ? newValue : {};
-
-      const keys = new Set([
-        ...Object.keys(oldObjectValue),
-        ...Object.keys(newObjectValue),
-      ]);
-
-      for (const key of keys) {
-        if (IGNORED_FIELDS.has(key)) {
-          continue;
-        }
-
-        const currentPath = path ? `${path}.${key}` : key;
-
-        compare(oldObjectValue[key], newObjectValue[key], currentPath);
-      }
-
-      return;
-    }
-
-    // Primitive / Date / ObjectId / null
-    if (!valuesEqual(oldValue, newValue)) {
-      changes.push({
-        field: path,
-        oldValue: normalizeValue(oldValue),
-        newValue: normalizeValue(newValue),
-      });
-    }
-  };
+  const newObject = newData && typeof newData === "object" ? newData : {};
 
   const keys = new Set([...Object.keys(oldObject), ...Object.keys(newObject)]);
 
   for (const key of keys) {
-    if (IGNORED_FIELDS.has(key)) {
+    // ⭐ IMPORTANT
+    // Ignore workLogs, createdAt, updatedAt, etc.
+    if (shouldIgnoreField(key, ignoredFields)) {
       continue;
     }
 
-    compare(oldObject[key], newObject[key], key);
+    const oldValue = oldObject[key];
+    const newValue = newObject[key];
+
+    const currentPath = parentPath ? `${parentPath}.${key}` : key;
+
+    /**
+     * Nested object
+     */
+    if (
+      oldValue &&
+      newValue &&
+      typeof oldValue === "object" &&
+      typeof newValue === "object" &&
+      !Array.isArray(oldValue) &&
+      !Array.isArray(newValue) &&
+      !(oldValue instanceof Date) &&
+      !(newValue instanceof Date)
+    ) {
+      changes.push(
+        ...getChangedFields(oldValue, newValue, currentPath, ignoredFields),
+      );
+
+      continue;
+    }
+
+    const oldNormalized = normalizeValue(oldValue);
+    const newNormalized = normalizeValue(newValue);
+
+    if (oldNormalized !== newNormalized) {
+      const readablePath = currentPath
+        .split(".")
+        .map(formatFieldName)
+        .join(" ");
+
+      changes.push(
+        `${readablePath} changed from "${oldNormalized || "Blank"}" to "${
+          newNormalized || "Blank"
+        }"`,
+      );
+    }
   }
 
   return changes;
 };
 
-const addWorklog = ({
-  document,
-  action,
-  changes = [],
-  req,
-  description = "",
+/**
+ * Create WorkLog
+ */
+const createWorkLog = ({ message, createdBy = "System" }) => {
+  return {
+    message,
+    createdBy,
+    createdAt: convertStringFormatDateTime(new Date()),
+  };
+};
+
+/**
+ * Generate automatic WorkLogs
+ */
+const generateWorkLogs = ({
+  oldData,
+  newData,
+  createdBy = "System",
+  ignoredFields = [],
 }) => {
-  if (!document) {
-    throw new Error("Document is required for worklog.");
+  const changes = getChangedFields(oldData, newData, "", ignoredFields);
+
+  if (changes.length === 0) {
+    return [];
   }
 
-  if (!action) {
-    throw new Error("Worklog action is required.");
-  }
-
-  if (!Array.isArray(changes) || changes.length === 0) {
-    return document;
-  }
-
-  const userId = req?.user?._id;
-
-  const userName =
-    req?.user?.name || req?.user?.fullName || req?.user?.employeeName || "";
-
-  if (!userId) {
-    throw new Error("Authenticated user is required to create a worklog.");
-  }
-
-  document.worklogs.push({
-    action,
-    description,
-    changes,
-    updatedBy: userId,
-    updatedByName: userName,
-    createdAt: new Date(),
-  });
-
-  return document;
+  return [
+    createWorkLog({
+      message: changes.join("\n"),
+      createdBy,
+    }),
+  ];
 };
 
 module.exports = {
   getChangedFields,
-  addWorklog,
+  createWorkLog,
+  generateWorkLogs,
+  formatFieldName,
 };

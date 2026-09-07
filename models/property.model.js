@@ -123,14 +123,18 @@ const PropertySchema = new mongoose.Schema(
     },
 
     // ---------------- WORKLOGS ----------------
-    worklogs: [
+   workLogs: [
       {
         message: String,
-        createdAt: { type: Date, default: Date.now },
+        createdBy: String,
+        createdAt: {
+          type: String,
+          default: String,
+        },
       },
     ],
   },
-  { timestamps: true }
+  { timestamps: true },
 );
 
 PropertySchema.index({ propertyCode: 1 });

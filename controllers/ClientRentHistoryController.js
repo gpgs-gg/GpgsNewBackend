@@ -86,7 +86,7 @@ exports.getClientRentHistory = async (req, res) => {
         { bedId: { $in: beds.map((item) => item._id) } },
         { monthName: { $regex: keyword, $options: "i" } },
         { paymentStatus: { $regex: keyword, $options: "i" } },
-        { paymentComments: { $regex: keyword, $options: "i" } },
+        { "paymentComments.comment": { $regex: keyword, $options: "i" } },
         { remarks: { $regex: keyword, $options: "i" } },
       ];
 

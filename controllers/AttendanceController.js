@@ -803,7 +803,26 @@ const getAllAttendance = async (req, res) => {
 
       query.employeeId = req.query.employeeId;
     }
+    // ==================================================
+    // DEPARTMENT FILTER
+    // ==================================================
 
+    if (req.query.department?.trim()) {
+      const department = req.query.department.trim();
+
+      const matchingEmployees = await Employee.find({
+        department: {
+          $regex: department,
+          $options: "i",
+        },
+      }).select("_id");
+
+      const employeeIds = matchingEmployees.map((employee) => employee._id);
+
+      query.employeeId = {
+        $in: employeeIds,
+      };
+    }
     // ==================================================
     // STATUS FILTER
     // ==================================================
@@ -994,7 +1013,7 @@ const getAllAttendance = async (req, res) => {
       message: error.message || "Failed to fetch all attendance",
     });
   }
-};
+};  
 // ======================================================
 // 6. GET ATTENDANCE BY ID
 // ======================================================

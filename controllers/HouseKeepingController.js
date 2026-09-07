@@ -44,7 +44,7 @@ const fetchHousekeepingData = asyncHandler(async (req, res) => {
     }));
   // 2. Get all active properties
   const properties = await Property.find(
-    {},
+    {status : "Active"},
     {
       propertyCode: 1,
     },

@@ -37,6 +37,7 @@ router.put("/:id",  upload.fields([
     { name: "collegeIdentification", maxCount: 10 },
     { name: "clientRentalAgreement", maxCount: 10 },
     { name: "clientPoliceNOC", maxCount: 10 },
+    { name: "handoverAttachment", maxCount: 10 },
   ]), updateClient);
 
 // Delete Client

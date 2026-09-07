@@ -7,6 +7,7 @@ const Booking = require("../models/newBooking.model");
 const ClientVacationHistory = require("../models/clientVacationHistory.model");
 const { recalculateRentHistory } = require("../services/rentHistory.service");
 const { enableClientLogin } = require("../services/clientLogin.service");
+const mongoose = require("mongoose")
 const {
   createClientRentHistory,
 } = require("../services/rentHistory.service");
@@ -1461,7 +1462,7 @@ exports.updateClient = async (req, res) => {
         ? req.body.photoExisting
         : [req.body.photoExisting])
       : [];
-
+const handoverFiles = getFiles("handoverAttachment");
     const existingAadhaarCard = req.body.aadhaarCardExisting
       ? (Array.isArray(req.body.aadhaarCardExisting)
         ? req.body.aadhaarCardExisting
@@ -1595,13 +1596,65 @@ exports.updateClient = async (req, res) => {
     }
     // ===============================================
     const wasBookingCancelled = client.isBookingCancelled;
+
+
+
+    // ===============================================
+    // F&F HANDOVER ATTACHMENT
+    // ===============================================
+
+    const existingHandoverAttachments = Array.isArray(
+      req.body.handoverAttachmentExisting,
+    )
+      ? req.body.handoverAttachmentExisting
+      : req.body.handoverAttachmentExisting
+        ? [req.body.handoverAttachmentExisting]
+        : [];
+
+    let fnfData = {};
+
+    if (req.body.fnf) {
+      try {
+        fnfData =
+          typeof req.body.fnf === "string"
+            ? JSON.parse(req.body.fnf)
+            : req.body.fnf;
+      } catch (error) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid F&F data",
+        });
+      }
+    }
+
+    // Keep only attachments user did NOT remove
+    let finalHandoverAttachments = [...existingHandoverAttachments];
+
+    // Upload newly selected files
+    if (handoverFiles.length > 0) {
+      const uploads = await Promise.all(
+        handoverFiles.map((file) =>
+          uploadFile(
+            file,
+            `Clients Docs/${client?.propertyId?.propertyCode}/${client?.fullName}/FNF`,
+          ),
+        ),
+      );
+
+      finalHandoverAttachments = [...finalHandoverAttachments, ...uploads];
+    }
+
+    fnfData.handoverAttachment = finalHandoverAttachments;
+
+    client.fnf = fnfData;
+
+
     // Update Other Fields
-    Object.keys(req.body).forEach((key) => {
-      if (!key.endsWith("Existing")) {
+ Object.keys(req.body).forEach((key) => {
+      if (!key.endsWith("Existing") && key !== "fnf") {
         client[key] = req.body[key];
       }
     });
-
     await client.save();
 
     if (
@@ -1766,7 +1819,103 @@ exports.deleteClient = async (req, res) => {
 
 exports.getNoticeClients = async (req, res) => {
   try {
-    const clients = await Client.aggregate([
+    const page = Math.max(Number(req.query.page) || 1, 1);
+    const limit = Math.max(Number(req.query.limit) || 10, 1);
+    const skip = (page - 1) * limit;
+
+    // ==========================================
+    // BUILD FILTER QUERY
+    // ==========================================
+    const filterQuery = {};
+
+    // ==========================================
+    // SEARCH
+    // ==========================================
+    if (req.query.search?.trim()) {
+      const search = req.query.search.trim();
+
+      filterQuery.$or = [
+        {
+          fullName: {
+            $regex: search,
+            $options: "i",
+          },
+        },
+        {
+          emailId: {
+            $regex: search,
+            $options: "i",
+          },
+        },
+        {
+          callingNo: {
+            $regex: search,
+            $options: "i",
+          },
+        },
+        {
+          whatsappNo: {
+            $regex: search,
+            $options: "i",
+          },
+        },
+        {
+          "property.propertyCode": {
+            $regex: search,
+            $options: "i",
+          },
+        },
+      ];
+    }
+
+    // ==========================================
+    // PROPERTY FILTER
+    // ==========================================
+    if (req.query.propertyId) {
+      if (!mongoose.Types.ObjectId.isValid(req.query.propertyId)) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid propertyId",
+        });
+      }
+
+      filterQuery.propertyId = new mongoose.Types.ObjectId(
+        req.query.propertyId,
+      );
+    }
+
+    // ==========================================
+    // FNF STATUS FILTER
+    // ==========================================
+    if (req.query.fnfStatus?.trim()) {
+      filterQuery["fnf.status"] = req.query.fnfStatus.trim();
+    }
+
+    // ==========================================
+    // STAY TYPE FILTER
+    // ==========================================
+    if (req.query.stayType?.trim()) {
+      filterQuery.stayType = req.query.stayType.trim();
+    }
+
+    // ==========================================
+    // CVD FILTER
+    // hasCvd=true => clientVacatingDate exists
+    // ==========================================
+    if (req.query.hasCvd === "true") {
+      filterQuery.clientVacatingDate = {
+        $exists: true,
+        $nin: [null, ""],
+      };
+    }
+
+    // ==========================================
+    // AGGREGATION
+    // ==========================================
+    const result = await Client.aggregate([
+      // ==========================================
+      // ONLY NOTICE CLIENTS
+      // ==========================================
       {
         $match: {
           isBookingCancelled: false,
@@ -1777,80 +1926,9 @@ exports.getNoticeClients = async (req, res) => {
         },
       },
 
-      {
-        $lookup: {
-          from: "clientrenthistories",
-          let: {
-            clientId: "$_id",
-          },
-
-          pipeline: [
-            {
-              $match: {
-                $expr: {
-                  $eq: ["$clientId", "$$clientId"],
-                },
-              },
-            },
-            {
-              $sort: {
-                year: -1,
-                month: -1,
-                createdAt: -1,
-                _id: -1,
-              },
-            },
-            {
-              $limit: 1,
-            },
-          ],
-
-          as: "latestRentHistory",
-        },
-      },
-// ==========================================
-// TOTAL PAID DEPOSIT
-// ==========================================
-{
-  $lookup: {
-    from: "clientrenthistories",
-    let: {
-      clientId: "$_id",
-    },
-    pipeline: [
-      {
-        $match: {
-          $expr: {
-            $eq: ["$clientId", "$$clientId"],
-          },
-        },
-      },
-      {
-        $group: {
-          _id: null,
-          totalPaidDeposit: {
-            $sum: {
-              $toDouble: {
-                $ifNull: [
-                  "$depositAmount",
-                  0,
-                ],
-              },
-            },
-          },
-        },
-      },
-    ],
-    as: "depositSummary",
-  },
-},
-      {
-        $unwind: {
-          path: "$latestRentHistory",
-          preserveNullAndEmptyArrays: true,
-        },
-      },
-
+      // ==========================================
+      // PROPERTY
+      // ==========================================
       {
         $lookup: {
           from: "properties",
@@ -1867,6 +1945,16 @@ exports.getNoticeClients = async (req, res) => {
         },
       },
 
+      // ==========================================
+      // SEARCH + FILTERS
+      // ==========================================
+      {
+        $match: filterQuery,
+      },
+
+      // ==========================================
+      // BED
+      // ==========================================
       {
         $lookup: {
           from: "beds",
@@ -1883,9 +1971,98 @@ exports.getNoticeClients = async (req, res) => {
         },
       },
 
+      // ==========================================
+      // LATEST RENT HISTORY
+      // ==========================================
+      {
+        $lookup: {
+          from: "clientrenthistories",
+          let: {
+            clientId: "$_id",
+          },
+
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $eq: ["$clientId", "$$clientId"],
+                },
+              },
+            },
+
+            {
+              $sort: {
+                year: -1,
+                month: -1,
+                createdAt: -1,
+                _id: -1,
+              },
+            },
+
+            {
+              $limit: 1,
+            },
+          ],
+
+          as: "latestRentHistory",
+        },
+      },
+
+      {
+        $unwind: {
+          path: "$latestRentHistory",
+          preserveNullAndEmptyArrays: true,
+        },
+      },
+
+      // ==========================================
+      // TOTAL PAID DEPOSIT
+      // ==========================================
+      {
+        $lookup: {
+          from: "clientrenthistories",
+          let: {
+            clientId: "$_id",
+          },
+
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $eq: ["$clientId", "$$clientId"],
+                },
+              },
+            },
+
+            {
+              $group: {
+                _id: null,
+
+                totalPaidDeposit: {
+                  $sum: {
+                    $convert: {
+                      input: "$depositAmount",
+                      to: "double",
+                      onError: 0,
+                      onNull: 0,
+                    },
+                  },
+                },
+              },
+            },
+          ],
+
+          as: "depositSummary",
+        },
+      },
+
+      // ==========================================
+      // PROJECT
+      // ==========================================
       {
         $project: {
           _id: 1,
+
           fullName: 1,
           emailId: 1,
           callingNo: 1,
@@ -1895,44 +2072,149 @@ exports.getNoticeClients = async (req, res) => {
           noticeStartDate: 1,
           noticeLastDate: 1,
           clientVacatingDate: 1,
-          fnf: 1,
-   
+
           stayType: 1,
           status: 1,
           isBookingCancelled: 1,
-totalPaidDeposit: {
-  $ifNull: [
-    {
-      $arrayElemAt: [
-        "$depositSummary.totalPaidDeposit",
-        0,
-      ],
-    },
-    0,
-  ],
-},
+
           propertyId: 1,
           propertyCode: "$property.propertyCode",
 
-          bedId: 1,
+          bedId: "$bed._id",
           roomNo: "$bed.roomNo",
           bedNo: "$bed.bedNo",
 
+          // ========================================
+          // FNF
+          // ========================================
+          fnf: {
+            $mergeObjects: [
+              {
+                status: "",
+                bankDetailReceived: "",
+                fnfAmount: 0,
+                remarks: "",
+              },
+              {
+                $ifNull: ["$fnf", {}],
+              },
+              {
+                // Put deposit + due inside fnf because
+                // frontend is reading them from item.fnf
+                totalPaidDeposit: {
+                  $ifNull: [
+                    {
+                      $arrayElemAt: ["$depositSummary.totalPaidDeposit", 0],
+                    },
+                    0,
+                  ],
+                },
+
+                currentDue: {
+                  $convert: {
+                    input: {
+                      $ifNull: ["$latestRentHistory.currentDue", 0],
+                    },
+                    to: "double",
+                    onError: 0,
+                    onNull: 0,
+                  },
+                },
+              },
+            ],
+          },
+
+          // ========================================
+          // LATEST RENT HISTORY
+          // ========================================
           latestRentHistory: 1,
         },
       },
 
+      // ==========================================
+      // SORT
+      // ==========================================
       {
         $sort: {
           noticeLastDate: 1,
+          fullName: 1,
+          _id: 1,
+        },
+      },
+
+      // ==========================================
+      // PAGINATION + COUNT + TOTALS
+      // ==========================================
+      {
+        $facet: {
+          data: [
+            {
+              $skip: skip,
+            },
+            {
+              $limit: limit,
+            },
+          ],
+
+          totalCount: [
+            {
+              $count: "count",
+            },
+          ],
+
+          totalPaidDeposit: [
+            {
+              $group: {
+                _id: null,
+
+                total: {
+                  $sum: {
+                    $convert: {
+                      input: "$fnf.totalPaidDeposit",
+                      to: "double",
+                      onError: 0,
+                      onNull: 0,
+                    },
+                  },
+                },
+              },
+            },
+          ],
         },
       },
     ]);
 
+    // ==========================================
+    // RESULT
+    // ==========================================
+    const data = result[0]?.data || [];
+
+    const totalCount = result[0]?.totalCount?.[0]?.count || 0;
+
+    const totalPages = Math.ceil(totalCount / limit);
+
+    const totalPaidDeposit = result[0]?.totalPaidDeposit?.[0]?.total || 0;
+
     return res.status(200).json({
       success: true,
-      count: clients.length,
-      data: clients,
+
+      count: data.length,
+
+      totalCount,
+
+      totalPages,
+
+      currentPage: page,
+
+      limit,
+
+      hasNextPage: page < totalPages,
+
+      hasPreviousPage: page > 1,
+
+      totalPaidDeposit,
+
+      data,
     });
   } catch (error) {
     console.error("Get Notice Clients Error:", error);
@@ -1949,7 +2231,45 @@ exports.getClientsWithLatestRentHistory = async (req, res) => {
     const page = Math.max(Number(req.query.page) || 1, 1);
     const limit = Math.max(Number(req.query.limit) || 10, 1);
     const skip = (page - 1) * limit;
+    // Build filter query for aggregation
+    const filterQuery = {};
 
+    // Search
+    if (req.query.search) {
+      filterQuery.$or = [
+        {
+          "property.propertyCode": {
+            $regex: req.query.search,
+            $options: "i",
+          },
+        },
+        {
+          "property.propertyLocation": {
+            $regex: req.query.search,
+            $options: "i",
+          },
+        },
+      ];
+    }
+
+    // Filters
+    // Filters
+    if (req.query.propertyId) {
+      if (!mongoose.Types.ObjectId.isValid(req.query.propertyId)) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid propertyId",
+        });
+      }
+
+      filterQuery.propertyId = new mongoose.Types.ObjectId(
+        req.query.propertyId,
+      );
+    }
+
+    if (req.query.propertyLocation) {
+      filterQuery["property.propertyLocation"] = req.query.propertyLocation;
+    }
     const clients = await Client.aggregate([
       {
         $match: {
@@ -1972,7 +2292,10 @@ exports.getClientsWithLatestRentHistory = async (req, res) => {
           preserveNullAndEmptyArrays: true,
         },
       },
-
+      // Apply search + filters AFTER property lookup
+      {
+        $match: filterQuery,
+      },
       {
         $lookup: {
           from: "beds",
@@ -2080,10 +2403,7 @@ exports.getClientsWithLatestRentHistory = async (req, res) => {
           rentNotReceivedComment: {
             $ifNull: [
               {
-                $arrayElemAt: [
-                  "$rentNotReceivedComment",
-                  0,
-                ],
+                $arrayElemAt: ["$rentNotReceivedComment", 0],
               },
               {
                 _id: null,
@@ -2102,54 +2422,37 @@ exports.getClientsWithLatestRentHistory = async (req, res) => {
             startDate: "$latestRentHistory.startDate",
             endDate: "$latestRentHistory.endDate",
 
-            monthlyRent:
-              "$latestRentHistory.monthlyRent",
+            monthlyRent: "$latestRentHistory.monthlyRent",
 
-            daysCount:
-              "$latestRentHistory.daysCount",
+            daysCount: "$latestRentHistory.daysCount",
 
-            rentDivider:
-              "$latestRentHistory.rentDivider",
+            rentDivider: "$latestRentHistory.rentDivider",
 
-            totalRent:
-              "$latestRentHistory.totalRent",
+            totalRent: "$latestRentHistory.totalRent",
 
-            totalReceived:
-              "$latestRentHistory.totalReceived",
+            totalReceived: "$latestRentHistory.totalReceived",
 
             currentDue: {
-              $ifNull: [
-                "$latestRentHistory.currentDue",
-                0,
-              ],
+              $ifNull: ["$latestRentHistory.currentDue", 0],
             },
 
-            paymentStatus:
-              "$latestRentHistory.paymentStatus",
+            paymentStatus: "$latestRentHistory.paymentStatus",
 
-            ebAmt:
-              "$latestRentHistory.ebAmt",
+            ebAmt: "$latestRentHistory.ebAmt",
 
-            flatEB:
-              "$latestRentHistory.flatEB",
+            flatEB: "$latestRentHistory.flatEB",
 
-            adjEB:
-              "$latestRentHistory.adjEB",
+            adjEB: "$latestRentHistory.adjEB",
 
-            adjAmt:
-              "$latestRentHistory.adjAmt",
+            adjAmt: "$latestRentHistory.adjAmt",
 
-            processingFees:
-              "$latestRentHistory.processingFees",
+            processingFees: "$latestRentHistory.processingFees",
 
-            parkingCharges:
-              "$latestRentHistory.parkingCharges",
+            parkingCharges: "$latestRentHistory.parkingCharges",
 
-            depositAmount:
-              "$latestRentHistory.depositAmount",
+            depositAmount: "$latestRentHistory.depositAmount",
 
-            depositAmountReceived:
-              "$latestRentHistory.depositAmountReceived",
+            depositAmountReceived: "$latestRentHistory.depositAmountReceived",
           },
         },
       },
@@ -2186,10 +2489,7 @@ exports.getClientsWithLatestRentHistory = async (req, res) => {
                 total: {
                   $sum: {
                     $toDouble: {
-                      $ifNull: [
-                        "$latestRentHistory.currentDue",
-                        0,
-                      ],
+                      $ifNull: ["$latestRentHistory.currentDue", 0],
                     },
                   },
                 },
@@ -2204,15 +2504,11 @@ exports.getClientsWithLatestRentHistory = async (req, res) => {
 
     const data = result.data || [];
 
-    const totalCount =
-      result.totalCount?.[0]?.count || 0;
+    const totalCount = result.totalCount?.[0]?.count || 0;
 
-    const totalCurrentDue =
-      result.totalCurrentDue?.[0]?.total || 0;
+    const totalCurrentDue = result.totalCurrentDue?.[0]?.total || 0;
 
-    const totalPages = Math.ceil(
-      totalCount / limit
-    );
+    const totalPages = Math.ceil(totalCount / limit);
 
     return res.status(200).json({
       success: true,
@@ -2236,10 +2532,7 @@ exports.getClientsWithLatestRentHistory = async (req, res) => {
       data,
     });
   } catch (error) {
-    console.error(
-      "Get Clients With Latest Rent History Error:",
-      error
-    );
+    console.error("Get Clients With Latest Rent History Error:", error);
 
     return res.status(500).json({
       success: false,
@@ -2247,6 +2540,12 @@ exports.getClientsWithLatestRentHistory = async (req, res) => {
     });
   }
 };
+
+
+
+
+
+
 
 // exports.getClientsWithLatestRentHistory = async (req, res) => {
 //   try {

@@ -47,7 +47,7 @@ const fetchMaintenanceData = asyncHandler(async (req, res) => {
       })) || [];
   // 2. Properties
   const properties = await Property.find(
-    {},
+    { status: "Active" },
     {
       propertyCode: 1,
     },
