@@ -295,16 +295,17 @@ const ClientSchema = new mongoose.Schema(
         // WORKLOGS
         // ===================================
 
-        worklogs: [
-            {
-                message: String,
-
-                createdAt: {
-                    type: Date,
-                    default: Date.now,
-                },
-            },
-        ],
+      worklogs: [
+      {
+        message: String,
+        // Why: We need to know which user created the worklog.
+        createdBy: String,
+        createdAt: {
+          type: Date,
+          default: Date.now,
+        },
+      },
+    ],
     },
     {
         timestamps: true,

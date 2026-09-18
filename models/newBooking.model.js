@@ -168,6 +168,17 @@ const bookingSchema = new mongoose.Schema(
             enum: ["Booked", "Not Booked"],
             default: "Not Booked",
         },
+        
+        workLogs: [
+      {
+        message: String,
+        createdBy: String,
+        createdAt: {
+          type: String,
+          default: String,
+        },
+      },
+    ],
         // Daily Booking
 // dailyPropertyId: {
 //     type: mongoose.Schema.Types.ObjectId,

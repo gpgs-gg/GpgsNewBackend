@@ -14,17 +14,18 @@ const {
 const uploadFile = require("../services/uploadFile");
 
 const ClientRentHistory = require("../models/clientRentHistory.model");
+const { generateWorkLogs, createWorkLog } = require("../utils/worklog");
 
 
   exports.createDummyClients = async (req, res) => {
     try {
       const clients = [];
 
-      for (let i = 1; i <= 20000; i++) {
+      for (let i = 1; i <= 2000; i++) {
         clients.push({
-          propertyId: "6a5f00cf449ad08b14340eca",
-          bedId: "6a5f02c8449ad08b14340ecb",
-          bookingId: "6a4f785416d15e9afa6e829e",
+          propertyId: "6aa39e572d964162cb933cdf",
+          bedId: "6aa4ec3213e0732c147090ba",
+          bookingId: "6aab8c15ccb2b3635afa7408",
 
           stayType: "P. Booked",
           status: "Booked",
@@ -1396,7 +1397,22 @@ exports.updateClient = async (req, res) => {
         message: "Client not found",
       });
     }
+// ============================================================
+    // CAPTURE OLD CLIENT DATA
+    // ============================================================
+    // Why: generateWorkLogs needs the original document to compare
+    // against the final updated document.
+    const oldClientData = client.toObject();
 
+    // Normalize populated references for worklog comparison
+    oldClientData.propertyId =
+      client.propertyId?._id?.toString() || client.propertyId?.toString();
+
+    oldClientData.bedId =
+      client.bedId?._id?.toString() || client.bedId?.toString();
+    // Old Values
+    const oldEmail = client.emailId;
+    const oldFullName = client.fullName;
     // Old Values
     const oldData = {
       clientDoj: client.clientDoj,
@@ -1409,7 +1425,7 @@ exports.updateClient = async (req, res) => {
     };
 
     // Temporary -> Permanent
-    // Temporary -> Permanent
+   
     if (
       client.stayType === "T. Booked" &&
       req.body.stayType === "P. Booked"
@@ -1611,42 +1627,51 @@ const handoverFiles = getFiles("handoverAttachment");
         ? [req.body.handoverAttachmentExisting]
         : [];
 
-    let fnfData = {};
+// ONLY update FNF when FNF data or handover files are actually sent
+if (req.body.fnf !== undefined || handoverFiles.length > 0) {
+  let fnfData = {};
 
-    if (req.body.fnf) {
-      try {
-        fnfData =
-          typeof req.body.fnf === "string"
-            ? JSON.parse(req.body.fnf)
-            : req.body.fnf;
-      } catch (error) {
-        return res.status(400).json({
-          success: false,
-          message: "Invalid F&F data",
-        });
-      }
+  if (req.body.fnf !== undefined) {
+    try {
+      fnfData =
+        typeof req.body.fnf === "string"
+          ? JSON.parse(req.body.fnf)
+          : req.body.fnf;
+    } catch (error) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid F&F data",
+      });
     }
+  } else {
+    // Keep existing FNF values
+    fnfData = client.fnf?.toObject
+      ? client.fnf.toObject()
+      : client.fnf || {};
+  }
 
-    // Keep only attachments user did NOT remove
-    let finalHandoverAttachments = [...existingHandoverAttachments];
+  let finalHandoverAttachments = [...existingHandoverAttachments];
 
-    // Upload newly selected files
-    if (handoverFiles.length > 0) {
-      const uploads = await Promise.all(
-        handoverFiles.map((file) =>
-          uploadFile(
-            file,
-            `Clients Docs/${client?.propertyId?.propertyCode}/${client?.fullName}/FNF`,
-          ),
-        ),
-      );
+  if (handoverFiles.length > 0) {
+    const uploads = await Promise.all(
+      handoverFiles.map((file) =>
+        uploadFile(
+          file,
+          `Clients Docs/${client?.propertyId?.propertyCode}/${client?.fullName}/FNF`,
+        )
+      )
+    );
 
-      finalHandoverAttachments = [...finalHandoverAttachments, ...uploads];
-    }
+    finalHandoverAttachments = [
+      ...finalHandoverAttachments,
+      ...uploads,
+    ];
+  }
 
-    fnfData.handoverAttachment = finalHandoverAttachments;
+  fnfData.handoverAttachment = finalHandoverAttachments;
 
-    client.fnf = fnfData;
+  client.fnf = fnfData;
+}
 
 
     // Update Other Fields
@@ -1655,24 +1680,166 @@ const handoverFiles = getFiles("handoverAttachment");
         client[key] = req.body[key];
       }
     });
-    await client.save();
 
-    if (
-      wasBookingCancelled !== client.isBookingCancelled
-    ) {
-      await User.findOneAndUpdate(
-        {
-          bookingId: client.bookingId,
-          role: "Client",
-        },
-        {
-          $set: {
-            isActive: !client.isBookingCancelled,
-          },
-        }
+// ============================================================
+    // AUTOMATIC WORKLOG FOR EVERY CHANGED FIELD
+    // ============================================================
+
+    // Get the user who performed the update.
+    // Why: Every automatic worklog must identify who changed the data.
+    const user =
+      req.body.updatedByName ||
+      req.body.createdByName ||
+      req.user?.name ||
+      req.user?.Name ||
+      "System";
+    console.log("user", user);
+    // Convert the final Client document into a plain object.
+    // Why: At this point all normal fields, uploaded documents,
+    // F&F data, bed changes, etc. have already been applied.
+    const newClientData = client.toObject();
+
+    // Normalize references for worklog comparison
+    newClientData.propertyId =
+      client.propertyId?._id?.toString() || client.propertyId?.toString();
+
+    newClientData.bedId =
+      client.bedId?._id?.toString() || client.bedId?.toString();
+
+    // Generate worklogs by comparing the complete old Client
+    // with the complete updated Client.
+    // where every changed field gets its own worklog.
+    const automaticWorkLogs = generateWorkLogs({
+      oldData: oldClientData,
+      newData: newClientData,
+      createdBy: user,
+
+      ignoredFields: [
+        "newWorkLog",
+        "worklogs",
+
+        "_id",
+        "createdAt",
+        "updatedAt",
+        "__v",
+
+        "createdByName",
+        "updatedByName",
+
+        "photoExisting",
+        "aadhaarCardExisting",
+        "panExisting",
+        "collegeIdentificationExisting",
+        "companyIdentificationExisting",
+        "clientRentalAgreementExisting",
+        "clientPoliceNOCExisting",
+        "handoverAttachmentExisting",
+
+        "temporaryPropertyId",
+        "temporaryBedId",
+        "temporaryClientDoj",
+        "temporaryClientLastDate",
+
+        // FNF is handled separately
+      ],
+    });
+
+    // Add all automatically generated field-change logs.
+    client.worklogs.push(...automaticWorkLogs);
+
+    // ============================================================
+    // MANUAL WORKLOG
+    // ============================================================
+
+    // newWorkLog is a manually entered note from the user.
+    // Why: Keep manual notes separate from automatic field changes.
+    const newWorkLog = String(req.body.newWorkLog || "").trim();
+
+    if (newWorkLog) {
+      client.worklogs.push(
+        createWorkLog({
+          message: newWorkLog,
+          createdBy: user,
+        }),
       );
     }
-    await client.save();
+
+    // Do not allow the frontend-only field to be saved as a Client field.
+    delete req.body.newWorkLog;
+    const session = await mongoose.startSession();
+
+    try {
+      await session.withTransaction(async () => {
+        // ========================================================
+        // SAVE CLIENT
+        // ========================================================
+
+        await client.save({ session });
+
+        // ========================================================
+        // UPDATE USER ACTIVE STATUS
+        // ========================================================
+
+        if (wasBookingCancelled !== client.isBookingCancelled) {
+          await User.findOneAndUpdate(
+            {
+              bookingId: client.bookingId,
+              role: "Client",
+            },
+            {
+              $set: {
+                isActive: !client.isBookingCancelled,
+              },
+            },
+            { session },
+          );
+        }
+
+        // ========================================================
+        // SYNC CLIENT NAME & EMAIL WITH USER
+        // ONLY WHEN LOGIN IS ENABLED
+        // ========================================================
+
+        if (
+          client.loginEnabled === true &&
+          ((req.body.emailId !== undefined && req.body.emailId !== oldEmail) ||
+            (req.body.fullName !== undefined &&
+              req.body.fullName !== oldFullName))
+        ) {
+
+          const user = await User.findOne({
+            bookingId: client.bookingId,
+            role: "Client",
+          }).session(session);
+
+          if (user) {
+            // Update ONLY User email
+            if (
+              req.body.emailId !== undefined &&
+              req.body.emailId !== oldEmail
+            ) {
+              user.email = client.emailId;
+            }
+
+            // Update ONLY User name
+            if (
+              req.body.fullName !== undefined &&
+              req.body.fullName !== oldFullName
+            ) {
+              user.name = client.fullName;
+            }
+
+            await user.save({ session });
+
+            console.log("Client User name/email synchronized successfully");
+          }
+        }
+      });
+    } finally {
+      await session.endSession();
+    }
+
+
     const shouldRecalculate =
       oldData.clientDoj !== client.clientDoj ||
       oldData.noticeLastDate !== client.noticeLastDate ||
@@ -1822,7 +1989,25 @@ exports.getNoticeClients = async (req, res) => {
     const page = Math.max(Number(req.query.page) || 1, 1);
     const limit = Math.max(Number(req.query.limit) || 10, 1);
     const skip = (page - 1) * limit;
+// ==========================================
+    // SORT
+    // CVD FILTER ON  → CVD first, then NLD
+    // CVD FILTER OFF → NLD first
+    // ==========================================
 
+    const sortQuery =
+      req.query.hasCvd === "true"
+        ? {
+            clientVacatingDate: 1,
+            noticeLastDate: 1,
+            fullName: 1,
+            _id: 1,
+          }
+        : {
+            noticeLastDate: 1,
+            fullName: 1,
+            _id: 1,
+          };
     // ==========================================
     // BUILD FILTER QUERY
     // ==========================================
@@ -1902,10 +2087,18 @@ exports.getNoticeClients = async (req, res) => {
     // CVD FILTER
     // hasCvd=true => clientVacatingDate exists
     // ==========================================
-    if (req.query.hasCvd === "true") {
-      filterQuery.clientVacatingDate = {
-        $exists: true,
-        $nin: [null, ""],
+if (req.query.hasCvd === "true") {
+      filterQuery.$expr = {
+        $gt: [
+          {
+            $strLenCP: {
+              $trim: {
+                input: { $ifNull: ["$clientVacatingDate", ""] },
+              },
+            },
+          },
+          0,
+        ],
       };
     }
 
@@ -2135,11 +2328,7 @@ exports.getNoticeClients = async (req, res) => {
       // SORT
       // ==========================================
       {
-        $sort: {
-          noticeLastDate: 1,
-          fullName: 1,
-          _id: 1,
-        },
+       $sort: sortQuery,
       },
 
       // ==========================================

@@ -827,7 +827,21 @@ exports.getAllTransactions = async (req, res) => {
     }
 
     if (req.query.narration) {
-      query.narration = { $regex: req.query.narration, $options: "i" };
+      query.narration = {
+        $regex: req.query.narration,
+        $options: "i"
+      };
+    } else if (req.query.transactionType === "salary") {
+      // Salary table → ONLY salary transactions
+      query.narration = {
+        $regex: "salary",
+        $options: "i"
+      };
+    } else {
+      // Normal table → Salary transactions exclude
+      query.narration = {
+        $not: /salary/i
+      };
     }
 
     if (req.query.minAmount || req.query.maxAmount) {
@@ -938,7 +952,7 @@ exports.getAllTransactions = async (req, res) => {
 exports.getTransactionById = async (req, res) => {
   try {
     const { account, id } = req.params;
-
+        console.log(1111111111, account ,  id)
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return res.status(400).json({
         success: false,
@@ -1119,27 +1133,26 @@ exports.updateTransaction = async (req, res) => {
       { key: "isMapped", label: "Mapped" },
     ];
 
-fields.forEach(({ key, label }) => {
-  const oldValue = transaction[key] ?? "";
-  const newValue = req.body[key];
+    fields.forEach(({ key, label }) => {
+      const oldValue = transaction[key] ?? "";
+      const newValue = req.body[key];
 
-  if (
-    newValue !== undefined &&
-    String(oldValue) !== String(newValue)
-  ) {
-    if (key === "isMapped") {
-      changes.push(
-        `${label} changed from "${oldValue ? "Yes" : "No"}" to "${
-          newValue === true || newValue === "true" ? "Yes" : "No"
-        }"`
-      );
-    } else {
-      changes.push(
-        `${label} changed from "${oldValue || "Blank"}" to "${newValue || "Blank"}"`
-      );
-    }
-  }
-});
+      if (
+        newValue !== undefined &&
+        String(oldValue) !== String(newValue)
+      ) {
+        if (key === "isMapped") {
+          changes.push(
+            `${label} changed from "${oldValue ? "Yes" : "No"}" to "${newValue === true || newValue === "true" ? "Yes" : "No"
+            }"`
+          );
+        } else {
+          changes.push(
+            `${label} changed from "${oldValue || "Blank"}" to "${newValue || "Blank"}"`
+          );
+        }
+      }
+    });
 
     const oldPropertyId = transaction.propertyId
       ? String(transaction.propertyId)
@@ -1605,6 +1618,7 @@ exports.updateClientRentHistoryReceived = async (req, res) => {
       year,
       amount,
       transactionId,
+      expenseCategory
     } = req.body;
     // ===============================
     // Check Transaction
@@ -1730,6 +1744,9 @@ exports.updateClientRentHistoryReceived = async (req, res) => {
     transaction.propertyId = propertyId;
     transaction.bedId = bedId;
     transaction.rentHistoryId = history._id;
+    // existing transaction values ko preserve karo
+    transaction.expenseCategory = expenseCategory;
+
     await transaction.save();
     return res.status(200).json({
       success: true,
@@ -1747,9 +1764,10 @@ exports.updateClientRentHistoryReceived = async (req, res) => {
 };
 
 exports.getTransactionByNarration = async (req, res) => {
+   
   try {
     const { narration } = req.params;
-
+   console.log("narration", narration)
     if (!narration?.trim()) {
       return res.status(400).json({
         success: false,

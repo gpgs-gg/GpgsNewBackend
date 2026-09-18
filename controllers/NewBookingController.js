@@ -2,12 +2,22 @@ const Booking = require("../models/newBooking.model");
 const Client = require("../models/client.model");
 const User = require("../models/user.model");
 const Property = require("../models/property.model")
-const Bed = require("../models/bed.model")
+const Bed = require("../models/bed.model");
+const { createWorkLog, generateWorkLogs } = require("../utils/worklog");
 // CREATE BOOKING
 exports.createBooking = async (req, res) => {
   try {
-    const booking = await Booking.create(req.body);
 
+    const user = req.body.createdByName || req.body.updatedByName || "System";
+    const booking = await Booking.create(req.body);
+    // Worklog for booking creation
+    booking.workLogs.push(
+      createWorkLog({
+        message: `Booking created by ${user}`,
+        createdBy: user,
+      }),
+    );
+    await booking.save();
     res.status(201).json({
       success: true,
       message: "Booking created successfully",
@@ -313,14 +323,7 @@ exports.getBookingById = async (req, res) => {
 // UPDATE BOOKING
 exports.updateBooking = async (req, res) => {
   try {
-    const booking = await Booking.findByIdAndUpdate(
-      req.params.id,
-      req.body,
-      {
-        new: true,
-        runValidators: true,
-      }
-    );
+    const booking = await Booking.findById(req.params.id);
 
     if (!booking) {
       return res.status(404).json({
@@ -328,11 +331,168 @@ exports.updateBooking = async (req, res) => {
         message: "Booking not found",
       });
     }
+    const user =
+      req.body.updatedByName ||
+      req.body.createdByName ||
+      req.user?.name ||
+      req.body?.user ||
+      "system";
+    let workLogs = booking.workLogs || [];
+    // ============================================================
+    // PREPARE NEW DATA FOR WORKLOG COMPARISON
+    // ============================================================
+    const updateData = {
+      ...req.body,
+    };
+    delete updateData.newWorkLog;
+    delete updateData.createdByName;
+    delete updateData.updatedByName;
+    delete updateData.workLogs;
+
+    // Merge existing booking with partial update data.
+    // This prevents unchanged fields from becoming "Blank"
+    // when they are not included in req.body.
+    const newBookingData = {
+      ...booking.toObject(),
+      ...updateData,
+    };
+    // ============================================================
+    // CONVERT PROPERTY ID / BED ID TO DISPLAY VALUES FOR WORKLOG
+    // ============================================================
+    const oldBookingData = booking.toObject();
+    // OLD PROPERTY
+    if (oldBookingData.propertyId) {
+      const oldProperty = await Property.findById(oldBookingData.propertyId);
+
+      if (oldProperty) {
+        oldBookingData.propertyId = oldProperty.propertyCode;
+      }
+    }
+
+    // OLD BED
+    if (oldBookingData.bedId) {
+      const oldBed = await Bed.findById(oldBookingData.bedId);
+
+      if (oldBed) {
+        oldBookingData.bedId = oldBed.bedNo;
+      }
+    }
+
+    // NEW PROPERTY
+    if (newBookingData.propertyId) {
+      const newProperty = await Property.findById(newBookingData.propertyId);
+
+      if (newProperty) {
+        newBookingData.propertyId = newProperty.propertyCode;
+      }
+    }
+
+    // NEW BED
+    if (newBookingData.bedId) {
+      const newBed = await Bed.findById(newBookingData.bedId);
+
+      if (newBed) {
+        newBookingData.bedId = newBed.bedNo;
+      }
+    }
+
+    // OLD TEMPORARY PROPERTY
+    if (oldBookingData.temporaryPropertyId) {
+      const oldTemporaryProperty = await Property.findById(
+        oldBookingData.temporaryPropertyId,
+      );
+
+      if (oldTemporaryProperty) {
+        oldBookingData.temporaryPropertyId = oldTemporaryProperty.propertyCode;
+      }
+    }
+
+    // OLD TEMPORARY BED
+    if (oldBookingData.temporaryBedId) {
+      const oldTemporaryBed = await Bed.findById(oldBookingData.temporaryBedId);
+
+      if (oldTemporaryBed) {
+        oldBookingData.temporaryBedId = oldTemporaryBed.bedNo;
+      }
+    }
+
+    // NEW TEMPORARY PROPERTY
+    if (newBookingData.temporaryPropertyId) {
+      const newTemporaryProperty = await Property.findById(
+        newBookingData.temporaryPropertyId,
+      );
+
+      if (newTemporaryProperty) {
+        newBookingData.temporaryPropertyId = newTemporaryProperty.propertyCode;
+      }
+    }
+
+    // NEW TEMPORARY BED
+    if (newBookingData.temporaryBedId) {
+      const newTemporaryBed = await Bed.findById(newBookingData.temporaryBedId);
+
+      if (newTemporaryBed) {
+        newBookingData.temporaryBedId = newTemporaryBed.bedNo;
+      }
+    }
+    // ============================================================
+    // AUTOMATIC WORKLOG FOR EVERY CHANGED FIELD
+    // ============================================================
+
+    const automaticWorkLogs = generateWorkLogs({
+      oldData: oldBookingData,
+      newData: newBookingData,
+      createdBy: user,
+
+      ignoredFields: [
+        "newWorkLog",
+        "workLogs",
+
+        // System fields
+        "createdAt",
+        "updatedAt",
+        "__v",
+        "_id",
+
+        // User/helper fields
+        "createdByName",
+        "updatedByName",
+        "user",
+        "roomNo",
+        "acRoom",
+      ],
+    });
+
+    workLogs.push(...automaticWorkLogs);
+
+    // ============================================================
+    // MANUAL WORKLOG
+    // ============================================================
+
+    const newWorkLog = String(req.body.newWorkLog || "").trim();
+
+    if (newWorkLog) {
+      workLogs.push(
+        createWorkLog({
+          message: newWorkLog,
+          createdBy: user,
+        }),
+      );
+    }
+
+    // ============================================================
+    // UPDATE BOOKING
+    // ============================================================
+
+    Object.assign(booking, updateData);
+    booking.workLogs = workLogs;
+
+    const updatedBooking = await booking.save();
 
     res.status(200).json({
       success: true,
       message: "Booking updated successfully",
-      data: booking,
+      data: updatedBooking,
     });
   } catch (error) {
     res.status(500).json({

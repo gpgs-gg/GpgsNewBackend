@@ -98,11 +98,14 @@ const BedSchema = new mongoose.Schema(
     },
 
     // Worklogs
-    worklogs: [
+   worklogs: [
       {
         message: {
           type: String,
           required: true,
+        },
+        createdBy: {
+          type: String,
         },
         createdAt: {
           type: Date,

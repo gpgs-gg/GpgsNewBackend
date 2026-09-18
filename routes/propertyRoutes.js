@@ -13,6 +13,7 @@ const {
   getPropertyDropdown,
   deleteMultipleProperties
 } = require("../controllers/propertyController");
+const { verifyJWT } = require("../middleware/verifyJWT");
 
 
 router.get("/dropdown", getPropertyDropdown);
@@ -24,7 +25,7 @@ router.post("/", upload.fields([
 
 ]), createProperty
 );
-router.get("/", getAllProperties);
+router.get("/", verifyJWT, getAllProperties);
 router.get("/:id", getPropertyById);
 router.put(
   "/:id",

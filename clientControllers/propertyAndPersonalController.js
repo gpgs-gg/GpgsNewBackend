@@ -3,11 +3,9 @@ const Client = require("../models/client.model");
 exports.getPropertyAndPersonalDetailsById = async (req, res) => {
   try {
     const client = await Client.findById(req.params.id)
-      .populate(
-        "propertyId",
-        "propertyCode propertyName propertyLocation internet.wifiName internet.wifiPwd"
-      )
-      .populate("bedId", "roomNo bedNo monthlyRent acRoom");
+      .populate("propertyId",
+        "propertyCode propertyName propertyLocation internet.wifiName internet.wifiPwd propertyAddress utility.ebConsumerNo utility.ebBillingUnit")
+      .populate("bedId", "roomNo bedNo acRoom ");
 
     if (!client) {
       return res.status(404).json({

@@ -10,6 +10,7 @@ const roundValue = (value, decimals = 2) => {
 
 const createElectricityReading = asyncHandler(async (req, res) => {
   const {
+    // propertyId,
     roomId,
     month,
     date,
@@ -22,7 +23,7 @@ const createElectricityReading = asyncHandler(async (req, res) => {
 
   // ================= Validation =================
 
-  if (!propertyId || !month || !date) {
+  if (!month || !date) {
     throw new ApiError(
       400,
       "Property, month and date are required"

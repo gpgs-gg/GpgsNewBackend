@@ -1,6 +1,7 @@
 const Bed = require("../models/bed.model");
 const Property = require("../models/property.model");
 const mongoose = require("mongoose");
+const { generateWorkLogs, createWorkLog } = require("../utils/worklog");
 
 // Create Bed
 exports.createBed = async (req, res) => {
@@ -22,6 +23,8 @@ exports.createBed = async (req, res) => {
       bedAdditionalStatus,
       freeEbAsPerBed,
       comment,
+      createdByName,
+      updatedByName
     } = req.body;
 
     const property = await Property.findById(propertyId);
@@ -45,7 +48,7 @@ exports.createBed = async (req, res) => {
       });
     }
 
-    const totalBeds = await Bed.countDocuments();
+    // const totalBeds = await Bed.countDocuments();
     const bed = await Bed.create({
       propertyId,
       roomNo,
@@ -64,9 +67,10 @@ exports.createBed = async (req, res) => {
       freeEbAsPerBed,
       comment,
       worklogs: [
-        {
-          message: "Bed Created",
-        },
+        createWorkLog({
+          message: `Bed created by ${createdByName || updatedByName}`,
+          createdBy: createdByName || updatedByName,
+        }),
       ],
     });
 
@@ -328,7 +332,6 @@ exports.getSingleBed = async (req, res) => {
 exports.updateBed = async (req, res) => {
   try {
     const bed = await Bed.findById(req.params.id);
-
     // --------------------------------------------------
     // 1. Check bed exists
     // --------------------------------------------------
@@ -387,6 +390,85 @@ exports.updateBed = async (req, res) => {
     }
 
     // --------------------------------------------------
+    // 4. Get user
+    // --------------------------------------------------
+    const user = req.body.updatedByName || req.body.createdByName || "System";
+    // --------------------------------------------------
+    // 5. Keep old data BEFORE modifying bed
+    // --------------------------------------------------
+    const oldBedData = bed.toObject();
+
+    // --------------------------------------------------
+    // 6. Prepare new data
+    // --------------------------------------------------
+    const newBedData = {
+      ...oldBedData,
+
+      propertyId,
+      roomNo,
+      bedNo,
+      gender,
+      sharingType,
+      bathAttached,
+      acRoom,
+      monthlyRent,
+      securityDepositMultiplicationFactor,
+      upcomingRentHikeDate,
+      upcomingRentHikeAmount,
+      previousRentHikeDate,
+      bedAvailable,
+      bedAdditionalStatus,
+      freeEbAsPerBed,
+      comment,
+    };
+
+    // --------------------------------------------------
+    // 7. Generate automatic worklogs
+    // --------------------------------------------------
+    const automaticWorkLogs = generateWorkLogs({
+      oldData: oldBedData,
+      newData: newBedData,
+      createdBy: user,
+
+      ignoredFields: [
+        "propertyId",
+        "worklogs",
+
+        // Mongo/system fields
+        "_id",
+        "__v",
+        "createdAt",
+        "updatedAt",
+
+        // User/helper fields
+        "createdByName",
+        "updatedByName",
+        "newWorkLog",
+
+        // Derived field
+        "depositAmount",
+      ],
+    });
+
+    // --------------------------------------------------
+    // 8. Add automatic worklogs
+    // --------------------------------------------------
+    bed.worklogs.push(...automaticWorkLogs);
+
+    // --------------------------------------------------
+    // 9. Add manually entered worklog
+    // --------------------------------------------------
+    const newWorkLog = String(req.body.newWorkLog || "").trim();
+
+    if (newWorkLog) {
+      bed.worklogs.push(
+        createWorkLog({
+          message: newWorkLog,
+          createdBy: user,
+        }),
+      );
+    }
+    // --------------------------------------------------
     // 4. Update bed
     // --------------------------------------------------
     Object.assign(bed, {
@@ -408,9 +490,6 @@ exports.updateBed = async (req, res) => {
       comment,
     });
 
-    bed.worklogs.push({
-      message: "Bed Updated",
-    });
 
     await bed.save();
 

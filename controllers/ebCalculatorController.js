@@ -249,7 +249,10 @@ exports.getPropertyEbClients = async (req, res) => {
 
     // Frontend se optional dates
     const { startDate, endDate } = req.query;
+
+
    console.log("startDate, endDate" , startDate, endDate)
+   
     // ==========================================
     // PROPERTY
     // ==========================================

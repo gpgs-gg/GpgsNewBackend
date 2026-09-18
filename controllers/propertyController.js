@@ -5,7 +5,7 @@ const ApiError = require("../utils/ApiError");
 const safeParse = require("../utils/safeParse");
 const uploadFile = require("../services/uploadFile");
 const mongoose = require("mongoose");
-const { generateWorkLogs } = require("../utils/worklog");
+const { generateWorkLogs, createWorkLog } = require("../utils/worklog");
 // const createProperty = asyncHandler(async (req, res) => {
 //   const files = req.files;
 //   const getFile = (key) => files?.[key]?.[0] || null;
@@ -42,12 +42,12 @@ const { generateWorkLogs } = require("../utils/worklog");
 
 
 
-const isPdfFile = (file) => {
-  return (
-    file.mimetype === "application/pdf" ||
-    file.originalname?.toLowerCase().endsWith(".pdf")
-  );
-};
+// const isPdfFile = (file) => {
+//   return (
+//     file.mimetype === "application/pdf" ||
+//     file.originalname?.toLowerCase().endsWith(".pdf")
+//   );
+// };
 
 const createProperty = asyncHandler(async (req, res) => {
   const propertyCode = req.body.propertyCode;
