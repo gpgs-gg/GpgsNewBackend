@@ -1,5 +1,5 @@
 const OptionsData = require("../models/options.model");
-
+const { generateWorkLogs, createWorkLog } = require("../utils/worklog");
 /**
  * @desc    Get all master categories
  * @route   GET /api/master-data
@@ -148,14 +148,30 @@ exports.createOptionsData = async (req, res) => {
         message: "Duplicate values found in items.",
       });
     }
-
+    // ============================================================
+    // WORKLOG USER
+    // ============================================================
+    // Get the logged-in user's display name from the request.
+    // This follows the same approach used in Property worklogs.
+    const user = req.body.createdByName || req.body.updatedByName || "System";
     const master = await OptionsData.create({
       categoryKey,
       categoryName,
       description,
       items,
     });
+    // ============================================================
+    // CREATION WORKLOG
+    // ============================================================
+    // Add one worklog when the master category is created.
+    master.workLogs.push(
+      createWorkLog({
+        message: `Options category created by ${user}`,
+        createdBy: user,
+      }),
+    );
 
+    await master.save();
     return res.status(201).json({
       success: true,
       message: "created successfully.",
@@ -175,15 +191,145 @@ exports.createOptionsData = async (req, res) => {
  * @desc    Update master category
  * @route   PUT /api/master-data/:id
  */
+// exports.updateOptionsData = async (req, res) => {
+//   try {
+//     const { categoryName, description, items, newWorkLog } = req.body;
+//     const master = await OptionsData.findByIdAndUpdate(
+//       req.params.id,
+//       {
+//         categoryName,
+//         description,
+//         items,
+//       },
+//       {
+//         new: true,
+//         runValidators: true,
+//       },
+//     );
+
+//     if (!master) {
+//       return res.status(404).json({
+//         success: false,
+//         message: "Master category not found.",
+//       });
+//     }
+//     // Prevent duplicate values inside items
+//     const values = items.map((item) => item.value.trim().toLowerCase());
+
+//     const duplicateValue = values.find(
+//       (value, index) => values.indexOf(value) !== index,
+//     );
+
+//     if (duplicateValue) {
+//       return res.status(400).json({
+//         success: false,
+//         message: `The item "${duplicateValue}" has been entered more than once. Please remove the duplicate and try again.`,
+//       });
+//     }
+
+//     // ============================================================
+//     // WORKLOG USER
+//     // ============================================================
+//     const user = req.body.updatedByName || req.body.createdByName || "System";
+
+//     // Keep the existing worklogs before updating the document.
+//     let workLogs = master.workLogs || [];
+//     // ============================================================
+//     // AUTOMATIC WORKLOG FOR CHANGED FIELDS
+//     // ============================================================
+//     const automaticWorkLogs = generateWorkLogs({
+//       oldData: master.toObject(),
+
+//       newData: {
+//         categoryName,
+//         description,
+//         items,
+//       },
+
+//       createdBy: user,
+
+//       ignoredFields: [
+//         "newWorkLog",
+//         "workLogs",
+
+//         // MongoDB/system fields
+//         "_id",
+//         "__v",
+//         "createdAt",
+//         "updatedAt",
+
+//         // User/helper fields
+//         "createdByName",
+//         "updatedByName",
+//       ],
+//     });
+
+//     workLogs.push(...automaticWorkLogs);
+//     // ============================================================
+//     // MANUAL WORKLOG
+//     // ============================================================
+//     const manualWorkLog = String(newWorkLog || "").trim();
+
+//     if (manualWorkLog) {
+//       workLogs.push(
+//         createWorkLog({
+//           message: manualWorkLog,
+//           createdBy: user,
+//         }),
+//       );
+//     }
+
+//     return res.status(200).json({
+//       success: true,
+//       message: "updated successfully.",
+//       data: master,
+//     });
+//   } catch (error) {
+//     console.error("Update Master Data:", error);
+
+//     return res.status(500).json({
+//       success: false,
+//       message: "Failed to update master category.",
+//     });
+//   }
+// };
+
 exports.updateOptionsData = async (req, res) => {
   try {
-    const { categoryName, description, items } = req.body;
+    const { categoryName, description, items, newWorkLog } = req.body;
 
-    // Prevent duplicate values inside items
-    const values = items.map((item) => item.value.trim().toLowerCase());
+    // ============================================================
+    // WORKLOG USER
+    // ============================================================
+    // Use the same user-name pattern as Salary worklogs.
+    const user = req.body.updatedByName || req.body.createdByName || "System";
+
+    // ============================================================
+    // FIND EXISTING MASTER
+    // ============================================================
+    // IMPORTANT:
+    // Fetch the existing document BEFORE changing anything.
+    // generateWorkLogs() needs this OLD data for comparison.
+    const master = await OptionsData.findById(req.params.id);
+
+    if (!master) {
+      return res.status(404).json({
+        success: false,
+        message: "Master category not found.",
+      });
+    }
+
+    // ============================================================
+    // PREVENT DUPLICATE VALUES
+    // ============================================================
+    const values = (items || []).map((item) =>
+      String(item?.value || "")
+        .trim()
+        .toLowerCase(),
+    );
 
     const duplicateValue = values.find(
-      (value, index) => values.indexOf(value) !== index
+      (value, index) => values.indexOf(value) !== index,
     );
 
     if (duplicateValue) {
@@ -193,26 +339,166 @@ exports.updateOptionsData = async (req, res) => {
       });
     }
 
-    const master = await OptionsData.findByIdAndUpdate(
-      req.params.id,
-      {
+    // ============================================================
+    // KEEP EXISTING WORKLOGS
+    // ============================================================
+    let workLogs = master.workLogs || [];
+
+    // ============================================================
+    // AUTOMATIC WORKLOGS
+    // ============================================================
+    const automaticWorkLogs = generateWorkLogs({
+      // IMPORTANT:
+      // This is the document BEFORE update.
+      oldData: master.toObject(),
+
+      // IMPORTANT:
+      // Pass the final values that will actually be saved.
+      newData: {
+        // categoryKey is not editable from the frontend.
+        // Keeping the old value prevents:
+        // "Category Key changed from department to Blank"
+        categoryKey: master.categoryKey,
+
         categoryName,
         description,
-        items,
       },
-      {
-        new: true,
-        runValidators: true,
-      },
-    );
 
-    if (!master) {
-      return res.status(404).json({
-        success: false,
-        message: "Master category not found.",
-      });
+      createdBy: user,
+
+      ignoredFields: [
+        // Worklog/helper fields
+        "newWorkLog",
+        "workLogs",
+        "items",
+        // MongoDB/system fields
+        "_id",
+        "__v",
+        "createdAt",
+        "updatedAt",
+
+        // Frontend helper fields
+        "createdByName",
+        "updatedByName",
+      ],
+    });
+
+    // Add all automatically generated change logs.
+    workLogs.push(...automaticWorkLogs);
+    // ============================================================
+    // ITEM-LEVEL WORKLOGS
+    // ============================================================
+    // IMPORTANT:
+    // Do not log the complete items array.
+    // Compare each item using its MongoDB _id so that only the
+    // actual changed item/field is recorded in the worklog.
+
+    const oldItems = master.items || [];
+    const newItems = items || [];
+
+    // ------------------------------------------------------------
+    // Compare existing items
+    // ------------------------------------------------------------
+    for (const newItem of newItems) {
+      const oldItem = oldItems.find(
+        (item) => String(item._id) === String(newItem._id),
+      );
+
+      // New item
+      if (!oldItem) {
+        workLogs.push(
+          createWorkLog({
+            message: `Item "${newItem.label || newItem.value}" was added.`,
+            createdBy: user,
+          }),
+        );
+
+        continue;
+      }
+
+      const itemName = oldItem.label || oldItem.value || "Item";
+
+      // Compare only editable item fields
+      const itemFields = [
+        "label",
+        "value",
+        "code",
+        "displayOrder",
+        "isDefault",
+        "isActive",
+      ];
+
+      for (const field of itemFields) {
+        const oldValue = oldItem[field];
+        const newValue = newItem[field];
+
+        if (String(oldValue ?? "") !== String(newValue ?? "")) {
+          workLogs.push(
+            createWorkLog({
+              message: `${field} of item "${itemName}" changed from "${oldValue ?? ""}" to "${newValue ?? ""}".`,
+              createdBy: user,
+            }),
+          );
+        }
+      }
     }
 
+    // ============================================================
+    // DETECT DELETED ITEMS
+    // ============================================================
+    // Compare old items against the final items coming from frontend.
+    // If an old item's _id is not present in the new items array,
+    // that item has been deleted.
+
+    for (const oldItem of oldItems) {
+      const oldItemId = String(oldItem._id);
+
+      const exists = newItems.some(
+        (newItem) => newItem?._id && String(newItem._id) === oldItemId,
+      );
+
+      if (!exists) {
+        workLogs.push(
+          createWorkLog({
+            message: `Item "${oldItem.label || oldItem.value}" was deleted.`,
+            createdBy: user,
+          }),
+        );
+      }
+    }
+    // ============================================================
+    // MANUAL WORKLOG
+    // ============================================================
+    const manualWorkLog = String(newWorkLog || "").trim();
+
+    if (manualWorkLog) {
+      workLogs.push(
+        createWorkLog({
+          message: manualWorkLog,
+          createdBy: user,
+        }),
+      );
+    }
+
+    // ============================================================
+    // UPDATE MASTER
+    // ============================================================
+    master.categoryName = categoryName;
+    master.description = description;
+    master.items = items;
+
+    // IMPORTANT:
+    // Save both automatic and manually added worklogs.
+    master.workLogs = workLogs;
+
+    // ============================================================
+    // SAVE
+    // ============================================================
+    await master.save();
+
+    // ============================================================
+    // RESPONSE
+    // ============================================================
     return res.status(200).json({
       success: true,
       message: "updated successfully.",
@@ -227,7 +513,6 @@ exports.updateOptionsData = async (req, res) => {
     });
   }
 };
-
 /**
  * @desc    Delete master data
  * @route   DELETE /api/master-data/:id
@@ -282,7 +567,6 @@ exports.getOptionsDataByCategory = async (req, res) => {
     });
   }
 };
-
 
 exports.getBatchOptions = async (req, res) => {
   try {

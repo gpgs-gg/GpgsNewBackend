@@ -67,8 +67,13 @@ const normalizeValue = (value) => {
     }
   }
 
-  if (Array.isArray(value)) {
-    return JSON.stringify(value);
+  // MongoDB ObjectId
+  if (
+    typeof value === "object" &&
+    value !== null &&
+    typeof value.toHexString === "function"
+  ) {
+    return value.toHexString();
   }
 
   if (typeof value === "object") {

@@ -21,7 +21,7 @@ const { generateWorkLogs, createWorkLog } = require("../utils/worklog");
     try {
       const clients = [];
 
-      for (let i = 1; i <= 2000; i++) {
+      for (let i = 1; i <= 20000; i++) {
         clients.push({
           propertyId: "6aa39e572d964162cb933cdf",
           bedId: "6aa4ec3213e0732c147090ba",
@@ -29,7 +29,7 @@ const { generateWorkLogs, createWorkLog } = require("../utils/worklog");
 
           stayType: "P. Booked",
           status: "Booked",
-          isBookingCancelled: false,
+          isBookingCancelled: true,
 
           fullName: `Dummy Client ${i}`,
           whatsappNo: `9000${String(i).padStart(6, "0")}`,

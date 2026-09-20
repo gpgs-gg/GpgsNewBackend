@@ -120,6 +120,21 @@ const attendanceSchema = new mongoose.Schema(
       trim: true,
       maxlength: 500,
     },
+
+    // =========================
+    // WORKLOGS
+    // =========================
+
+    workLogs: [
+      {
+        message: String,
+        createdBy: String,
+        createdAt: {
+          type: String,
+          default: String,
+        },
+      },
+    ],
     // ==========================================
     // REGULARIZATION DOCUMENTS
     // Maximum 5 documents per attendance

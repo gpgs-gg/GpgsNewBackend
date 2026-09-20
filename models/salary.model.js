@@ -189,7 +189,15 @@ const salarySchema = new mongoose.Schema(
       default: 0,
       min: 0,
     },
+    // =====================================================
+    // PUBLIC HOLIDAY
+    // =====================================================
 
+    publicHolidayDays: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
     // =====================================================
     // SALARY
     // =====================================================
@@ -301,6 +309,21 @@ const salarySchema = new mongoose.Schema(
       ref: "User",
       default: null,
     },
+
+    // =========================
+    // WORKLOGS
+    // =========================
+
+    workLogs: [
+      {
+        message: String,
+        createdBy: String,
+        createdAt: {
+          type: String,
+          default: String,
+        },
+      },
+    ],
   },
   {
     timestamps: true,

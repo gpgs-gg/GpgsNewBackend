@@ -200,7 +200,21 @@ const optionsDataSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
     },
+    // ============================================================
+    // WORKLOGS
+    // ============================================================
+    workLogs: [
+      {
+        message: String,
+        createdBy: String,
+        createdAt: {
+          type: String,
+          default: String,
+        },
+      },
+    ],
   },
+
   {
     // Automatically creates:
     // createdAt

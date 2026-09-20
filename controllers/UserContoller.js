@@ -1,6 +1,9 @@
 const User = require("../models/user.model");
 const asyncHandler = require("../middleware/asyncHandler");
 const ApiError = require("../utils/ApiError");
+const Employee = require("../models/employee.model");
+const Client = require("../models/client.model");
+const { generateWorkLogs, createWorkLog } = require("../utils/worklog");
 // ==========================
 // GET ALL USERS
 // ==========================
@@ -50,6 +53,64 @@ const getAllUsers = asyncHandler(async (req, res) => {
     .skip(skip)
     .limit(limit);
 
+  const usersWithCorrectDetails = await Promise.all(
+    users.map(async (user) => {
+      const userObj = user.toObject();
+
+      if (user.role === "Employee" && user.employeeId) {
+        const employee = await Employee.findById(user.employeeId).select(
+          "employeeName email",
+        );
+
+        if (employee) {
+          userObj.name = employee.employeeName;
+          userObj.email = employee.email;
+        }
+      }
+
+      if (user.role === "Client" && user.clientId) {
+        const client = await Client.findById(user.clientId).select(
+          "fullName emailId",
+        );
+
+        if (client) {
+          userObj.name = client.fullName;
+          userObj.email = client.emailId;
+        }
+      }
+
+      return userObj;
+    }),
+  );
+
+  res.status(200).json({
+    success: true,
+    page,
+    limit,
+    totalRecords,
+    totalPages: Math.ceil(totalRecords / limit),
+    hasNextPage: page < Math.ceil(totalRecords / limit),
+    hasPrevPage: page > 1,
+    count: usersWithCorrectDetails.length,
+    data: usersWithCorrectDetails,
+  });
+  // console.log(
+  //   "All User Emails:",
+  //   users.map((user) => user.email),
+  // );
+  // const employeeEmails = await Promise.all(
+  //   users
+  //     .filter((user) => user.role === "Employee" && user.employeeId)
+  //     .map(async (user) => {
+  //       const employee = await Employee.findById(user.employeeId).select(
+  //         "email",
+  //       );
+
+  //       return employee?.email;
+  //     }),
+  // );
+
+  console.log("Employee Emails:", employeeEmails);
   res.status(200).json({
     success: true,
     page,
@@ -63,13 +124,11 @@ const getAllUsers = asyncHandler(async (req, res) => {
   });
 });
 
-
 // ==========================
 // GET USER BY ID
 // ==========================
 const getUserById = asyncHandler(async (req, res) => {
-  const user = await User.findById(req.params.id)
-
+  const user = await User.findById(req.params.id);
 
   if (!user) {
     throw new ApiError(404, "User not found");
@@ -80,7 +139,6 @@ const getUserById = asyncHandler(async (req, res) => {
     data: user,
   });
 });
-
 
 // ==========================
 // UPDATE USER
@@ -93,10 +151,7 @@ const updateUser = asyncHandler(async (req, res) => {
   }
 
   // Email Duplicate Check
-  if (
-    req.body.email &&
-    req.body.email !== user.email
-  ) {
+  if (req.body.email && req.body.email !== user.email) {
     const existingEmail = await User.findOne({
       email: req.body.email,
       _id: {
@@ -111,20 +166,141 @@ const updateUser = asyncHandler(async (req, res) => {
       });
     }
   }
+  // ============================================================
+  // WORKLOG USER
+  // ============================================================
+  // This name is stored in the worklog as the person who
+  // performed the update.
+  const workLogUser =
+    req.body.updatedByName ||
+    req.body.createdByName ||
+    req.user?.name ||
+    "System";
 
+  // ============================================================
+  // STORE OLD DATA BEFORE UPDATE
+  // ============================================================
+  // We need the original document so generateWorkLogs()
+  // can compare old values with the new values.
+  const oldUserData = user.toObject();
+
+  // ============================================================
+  // PREPARE NEW DATA
+  // ============================================================
+  const newUserData = {
+    ...oldUserData,
+    ...req.body,
+  };
   if (req.body.password) {
     user.password = req.body.password;
   }
-
-  user.name = req.body.name ?? user.name;
-  user.email = req.body.email ?? user.email;
+  // ============================================================
+  // ADMIN ONLY EMAIL AND NAME
+  // ============================================================
+  // Email and name can be changed only when the existing
+  // user's role is Admin.
+  if (user.role === "Admin") {
+    user.email = req.body.email ?? user.email;
+    user.name = req.body.name ?? user.name;
+  }
   user.role = req.body.role ?? user.role;
-  user.bookingId = req.body.bookingId || null;
-  user.employeeId = req.body.employeeId || null;
+  user.bookingId = req.body.bookingId ?? user.bookingId;
+  user.employeeId = req.body.employeeId ?? user.employeeId;
 
   if (req.body.isActive !== undefined) {
     user.isActive = req.body.isActive;
   }
+  // ============================================================
+  // OTHER USER FIELDS
+  // ============================================================
+  newUserData.role = req.body.role ?? user.role;
+  newUserData.bookingId = req.body.bookingId ?? user.bookingId;
+  newUserData.employeeId = req.body.employeeId ?? user.employeeId;
+  newUserData.clientId = req.body.clientId ?? user.clientId;
+
+  if (req.body.isActive !== undefined) {
+    newUserData.isActive = req.body.isActive;
+  } else {
+    newUserData.isActive = user.isActive;
+  }
+
+  // ============================================================
+  // AUTOMATIC WORKLOG
+  // ============================================================
+  // generateWorkLogs() checks every field and creates a worklog
+  // only when the value has actually changed.
+  const automaticWorkLogs = generateWorkLogs({
+    oldData: oldUserData,
+    newData: newUserData,
+    createdBy: workLogUser,
+
+    ignoredFields: [
+      // --------------------------------------------------------
+      // Worklog/helper fields
+      // --------------------------------------------------------
+      "newWorkLog",
+      "workLogs",
+
+      // --------------------------------------------------------
+      // MongoDB/system fields
+      // --------------------------------------------------------
+      "_id",
+      "__v",
+      "createdAt",
+      "updatedAt",
+      "refreshToken",
+
+      // --------------------------------------------------------
+      // Request/helper fields
+      // --------------------------------------------------------
+      "createdByName",
+      "updatedByName",
+
+      // --------------------------------------------------------
+      // Password should NOT be displayed in worklogs
+      // --------------------------------------------------------
+      "password",
+    ],
+  });
+
+  // ============================================================
+  // EXISTING WORKLOGS
+  // ============================================================
+  const workLogs = [...(user.workLogs || [])];
+
+  // Add automatic field-change logs.
+  workLogs.push(...automaticWorkLogs);
+
+  // ============================================================
+  // MANUAL WORKLOG
+  // ============================================================
+  // Allows the frontend to send:
+  // newWorkLog: "User account verified"
+  const newWorkLog = String(req.body.newWorkLog || "").trim();
+
+  if (newWorkLog) {
+    workLogs.push(
+      createWorkLog({
+        message: newWorkLog,
+        createdBy: workLogUser,
+      }),
+    );
+  }
+
+  // ============================================================
+  // REMOVE HELPER FIELD
+  // ============================================================
+  delete newUserData.newWorkLog;
+  delete newUserData.createdByName;
+  delete newUserData.updatedByName;
+
+  // Keep the existing worklogs + newly generated worklogs.
+  newUserData.workLogs = workLogs;
+
+  // Password will be hashed by UserSchema pre-save middleware.
+  // Therefore use the document and save() instead of
+  // findByIdAndUpdate().
+  user.set(newUserData);
 
   await user.save();
 
@@ -134,7 +310,6 @@ const updateUser = asyncHandler(async (req, res) => {
     data: user,
   });
 });
-
 
 // ==========================
 // DELETE USER
@@ -151,7 +326,6 @@ const deleteUser = asyncHandler(async (req, res) => {
     message: "User deleted successfully",
   });
 });
-
 
 // ==========================
 // USER DROPDOWN
@@ -195,7 +369,7 @@ const getUserDropdown = asyncHandler(async (req, res) => {
 });
 
 module.exports = {
-//   createUser,
+  //   createUser,
   getAllUsers,
   getUserById,
   updateUser,

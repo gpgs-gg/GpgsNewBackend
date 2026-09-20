@@ -1,32 +1,22 @@
 const mongoose = require("mongoose");
 const Employee = require("../models/employee.model");
-
+const User = require("../models/user.model");
 const MasterData = require("../models/options.model");
 const Counter = require("../models/counter.model");
-
 const { uploadToCloudinary } = require("../utils/uploadToCloudinary");
-
 const asyncHandler = require("../middleware/asyncHandler");
 const ApiError = require("../utils/ApiError");
-const { getChangedFields, addWorklog } = require("../utils/worklog");
-const {
-  convertStringToDateTime,
-  convertStringFormatDateTime,
-} = require("../utils/dateFormatter");
-
 const { toggleEmployeeLogin } = require("../services/employeeLogin.seervice");
 
 const getLoginEnabledEmployeesController = async (req, res) => {
   try {
     const employees = await getLoginEnabledEmployees();
-
     return res.status(200).json({
       success: true,
       data: employees,
     });
   } catch (error) {
     console.error("Get login enabled employees error:", error);
-
     return res.status(500).json({
       success: false,
       message: error.message || "Failed to get login enabled employees",
@@ -36,7 +26,7 @@ const getLoginEnabledEmployeesController = async (req, res) => {
 // FOR ENABLING EMPLOYEE LOGIN, USE THE PATCH ROUTE /employees/enable-login WITH BODY { "employeeId": "<EMPLOYEE_ID>" }
 const toggleEmployeeLoginController = async (req, res) => {
   try {
-    const { employeeId } = req.body;    
+    const { employeeId } = req.body;
     if (!employeeId) {
       return res.status(400).json({
         success: false,
@@ -65,11 +55,9 @@ const toggleEmployeeLoginController = async (req, res) => {
     });
   }
 };
-
 // ============================================================
 // HELPER: GET NEXT EMPLOYEE ID
 // ============================================================
-
 const getNextEmployeeId = async () => {
   const counter = await Counter.findOneAndUpdate(
     { key: "employee" },
@@ -1044,11 +1032,66 @@ const updateEmployee = asyncHandler(async (req, res) => {
   // ========================================================
   // UPDATE EMPLOYEE
   // ========================================================
+  // ========================================================
+  // SYNC EMPLOYEE EMAIL WITH USER LOGIN EMAIL
+  // ========================================================
 
-  Object.assign(employee, body);
+  const oldEmail = employee.email;
+  const oldEmployeeName = employee.employeeName;
 
-  await employee.save();
+  const session = await mongoose.startSession();
 
+  try {
+    await session.withTransaction(async () => {
+      Object.assign(employee, body);
+
+      // Save Employee inside transaction
+      await employee.save({ session });
+
+      // ========================================================
+      // SYNC EMPLOYEE NAME & EMAIL WITH USER
+      // ONLY WHEN LOGIN IS ENABLED
+      // ========================================================
+      if (
+        employee.loginEnabled === true &&
+        ((body.email !== undefined && body.email !== oldEmail) ||
+          (body.employeeName !== undefined &&
+            body.employeeName !== oldEmployeeName))
+      ) {
+        console.log("Employee name/email changed and login is enabled");
+
+        const user = await User.findOne({
+          employeeId: employee._id.toString(),
+          role: "Employee",
+        }).session(session);
+
+        if (!user) {
+          throw new ApiError(
+            404,
+            "Employee User account not found. Update was not completed.",
+          );
+        }
+
+        // Update ONLY changed User fields
+        if (body.email !== undefined && body.email !== oldEmail) {
+          user.email = employee.email;
+        }
+
+        if (
+          body.employeeName !== undefined &&
+          body.employeeName !== oldEmployeeName
+        ) {
+          user.name = employee.employeeName;
+        }
+
+        await user.save({ session });
+
+        console.log("User name/email synchronized successfully");
+      }
+    });
+  } finally {
+    await session.endSession();
+  }
   return res.status(200).json({
     success: true,
 

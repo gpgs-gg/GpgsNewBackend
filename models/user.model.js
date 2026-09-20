@@ -22,7 +22,7 @@ const userSchema = new mongoose.Schema(
       required: true,
       minlength: 6,
     },
-    
+
     bookingId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Booking",
@@ -35,22 +35,37 @@ const userSchema = new mongoose.Schema(
     //   default: null,
     // },
 
-clientId: {
-  type: mongoose.Schema.Types.ObjectId,
-  ref: "Client",
-},
+    clientId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Client",
+    },
 
     employeeId: {
-    type: String,
+      type: String,
     },
 
     role: {
       type: String,
       enum: ["Admin", "Employee", "Client"],
     },
+    // ============================================================
+    // WORKLOGS
+    // Stores automatic field-change logs and manual worklogs
+    // ============================================================
+    workLogs: [
+      {
+        message: String,
+        createdBy: String,
+        createdAt: {
+          type: String,
+          default: String,
+        },
+      },
+    ],
     refreshToken: {
       type: String,
     },
+
     isActive: {
       type: Boolean,
       default: true,

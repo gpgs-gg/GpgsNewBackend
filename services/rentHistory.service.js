@@ -272,6 +272,10 @@ const generateMonthlyRent = async () => {
   } else {
     todayFilterDate = today.toISOString().split("T")[0];
   }
+
+
+
+  
   // const todayFilterDate = new Date().toISOString().split("T")[0];
   const clients = await Client.find({
     isBookingCancelled: false,

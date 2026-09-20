@@ -21,7 +21,7 @@ const upsertEmployeePermissions = async (req, res) => {
     }
 
     // --------------------------------------------------------
-    // Validate permissions 
+    // Validate permissions
     // --------------------------------------------------------
     if (!Array.isArray(permissions)) {
       return res.status(400).json({
@@ -322,7 +322,9 @@ const getMyPermissions = async (req, res) => {
     const employee = await Employee.findById(user.employeeId).select(
       "_id employeeId employeeName department designation role",
     );
-
+    // const employee = await Employee.findOne({
+    //   employeeId: user.employeeId,
+    // }).select("_id employeeId employeeName department designation role");
     if (!employee) {
       return res.status(404).json({
         success: false,

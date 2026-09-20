@@ -3,7 +3,7 @@ const mongoose = require("mongoose");
 const Attendance = require("../models/attendance.model");
 const Employee = require("../models/employee.model");
 const User = require("../models/user.model");
-
+const { generateWorkLogs, createWorkLog } = require("../utils/worklog");
 const { uploadToCloudinary } = require("../utils/uploadToCloudinary");
 
 // ======================================================
@@ -1013,7 +1013,7 @@ const getAllAttendance = async (req, res) => {
       message: error.message || "Failed to fetch all attendance",
     });
   }
-};  
+};
 // ======================================================
 // 6. GET ATTENDANCE BY ID
 // ======================================================
@@ -1082,8 +1082,14 @@ const getAttendanceById = async (req, res) => {
 // ======================================================
 const createOrRegularizeAttendance = async (req, res) => {
   try {
-    const { employeeId, attendanceDate, status, remarks } = req.body;
+    const { employeeId, attendanceDate, status, remarks, newWorkLog } =
+      req.body;
+    // ==================================================
+    // WORKLOG USER
+    // Use the logged-in user's name for attendance audit logs
+    // ==================================================
 
+    const user = req.user?.name || req.body.updatedByName || "System";
     // ==================================================
     // 1. VALIDATE EMPLOYEE ID
     // ==================================================
@@ -1105,17 +1111,6 @@ const createOrRegularizeAttendance = async (req, res) => {
       return res.status(404).json({
         success: false,
         message: "Employee not found",
-      });
-    }
-
-    // ==================================================
-    // 3. VALIDATE ATTENDANCE DATE
-    // ==================================================
-
-    if (!attendanceDate) {
-      return res.status(400).json({
-        success: false,
-        message: "Attendance date is required",
       });
     }
 
@@ -1247,6 +1242,17 @@ const createOrRegularizeAttendance = async (req, res) => {
         editedBy: req.user?._id || null,
 
         editedAt: new Date(),
+        // ==================================================
+        // WORKLOG
+        // Track who created the attendance record
+        // ==================================================
+
+        workLogs: [
+          createWorkLog({
+            message: `Attendance created by ${user}`,
+            createdBy: user,
+          }),
+        ],
       });
 
       await attendance.save();
@@ -1281,6 +1287,17 @@ const createOrRegularizeAttendance = async (req, res) => {
     // 9. EXISTING ATTENDANCE
     // ==================================================
 
+    // ==================================================
+    // STORE OLD VALUES BEFORE UPDATE
+    // ==================================================
+    // We need the previous values so the work log can tell exactly
+    // what changed instead of only saying "Attendance updated".
+
+    const oldStatus = attendance.status;
+    const oldRemarks = attendance.remarks || "";
+
+    const oldStatusLabel = getAttendanceStatusLabel(oldStatus);
+    const newStatusLabel = getAttendanceStatusLabel(numericStatus);
     attendance.status = numericStatus;
 
     attendance.attendanceSource = "ADMIN";
@@ -1288,6 +1305,89 @@ const createOrRegularizeAttendance = async (req, res) => {
     attendance.remarks =
       remarks !== undefined ? remarks.trim() : attendance.remarks;
 
+    // ==================================================
+    // WORKLOG
+    // Add an audit entry for every attendance update
+    // ==================================================
+
+    // ==================================================
+    // WORKLOG
+    // Track exactly what was changed during attendance regularization.
+    // ==================================================
+
+    if (!attendance.workLogs) {
+      attendance.workLogs = [];
+    }
+
+    const changes = [];
+
+    // --------------------------------------------------
+    // STATUS CHANGE
+    // --------------------------------------------------
+    // Only add this to the work log when the status actually changed.
+
+    if (oldStatus !== numericStatus) {
+      changes.push(
+        `Status changed from ${oldStatusLabel} to ${newStatusLabel}`,
+      );
+    }
+
+    // --------------------------------------------------
+    // REMARKS CHANGE
+    // --------------------------------------------------
+    // Compare old and new remarks and record the actual values.
+
+    const newRemarks = remarks !== undefined ? remarks.trim() : oldRemarks;
+
+    if (oldRemarks !== newRemarks) {
+      changes.push(
+        `Remarks changed from "${oldRemarks || "Empty"}" to "${
+          newRemarks || "Empty"
+        }"`,
+      );
+    }
+
+    // --------------------------------------------------
+    // SUPPORTING DOCUMENTS
+    // --------------------------------------------------
+    // If new documents were uploaded, record that in the work log.
+
+    if (uploadedDocuments.length > 0) {
+      changes.push(
+        `${uploadedDocuments.length} supporting document${
+          uploadedDocuments.length > 1 ? "s" : ""
+        } added`,
+      );
+    }
+
+    // --------------------------------------------------
+    // AUTOMATIC CHANGE LOG
+    // --------------------------------------------------
+    // Only create an automatic log when something actually changed.
+
+    if (changes.length > 0) {
+      attendance.workLogs.push(
+        createWorkLog({
+          message: `${changes.join("; ")} by ${user}`,
+          createdBy: user,
+        }),
+      );
+    }
+
+    // --------------------------------------------------
+    // MANUAL WORK LOG
+    // --------------------------------------------------
+    // If the admin entered something in "Add WorkLog",
+    // save that as a separate work-log entry.
+
+    if (newWorkLog?.trim()) {
+      attendance.workLogs.push(
+        createWorkLog({
+          message: newWorkLog.trim(),
+          createdBy: user,
+        }),
+      );
+    }
     // ==================================================
     // ADD NEW DOCUMENTS
     // ==================================================
