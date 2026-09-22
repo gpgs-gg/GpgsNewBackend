@@ -8,22 +8,21 @@ const bookingSchema = new mongoose.Schema(
             required: true,
             trim: true,
         },
-
         emailId: {
             type: String,
             trim: true,
             lowercase: true,
         },
-
         callingNo: {
             type: String,
             required: true,
         },
-
         whatsappNo: String,
-
+        teamCode: {
+            type: String,
+            trim: true,
+        },
         askFor: String,
-
         // Emergency Contacts
         emergencyContact1FullName: String,
         emergencyContact1No: String,
@@ -124,7 +123,7 @@ const bookingSchema = new mongoose.Schema(
             type: Number,
             default: 0,
         },
-        
+
         // Advance / Hold
         URHA: {
             type: Number,
@@ -168,72 +167,72 @@ const bookingSchema = new mongoose.Schema(
             enum: ["Booked", "Not Booked"],
             default: "Not Booked",
         },
-        
+
         workLogs: [
-      {
-        message: String,
-        createdBy: String,
-        createdAt: {
-          type: String,
-          default: String,
-        },
-      },
-    ],
+            {
+                message: String,
+                createdBy: String,
+                createdAt: {
+                    type: String,
+                    default: String,
+                },
+            },
+        ],
         // Daily Booking
-// dailyPropertyId: {
-//     type: mongoose.Schema.Types.ObjectId,
-//     ref: "Property",
-// },
+        // dailyPropertyId: {
+        //     type: mongoose.Schema.Types.ObjectId,
+        //     ref: "Property",
+        // },
 
-// dailyBedId: {
-//     type: mongoose.Schema.Types.ObjectId,
-//     ref: "Bed",
-// },
+        // dailyBedId: {
+        //     type: mongoose.Schema.Types.ObjectId,
+        //     ref: "Bed",
+        // },
 
-// dailyRoomNo: {
-//     type: String,
-//     default: null,
-// },
+        // dailyRoomNo: {
+        //     type: String,
+        //     default: null,
+        // },
 
-// dailyAcRoom: {
-//     type: String,
-//     default: null,
-// },
+        // dailyAcRoom: {
+        //     type: String,
+        //     default: null,
+        // },
 
-// dailyRentPerDay: {
-//     type: Number,
-//     default: 0,
-// },
+        // dailyRentPerDay: {
+        //     type: Number,
+        //     default: 0,
+        // },
 
-// dailyclientCalculatedRent: {
-//     type: Number,
-//     default: 0,
-// },
+        // dailyclientCalculatedRent: {
+        //     type: Number,
+        //     default: 0,
+        // },
 
-// dailyDepositAmount: {
-//     type: Number,
-//     default: 0,
-// },
+        // dailyDepositAmount: {
+        //     type: Number,
+        //     default: 0,
+        // },
 
-// dailyClientDoj: {
-//     type: String,
-//     default: null,
-// },
+        // dailyClientDoj: {
+        //     type: String,
+        //     default: null,
+        // },
 
-// dailyClientLastDate: {
-//     type: String,
-//     default: null,
-// },
+        // dailyClientLastDate: {
+        //     type: String,
+        //     default: null,
+        // },
 
-// dailyComments: {
-//     type: String,
-//     default: null,
-// },
+        // dailyComments: {
+        //     type: String,
+        //     default: null,
+        // },
 
-// dailyTotalAmount: {
-//     type: Number,
-//     default: 0,
-// },
+        // dailyTotalAmount: {
+        //     type: Number,
+        //     default: 0,
+        // },
     },
     {
         timestamps: true,

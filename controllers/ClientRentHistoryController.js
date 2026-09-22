@@ -59,7 +59,7 @@ exports.getClientRentHistory = async (req, res) => {
     // Search filter
     if (search?.trim()) {
       const keyword = search.trim();
-
+        console.log()
       const [clients, properties, beds] = await Promise.all([
         Client.find({
           $or: [

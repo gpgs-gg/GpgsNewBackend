@@ -870,18 +870,45 @@ exports.getClients = async (req, res) => {
       query.stayType = req.query.stayType;
     }
 
+// ================= F&F Status =================
+    if (req.query.fnfStatus === "F&F Closed") {
+      query["fnf.status"] = "F&F Closed";
+      query.isBookingCancelled = false;
+    } else if (req.query.fnfStatus === "Cancelled") {
+      query.isBookingCancelled = true;
+    } else {
+      // Default: hide F&F Closed and cancelled bookings
+      query["fnf.status"] = {
+        $nin: ["F&F Closed"],
+      };
+      query.isBookingCancelled = false;
+    }
+
     // Login Enabled
     if (req.query.loginEnabled !== undefined && req.query.loginEnabled !== "") {
       query.loginEnabled = req.query.loginEnabled === "true";
     }
 
     // Booking Cancelled
+if (
+      req.query.isBookingCancelled !== undefined &&
+      req.query.isBookingCancelled !== ""
+    ) {
+      query.isBookingCancelled = req.query.isBookingCancelled === "true";
+    } else if (
+      req.query.clientStatus !== "Cancelled" &&
+      req.query.fnfStatus !== "Cancelled"
+    ) {
+      query.isBookingCancelled = false;
+    }
+    
     if (
       req.query.isBookingCancelled !== undefined &&
       req.query.isBookingCancelled !== ""
     ) {
       query.isBookingCancelled = req.query.isBookingCancelled === "true";
     }
+
 
     // Room No
     if (req.query.roomNo) {
@@ -2267,6 +2294,7 @@ if (req.query.hasCvd === "true") {
           clientVacatingDate: 1,
 
           stayType: 1,
+          bookingType: 1,
           status: 1,
           isBookingCancelled: 1,
 

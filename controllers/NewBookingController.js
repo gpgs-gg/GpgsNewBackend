@@ -4,12 +4,87 @@ const User = require("../models/user.model");
 const Property = require("../models/property.model")
 const Bed = require("../models/bed.model");
 const { createWorkLog, generateWorkLogs } = require("../utils/worklog");
+const Employee = require("../models/employee.model");
+// exports.createBulkBooking = async (req, res) => {
+//   try {
+//     const data = req.body.data;
+
+//     if (!Array.isArray(data) || data.length === 0) {
+//       return res.status(400).json({
+//         success: false,
+//         message: "data array is required and must not be empty",
+//       });
+//     }
+
+//     const bookingsWithWorkLogs = data.map((bookingData) => {
+//       const user =
+//         bookingData.createdByName ||
+//         bookingData.updatedByName ||
+//         req.body.createdByName ||
+//         req.body.updatedByName ||
+//         "System";
+
+//       return {
+//         ...bookingData,
+
+//         workLogs: [
+//           ...(bookingData.workLogs || []),
+//           createWorkLog({
+//             message: `Booking created by ${user}`,
+//             createdBy: user,
+//           }),
+//         ],
+//       };
+//     });
+
+//     const bookings = await Booking.insertMany(bookingsWithWorkLogs, {
+//       ordered: true,
+//     });
+
+//     res.status(201).json({
+//       success: true,
+//       message: `${bookings.length} booking(s) created successfully`,
+//       data: bookings,
+//     });
+//   } catch (error) {
+//     console.error("Bulk Create Booking Error:", error);
+
+//     res.status(500).json({
+//       success: false,
+//       message: error.message,
+//     });
+//   }
+// };
+
+
 // CREATE BOOKING
 exports.createBooking = async (req, res) => {
   try {
+    const userId = req.user?._id || req.user?.id;
+
+    const loggedInUser = await User.findById(userId).select("name employeeId");
 
     const user = req.body.createdByName || req.body.updatedByName || "System";
-    const booking = await Booking.create(req.body);
+    // ============================================================
+    // GET TEAM CODE FROM EMPLOYEE
+    // ============================================================
+    let teamCode = "";
+
+    if (loggedInUser?.employeeId) {
+      const employee = await Employee.findById(loggedInUser.employeeId).select(
+        "teamCode",
+      );
+
+      teamCode = employee?.teamCode || "";
+    }
+    if (req.user?.employeeId) {
+      const employee = await Employee.findById(req.user.employeeId).select(
+        "teamCode",
+      );
+
+      teamCode = employee?.teamCode || "";
+    }
+    const booking = await Booking.create({ ...req.body, teamCode });
     // Worklog for booking creation
     booking.workLogs.push(
       createWorkLog({
@@ -43,7 +118,7 @@ exports.getAllBookings = async (req, res) => {
       whatsappNo,
       status,
       bookingType,
-
+      teamCode,
       // Property related
       propertyId,
       propertyLocation,
@@ -93,6 +168,12 @@ exports.getAllBookings = async (req, res) => {
     // Text filters (case-insensitive regex)
     if (fullName) {
       filter.fullName = { $regex: fullName, $options: "i" };
+    }
+    if (teamCode) {
+      filter.teamCode = {
+        $regex: `^${teamCode}$`,
+        $options: "i",
+      };
     }
     if (callingNo) {
       filter.callingNo = { $regex: callingNo, $options: "i" };

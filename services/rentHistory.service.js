@@ -248,32 +248,60 @@ const generateMonthlyRent = async () => {
   // const month = 10;
   // const year = 2026;
   // const todayFilterDate = "2026-8-03";
-  const today = new Date();
-  let month = today.getMonth() + 1;
-  let year = today.getFullYear();
-  // 27th ko next month's rent history generate hogi
-  if (today.getDate() >= 27) {
-    month++;
+  // const today = new Date();
+  // let month = today.getMonth() + 1;
+  // let year = today.getFullYear();
+  // // 27th ko next month's rent history generate hogi
+  // if (today.getDate() >= 27) {
+  //   month++;
 
-    if (month > 12) {
-      month = 1;
-      year++;
-    }
+  //   if (month > 12) {
+  //     month = 1;
+  //     year++;
+  //   }
+  // }
+  // // Client filtering ke liye bhi next month ki 1st date use hogi
+  // let todayFilterDate;
+  // if (today.getDate() >= 27) {
+  //   const filterDate = new Date(
+  //     today.getFullYear(),
+  //     today.getMonth() + 1,
+  //     1
+  //   );
+  //   todayFilterDate = filterDate.toISOString().split("T")[0];
+  // } else {
+  //   todayFilterDate = today.toISOString().split("T")[0];
+  // }
+
+const today = new Date();
+
+let month = today.getMonth() + 1;
+let year = today.getFullYear();
+
+// 22nd ko next month's rent history generate hogi
+if (today.getDate() >= 22) {
+  month++;
+
+  if (month > 12) {
+    month = 1;
+    year++;
   }
-  // Client filtering ke liye bhi next month ki 1st date use hogi
-  let todayFilterDate;
-  if (today.getDate() >= 27) {
-    const filterDate = new Date(
-      today.getFullYear(),
-      today.getMonth() + 1,
-      1
-    );
-    todayFilterDate = filterDate.toISOString().split("T")[0];
-  } else {
-    todayFilterDate = today.toISOString().split("T")[0];
-  }
+}
 
+// Client filtering ke liye bhi next month's 1st date use hogi
+let todayFilterDate;
 
+if (today.getDate() >= 22) {
+  const filterDate = new Date(
+    today.getFullYear(),
+    today.getMonth() + 1,
+    1
+  );
+
+  todayFilterDate = filterDate.toISOString().split("T")[0];
+} else {
+  todayFilterDate = today.toISOString().split("T")[0];
+}
 
   
   // const todayFilterDate = new Date().toISOString().split("T")[0];
@@ -314,6 +342,9 @@ const generateMonthlyRent = async () => {
   })
     .populate("bedId")
     .lean();
+
+
+
   const clientIds = clients.map((client) => client._id);
   const rentHistoryData = [];
   // Already Generated

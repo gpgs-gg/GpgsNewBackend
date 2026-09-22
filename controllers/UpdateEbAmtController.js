@@ -894,37 +894,48 @@ const createEBCalculation = async (req, res) => {
             });
         }
 
-        // 🔴 SAME EB CYCLE CHECK
+        // Find existing EB cycle
         const existingCycle = await EBCalculation.findOne({
             PropertyId,
             EBStartDate,
             EBEndDate,
         });
 
+        let ebCalculation;
+        let message;
+
         if (existingCycle) {
-            return res.status(409).json({
-                success: false,
-                message: `EB calculation already exists for cycle ${EBStartDate} - ${EBEndDate}.`,
+            // Existing cycle -> UPDATE all incoming data
+            existingCycle.PropertyCode = PropertyCode;
+            existingCycle.PropertyId = PropertyId;
+            existingCycle.EBStartDate = EBStartDate;
+            existingCycle.EBEndDate = EBEndDate;
+            existingCycle.clients = clients;
+
+            ebCalculation = await existingCycle.save();
+
+            message = "EB calculation updated successfully.";
+        } else {
+            // New cycle -> CREATE
+            ebCalculation = await EBCalculation.create({
+                PropertyCode,
+                PropertyId,
+                EBStartDate,
+                EBEndDate,
+                clients,
             });
+
+            message = "EB calculation created successfully.";
         }
 
-        // ✅ CREATE ONLY IF CYCLE DOES NOT EXIST
-        const ebCalculation = await EBCalculation.create({
-            PropertyCode,
-            PropertyId,
-            EBStartDate,
-            EBEndDate,
-            clients,
-        });
-
-        return res.status(201).json({
+        return res.status(existingCycle ? 200 : 201).json({
             success: true,
-            message: "EB calculation created successfully.",
+            message,
             data: ebCalculation,
         });
 
     } catch (error) {
-        console.error("Create EB Calculation Error:", error);
+        console.error("Create/Update EB Calculation Error:", error);
 
         return res.status(500).json({
             success: false,

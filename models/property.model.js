@@ -9,7 +9,7 @@ const PropertySchema = new mongoose.Schema(
     propertyLocation: String,
     bedCount: Number,
     propertyAddress: String,
-    subMeterDetails : String,
+    subMeterDetails: String,
     // ---------------- INTERNET DETAILS ----------------
     internet: {
       vendorLoginId: String,
@@ -30,6 +30,8 @@ const PropertySchema = new mongoose.Schema(
     utility: {
       ebConsumerNo: String,
       ebBillingUnit: String,
+      
+      ebConsumerName: String,
 
       ebStartCycle: {
         type: Number,
@@ -123,7 +125,7 @@ const PropertySchema = new mongoose.Schema(
     },
 
     // ---------------- WORKLOGS ----------------
-   workLogs: [
+    workLogs: [
       {
         message: String,
         createdBy: String,

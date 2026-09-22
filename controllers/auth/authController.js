@@ -1,6 +1,7 @@
 const User = require("../../models/user.model");
 const asyncHandler = require("../../middleware/asyncHandler");
 const jwt = require("jsonwebtoken");
+const Employee = require("../../models/employee.model");
 /* =========================
    COOKIE CONFIG (IMPORTANT)
    VPS HTTP = secure:false
@@ -204,11 +205,24 @@ const refreshAccessToken = asyncHandler(async (req, res) => {
    GET CURRENT USER
 ========================= */
 const getCurrentUser = asyncHandler(async (req, res) => {
+  const user = req.user;
+  let teamCode = "";
+  // Get latest teamCode from Employee collection
+  if (user?.employeeId) {
+    const employee = await Employee.findById(user.employeeId).select(
+      "teamCode",
+    );
+    teamCode = employee?.teamCode || "";
+  }
   return res.status(200).json({
     success: true,
-    user: req.user,
+    user: {
+      ...user.toObject(),
+      teamCode,
+    },
   });
 });
+
 
 // UPDATE PASSWORD ONLY FOR ACTIVE USER
 const updatePassword = asyncHandler(async (req, res) => {

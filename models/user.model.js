@@ -22,28 +22,27 @@ const userSchema = new mongoose.Schema(
       required: true,
       minlength: 6,
     },
-
     bookingId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Booking",
       default: null,
     },
-
     // clientId: {
     //   type: mongoose.Schema.Types.ObjectId,
     //   ref: "Booking",
     //   default: null,
     // },
-
     clientId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Client",
     },
-
     employeeId: {
       type: String,
     },
-
+    teamCode: {
+      type: String,
+      trim: true,
+    },
     role: {
       type: String,
       enum: ["Admin", "Employee", "Client"],
