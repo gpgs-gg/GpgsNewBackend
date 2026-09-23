@@ -2,7 +2,7 @@ const Client = require("../models/client.model");
 const Bed = require("../models/bed.model");
 const Property = require("../models/property.model");
 
-  // ye abhishek ka code h 
+// ye abhishek ka code h 
 // exports.getAllAvailableBeds = async (req, res) => {
 
 //   try {
@@ -87,7 +87,6 @@ const Property = require("../models/property.model");
 exports.getAllAvailableBeds = async (req, res) => {
   try {
     const now = new Date();
-
     const page = Math.max(parseInt(req.query.page) || 1, 1);
     const limit = Math.max(parseInt(req.query.limit) || 10000, 1);
     const skip = (page - 1) * limit;
@@ -144,7 +143,7 @@ exports.getAllAvailableBeds = async (req, res) => {
       const properties = await Property.find({
         $or: [{ propertyCode: regex }, { propertyLocation: regex }]
       }).select("_id").lean();
-      
+
       query.$or = [
         { roomNo: regex },
         { bedNo: regex },
@@ -158,33 +157,45 @@ exports.getAllAvailableBeds = async (req, res) => {
     }
 
     // ================= 💨 STEP 1: Get occupied bed IDs using distinct (FAST) =================
- const occupiedBedIds = await Client.distinct("bedId", {
-  bedId: { $exists: true, $ne: null },
-  isBookingCancelled: { $ne: true },
+    //  const occupiedBedIds = await Client.distinct("bedId", {
+    //   bedId: { $exists: true, $ne: null },
+    //   isBookingCancelled: { $ne: true },
 
-  // Normal active client = occupied
-  $or: [
-    // Notice start nahi hua
-    {
+    //   // Normal active client = occupied
+    //   $or: [
+    //     // Notice start nahi hua
+    //     {
+    //       $or: [
+    //         { noticeStartDate: { $exists: false } },
+    //         { noticeStartDate: "" },
+    //         { noticeStartDate: null }
+    //       ]
+    //     },
+
+    //     // Notice hai but vacating date future ki hai
+    //     {
+    //       noticeStartDate: { $nin: ["", null] },
+    //       $or: [
+    //         { clientVacatingDate: { $exists: false } },
+    //         { clientVacatingDate: "" },
+    //         { clientVacatingDate: null },
+    //         { clientVacatingDate: { $gt: today } }
+    //       ]
+    //     }
+    //   ]
+    // });
+
+    const occupiedBedIds = await Client.distinct("bedId", {
+      bedId: { $exists: true, $ne: null },
+      isBookingCancelled: { $ne: true },
+
+      // Sirf wahi clients occupied hain jinka notice nahi hai
       $or: [
         { noticeStartDate: { $exists: false } },
         { noticeStartDate: "" },
         { noticeStartDate: null }
       ]
-    },
-
-    // Notice hai but vacating date future ki hai
-    {
-      noticeStartDate: { $nin: ["", null] },
-      $or: [
-        { clientVacatingDate: { $exists: false } },
-        { clientVacatingDate: "" },
-        { clientVacatingDate: null },
-        { clientVacatingDate: { $gt: now } }
-      ]
-    }
-  ]
-});
+    });
 
     if (occupiedBedIds.length > 0) {
       query._id = { $nin: occupiedBedIds };
@@ -209,7 +220,7 @@ exports.getAllAvailableBeds = async (req, res) => {
 
     // ================= 💨 STEP 3: Get clients for these beds only =================
     const bedIds = beds.map(b => b._id);
-    
+
     // 🔥 Sirf 10-20 clients fetch ho rahe hain, 40K nahi
     let clients = [];
     if (bedIds.length > 0) {
@@ -217,8 +228,8 @@ exports.getAllAvailableBeds = async (req, res) => {
         bedId: { $in: bedIds }
         // ❌ Koi extra filter nahi - sab clients chahiye
       })
-      .select("_id bedId fullName callingNo whatsappNo noticeStartDate noticeLastDate clientVacatingDate clientDoj isBookingCancelled")
-      .lean();
+        .select("_id bedId fullName callingNo whatsappNo noticeStartDate noticeLastDate clientVacatingDate clientDoj isBookingCancelled")
+        .lean();
     }
 
     // ================= 💨 STEP 4: Map for O(1) lookup =================
@@ -251,7 +262,7 @@ exports.getAllAvailableBeds = async (req, res) => {
       data.sort((a, b) => {
         const aDate = a.client?.clientVacatingDate ? new Date(a.client.clientVacatingDate) : null;
         const bDate = b.client?.clientVacatingDate ? new Date(b.client.clientVacatingDate) : null;
-        
+
         if (aDate === null && bDate !== null) return -1;
         if (aDate !== null && bDate === null) return 1;
         if (aDate === null && bDate === null) {
@@ -260,10 +271,10 @@ exports.getAllAvailableBeds = async (req, res) => {
           }
           return 0;
         }
-        
+
         const dateDiff = aDate - bDate;
         if (dateDiff !== 0) return dateDiff;
-        
+
         if (sortByRent === "true") {
           return a.monthlyRent - b.monthlyRent;
         }
@@ -316,15 +327,15 @@ exports.getPropertyWiseAvailableBeds = async (req, res) => {
         ? new Date(client.noticeStartDate)
         : null;
 
-      const vacatingDate = client.clientVacatingDate
-        ? new Date(client.clientVacatingDate)
-        : null;
+      // const vacatingDate = client.clientVacatingDate
+      //   ? new Date(client.clientVacatingDate)
+      //   : null;
 
       // Notice diya hua = Available
       if (noticeDate) return;
 
       // Vacating date nikal gayi = Available
-      if (vacatingDate && now >= vacatingDate) return;
+      // if (vacatingDate && now >= vacatingDate) return;
 
       // Otherwise Occupied
       occupiedBedIds.push(client.bedId);
