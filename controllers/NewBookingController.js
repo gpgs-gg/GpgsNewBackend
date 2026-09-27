@@ -5,6 +5,7 @@ const Property = require("../models/property.model")
 const Bed = require("../models/bed.model");
 const { createWorkLog, generateWorkLogs } = require("../utils/worklog");
 const Employee = require("../models/employee.model");
+
 // exports.createBulkBooking = async (req, res) => {
 //   try {
 //     const data = req.body.data;
@@ -58,6 +59,7 @@ const Employee = require("../models/employee.model");
 
 
 // CREATE BOOKING
+
 exports.createBooking = async (req, res) => {
   try {
     const userId = req.user?._id || req.user?.id;
@@ -148,7 +150,8 @@ exports.getAllBookings = async (req, res) => {
       bookingAmountMax,
       balanceAmountMin,
       balanceAmountMax,
-
+// Today's bookings
+      todayBookings,
       // Pagination
       page = 1,
       limit = 10,
@@ -157,6 +160,26 @@ exports.getAllBookings = async (req, res) => {
 
     // Build filter object
     let filter = {};
+    // Today's bookings = bookings created today
+    if (todayBookings === "true") {
+      const now = new Date();
+
+      const indiaDate = new Intl.DateTimeFormat("en-CA", {
+        timeZone: "Asia/Kolkata",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+      }).format(now);
+
+      const startOfToday = new Date(`${indiaDate}T00:00:00+05:30`);
+      const startOfTomorrow = new Date(`${indiaDate}T00:00:00+05:30`);
+      startOfTomorrow.setDate(startOfTomorrow.getDate() + 1);
+
+      filter.createdAt = {
+        $gte: startOfToday,
+        $lt: startOfTomorrow,
+      };
+    }
     if (propertyLocation) {
       const properties = await Property.find({
         propertyLocation: propertyLocation,

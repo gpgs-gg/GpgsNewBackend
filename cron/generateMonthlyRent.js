@@ -5,7 +5,7 @@ const {
 } = require("../services/rentHistory.service");
 
 // Every month 1st date at 01:00 AM
-// cron.schedule("0 1 1 * *", async () => {
+// cron.schedule("0 0 1 20 * *", async () => {
   // cron.schedule("0 0 1 27 * *", async () => {
 cron.schedule("*/10 * * * * *", async () => {
   try {

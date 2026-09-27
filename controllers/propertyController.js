@@ -119,7 +119,7 @@ const createProperty = asyncHandler(async (req, res) => {
 const getAllProperties = asyncHandler(async (req, res) => {
   // Pagination
   const page = Math.max(parseInt(req.query.page) || 1, 1);
-  const limit = Math.max(parseInt(req.query.limit) || 10, 1);
+  const limit = Math.max(parseInt(req.query.limit) || 10000, 1);
   const skip = (page - 1) * limit;
   // Build filter query
   const query = {};

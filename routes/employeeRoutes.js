@@ -10,7 +10,7 @@ const {
   deleteEmployee,
   EmployeeDocumentUpload,
   toggleEmployeeLoginController,
-  getLoginEnabledEmployeesController,
+  getLoginEnabledEmployeesController,getManagerEmployees
 } = require("../controllers/EmployeesController");
 
 const router = express.Router();
@@ -58,13 +58,14 @@ router.get("/login-enabled", getLoginEnabledEmployeesController);
 // ============================================================
 // SINGLE EMPLOYEE
 // ============================================================
-
+router.get("/managers", getManagerEmployees);
+router.patch("/toggle-login", toggleEmployeeLoginController);
 router.get("/:id", getEmployeeById);
 
 router.put("/:id", updateEmployee);
 
 router.delete("/:id", deleteEmployee);
-router.patch("/toggle-login", toggleEmployeeLoginController);
+
 
 // ============================================================
 // EMPLOYEE DOCUMENTS

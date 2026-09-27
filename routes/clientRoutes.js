@@ -11,15 +11,21 @@ const {
   deleteClient,
   getAvailableBeds,
   createClientFromBooking,
-  createDummyClients,
+  // createDummyClients,
   getNoticeClients,
-  getClientsWithLatestRentHistory
+  getClientsWithLatestRentHistory,
+  generateSingleClientMonthlyRent,
+  generateMonthlyRent
 } = require("../controllers/ClientController");
 const upload = require("../middleware/uploadMiddleware");
 
 // Create Client
 router.post("/", createClient);
-
+router.post("/generate-single-client-monthly-rent/:clientId", generateSingleClientMonthlyRent);
+router.post(
+  "/generate-monthly-rent",
+  generateMonthlyRent
+);
 // Get All Clients
 router.get("/", getClients);
 router.get("/notice", getNoticeClients);
@@ -31,14 +37,14 @@ router.get(
 router.get("/:id", getClientById);
 
 // Update Client
-router.put("/:id",  upload.fields([
-    { name: "photo", maxCount: 10 },
-    { name: "aadhaarCard", maxCount: 10 },
-    { name: "collegeIdentification", maxCount: 10 },
-    { name: "clientRentalAgreement", maxCount: 10 },
-    { name: "clientPoliceNOC", maxCount: 10 },
-    { name: "handoverAttachment", maxCount: 10 },
-  ]), updateClient);
+router.put("/:id", upload.fields([
+  { name: "photo", maxCount: 10 },
+  { name: "aadhaarCard", maxCount: 10 },
+  { name: "collegeIdentification", maxCount: 10 },
+  { name: "clientRentalAgreement", maxCount: 10 },
+  { name: "clientPoliceNOC", maxCount: 10 },
+  { name: "handoverAttachment", maxCount: 10 },
+]), updateClient);
 
 // Delete Client
 router.delete("/:id", deleteClient);
@@ -48,7 +54,7 @@ router.post(
   "/create-from-booking",
   createClientFromBooking
 );
-router.post("/dummy-clients", createDummyClients);
+// router.post("/dummy-clients", createDummyClients);
 
 module.exports = router;
 

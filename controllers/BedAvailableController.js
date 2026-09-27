@@ -1,6 +1,7 @@
 const Client = require("../models/client.model");
 const Bed = require("../models/bed.model");
 const Property = require("../models/property.model");
+const Booking = require("../models/newBooking.model");
 
 // ye abhishek ka code h 
 // exports.getAllAvailableBeds = async (req, res) => {
@@ -184,22 +185,54 @@ exports.getAllAvailableBeds = async (req, res) => {
     //     }
     //   ]
     // });
+ // ................................................
+    // const occupiedBedIds = await Client.distinct("bedId", {
+    //   bedId: { $exists: true, $ne: null },
+    //   isBookingCancelled: { $ne: true },
 
-    const occupiedBedIds = await Client.distinct("bedId", {
-      bedId: { $exists: true, $ne: null },
-      isBookingCancelled: { $ne: true },
+    //   // Sirf wahi clients occupied hain jinka notice nahi hai
+    //   $or: [
+    //     { noticeStartDate: { $exists: false } },
+    //     { noticeStartDate: "" },
+    //     { noticeStartDate: null }
+    //   ]
+    // });
 
-      // Sirf wahi clients occupied hain jinka notice nahi hai
-      $or: [
-        { noticeStartDate: { $exists: false } },
-        { noticeStartDate: "" },
-        { noticeStartDate: null }
-      ]
-    });
+    // if (occupiedBedIds.length > 0) {
+    //   query._id = { $nin: occupiedBedIds };
+    // }
 
-    if (occupiedBedIds.length > 0) {
-      query._id = { $nin: occupiedBedIds };
-    }
+// 1️⃣ Active clients → Bed actually occupied
+const occupiedBedIds = await Client.distinct("bedId", {
+  bedId: { $exists: true, $ne: null },
+  isBookingCancelled: { $ne: true },
+
+  // Sirf wahi clients occupied hain jinka notice nahi hai
+  $or: [
+    { noticeStartDate: { $exists: false } },
+    { noticeStartDate: "" },
+    { noticeStartDate: null }
+  ]
+});
+
+// 2️⃣ Pending bookings → Bed temporarily reserved
+// Payment verify nahi hua + hold expire nahi hua
+const pendingBookingBedIds = await Booking.distinct("bedId", {
+  bedId: { $exists: true, $ne: null },
+  status: "Booked",
+  loginEnabled: false,
+});
+
+// 3️⃣ Client occupied + pending booking reserved
+const unavailableBedIds = [
+  ...occupiedBedIds,
+  ...pendingBookingBedIds
+];
+
+if (unavailableBedIds.length > 0) {
+  query._id = { $nin: unavailableBedIds };
+}
+
 
     // ================= 💨 STEP 2: Parallel queries (FASTER) =================
     let sortOption = { createdAt: -1 };

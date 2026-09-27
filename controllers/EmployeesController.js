@@ -135,7 +135,8 @@ const formatEmployee = (employee) => {
     Level: data.level || "",
 
     Role: data.role || "",
-
+    ticketManager: data.ticketManager ?? false,
+    TicketManager: data.ticketManager ? "Yes" : "No",
     // Dates FIX
     dateOfJoining: data.dateOfJoining ? new Date(data.dateOfJoining) : null,
 
@@ -422,7 +423,7 @@ const createEmployee = asyncHandler(async (req, res) => {
     designation,
     level,
     role,
-    // Work Details
+    ticketManager = false,
     // Work Details
     workingHours = 9,
     halfDayHours = 5,
@@ -573,6 +574,7 @@ const createEmployee = asyncHandler(async (req, res) => {
     designation: designation?.trim(),
     level: level?.trim(),
     role: role?.trim(),
+    ticketManager: ticketManager === true || ticketManager === "Yes",
     // Work Details
     workingHours: employeeWorkingHours,
 
@@ -609,7 +611,22 @@ const createEmployee = asyncHandler(async (req, res) => {
     createdBy: req.user?._id || null,
     updatedBy: req.user?._id || null,
   });
+  const createdByName =
+    req.body.updatedByName ||
+    req.user?.name ||
+    req.user?.Name ||
+    req.user?.fullName ||
+    req.user?.username ||
+    "System";
+  employee.worklogs.push({
+    action: "CREATE",
+    description: "Employee created",
+    changes: [],
+    updatedBy: req.user?._id || null,
+    updatedByName: createdByName,
+  });
 
+  await employee.save();
   return res.status(201).json({
     success: true,
     message: "Employee created successfully",
@@ -772,9 +789,20 @@ const updateEmployee = asyncHandler(async (req, res) => {
 
   delete body._id;
   delete body.__v;
-
   delete body.worklogs;
   delete body.password;
+
+  // updatedByName is only used for worklog/audit information.
+  // It must NOT be treated as an Employee database field.
+  const updatedByName =
+    req.body.updatedByName ||
+    req.user?.name ||
+    req.user?.Name ||
+    req.user?.fullName ||
+    req.user?.username ||
+    "System";
+
+  delete body.updatedByName;
 
   // ========================================================
   // STRING NORMALIZATION
@@ -801,6 +829,14 @@ const updateEmployee = asyncHandler(async (req, res) => {
     if (body[field] !== undefined && typeof body[field] === "string") {
       body[field] = body[field].trim();
     }
+  }
+  // ========================================================
+  // TICKET MANAGER
+  // ========================================================
+
+  if (body.ticketManager !== undefined) {
+    body.ticketManager =
+      body.ticketManager === true || body.ticketManager === "Yes";
   }
 
   // ========================================================
@@ -1016,19 +1052,14 @@ const updateEmployee = asyncHandler(async (req, res) => {
   if (changes.length > 0) {
     employee.worklogs.push({
       action: "UPDATE",
-
       description: `${changes.length} field${
         changes.length > 1 ? "s" : ""
       } updated`,
-
       changes,
-
-      // Authentication not implemented yet
-      updatedBy: null,
-      updatedByName: "Pooja",
+      updatedBy: req.user?._id || null,
+      updatedByName,
     });
   }
-
   // ========================================================
   // UPDATE EMPLOYEE
   // ========================================================
@@ -1266,7 +1297,29 @@ const EmployeeDocumentUpload = asyncHandler(async (req, res) => {
     uploadedDocuments,
   });
 });
+const getManagerEmployees = async (req, res) => {
+  try {
+    const managers = await Employee.find({
+      status: { $regex: /^active$/i },
+      designation: { $regex: /manager/i },
+    })
+      .select("_id employeeId employeeName designation status")
+      .sort({ employeeName: 1 })
+      .lean();
 
+    return res.status(200).json({
+      success: true,
+      data: managers,
+    });
+  } catch (error) {
+    console.error("Get manager employees error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch managers",
+    });
+  }
+};
 // ============================================================
 // GET EMPLOYEE WORKLOGS
 // ============================================================
@@ -1288,4 +1341,5 @@ module.exports = {
   EmployeeDocumentUpload,
   toggleEmployeeLoginController,
   getLoginEnabledEmployeesController,
+  getManagerEmployees,
 };

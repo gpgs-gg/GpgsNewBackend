@@ -77,7 +77,10 @@ const employeeSchema = new mongoose.Schema(
       type: String,
       trim: true,
     },
-
+ticketManager: {
+      type: Boolean,
+      default: false,
+    },
     // =========================
     // DATES
     // =========================

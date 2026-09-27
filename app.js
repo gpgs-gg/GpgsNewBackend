@@ -33,7 +33,8 @@ const clientVacationRoutes = require('./routes/clientVacationRoutes');
 const ebCalculatorRoutes = require('./routes/ebCalculatorRoutes.js');
 const updateEbAmtRoutes = require('./routes/UpdateEbAmtRoutes.js')
 const propertyAndPersonalRoutes = require('./clientRoutes/propertyAndPersonalRoutes.js')
-
+const bookingEnquiryRoutes = require("./routes/bookingEnquiryRoutes")
+const rentGenerationLogRoutes = require("./routes/rentGenerationLogRoutes");
 const ApiError = require("./utils/ApiError");
 const cors = require("cors");
 const cookieParser = require("cookie-parser");
@@ -45,9 +46,16 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 
+// app.use(
+//   cors({
+//     origin: "http://localhost:5173",
+//     credentials: true,
+//   })
+// );
+
 app.use(
   cors({
-    origin: "http://localhost:5173",
+    origin: "http://gpgs24.in",
     credentials: true,
   })
 );
@@ -92,7 +100,8 @@ app.use('/api/vacation-history', clientVacationRoutes);
 app.use("/api", ebCalculatorRoutes);
 app.use("/api", updateEbAmtRoutes);
 app.use("/api", propertyAndPersonalRoutes);
-
+app.use("/api/booking-enquiries", bookingEnquiryRoutes);
+app.use("/api", rentGenerationLogRoutes);
 app.use((req, res, next) => {
   next(new ApiError(404, `Route Not Found - ${req.originalUrl}`));
 });

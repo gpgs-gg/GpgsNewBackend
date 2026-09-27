@@ -4,6 +4,7 @@ const Bed = require("../models/bed.model");
 const calculateRentHistory = require("../utils/calculateRentHistory");
 const batchInsert = require("../utils/batchInsert");
 const getDaysCount = require("../utils/getDaysCount");
+const RentGenerationLog = require("../models/RentGenerationLog.model");
 
 const monthNames = [
   "January",
@@ -248,62 +249,76 @@ const generateMonthlyRent = async () => {
   // const month = 10;
   // const year = 2026;
   // const todayFilterDate = "2026-8-03";
-  // const today = new Date();
+  const today = new Date();
+  let month = today.getMonth() + 1;
+  let year = today.getFullYear();
+  // 27th ko next month's rent history generate hogi
+  if (today.getDate() >= 20) {
+    month++;
+
+    if (month > 12) {
+      month = 1;
+      year++;
+    }
+  }
+
+  // Client filtering ke liye bhi next month ki 1st date use hogi
+  let todayFilterDate;
+
+  if (today.getDate() >= 20) {
+    const filterDate = new Date(
+      today.getFullYear(),
+      today.getMonth() + 1,
+      1
+    );
+    todayFilterDate = `${filterDate.getFullYear()}-${String(
+      filterDate.getMonth() + 1
+    ).padStart(2, "0")}-${String(
+      filterDate.getDate()
+    ).padStart(2, "0")}`;
+
+
+  } else {
+    todayFilterDate = `${today.getFullYear()}-${String(
+      today.getMonth() + 1
+    ).padStart(2, "0")}-${String(
+      today.getDate()
+    ).padStart(2, "0")}`;
+
+  }
+
+  //   const today = new Date();
+
   // let month = today.getMonth() + 1;
   // let year = today.getFullYear();
-  // // 27th ko next month's rent history generate hogi
-  // if (today.getDate() >= 27) {
+
+  // let todayFilterDate;
+
+  // // 22nd ya uske baad → next month ka rent
+  // if (today.getDate() >= 22) {
   //   month++;
 
   //   if (month > 12) {
   //     month = 1;
   //     year++;
   //   }
-  // }
-  // // Client filtering ke liye bhi next month ki 1st date use hogi
-  // let todayFilterDate;
-  // if (today.getDate() >= 27) {
-  //   const filterDate = new Date(
-  //     today.getFullYear(),
-  //     today.getMonth() + 1,
-  //     1
-  //   );
-  //   todayFilterDate = filterDate.toISOString().split("T")[0];
+
+  //   // jis month ka rent generate ho raha hai,
+  //   // us month ki 1st date
+  //   const filterDate = new Date(year, month - 1, 1);
+
+  //   todayFilterDate = filterDate
+  //     .toISOString()
+  //     .split("T")[0];
   // } else {
-  //   todayFilterDate = today.toISOString().split("T")[0];
+  //   todayFilterDate =
+  //     today.toISOString().split("T")[0];
   // }
 
-const today = new Date();
+  // console.log("today:", today);
+  // console.log("month:", month, "year:", year);
+  // console.log("todayFilterDate:", todayFilterDate);
 
-let month = today.getMonth() + 1;
-let year = today.getFullYear();
-
-// 22nd ko next month's rent history generate hogi
-if (today.getDate() >= 22) {
-  month++;
-
-  if (month > 12) {
-    month = 1;
-    year++;
-  }
-}
-
-// Client filtering ke liye bhi next month's 1st date use hogi
-let todayFilterDate;
-
-if (today.getDate() >= 22) {
-  const filterDate = new Date(
-    today.getFullYear(),
-    today.getMonth() + 1,
-    1
-  );
-
-  todayFilterDate = filterDate.toISOString().split("T")[0];
-} else {
-  todayFilterDate = today.toISOString().split("T")[0];
-}
-
-  
   // const todayFilterDate = new Date().toISOString().split("T")[0];
   const clients = await Client.find({
     isBookingCancelled: false,
@@ -346,7 +361,9 @@ if (today.getDate() >= 22) {
 
 
   const clientIds = clients.map((client) => client._id);
+  const eligibleClientCount = clientIds.length;
   const rentHistoryData = [];
+  let alreadyGeneratedCount = 0;
   // Already Generated
   const existingHistory = await ClientRentHistory.find({
     month,
@@ -399,6 +416,7 @@ if (today.getDate() >= 22) {
     if (!client.bedId) continue;
     const key = `${client._id}_${client.bedId._id}`;
     if (existingHistorySet.has(key)) {
+      alreadyGeneratedCount++;
       continue;
     }
     const previousDue =
@@ -517,20 +535,98 @@ if (today.getDate() >= 22) {
     });
   }
 
+  // ✅ Kitne naye rent history generate karne ke liye ready hain
+  const pendingGenerationCount = rentHistoryData.length;
+
   if (!rentHistoryData.length) {
     return {
       insertedCount: 0,
       failedCount: 0,
-      total: 0,
-      message:
-        "No Rent History Generated",
+
+      // Total eligible clients
+      total: eligibleClientCount,
+
+      eligibleClientCount,
+      alreadyGeneratedCount,
+      pendingGenerationCount: 0,
+
+      completedCount: alreadyGeneratedCount,
+      remainingCount: 0,
+
+      message: "No New Rent History Generated",
     };
   }
-  return await batchInsert(
+
+  const batchResult = await batchInsert(
     ClientRentHistory,
     rentHistoryData,
     500
   );
+
+  const generatedCount = batchResult.insertedCount;
+
+  const failedCount = batchResult.failedCount;
+
+const failedClientIds = batchResult.failedClients || [];
+
+  const completedCount =
+    alreadyGeneratedCount + generatedCount;
+
+  const remainingCount =
+    Math.max(
+      eligibleClientCount - completedCount,
+      0
+    );
+
+
+  // ✅ YAHAN DATABASE ME SAVE HOGA
+  await RentGenerationLog.findOneAndUpdate(
+    { month, year },
+    {
+      $set: {
+        month,
+        year,
+        monthName: monthNames[month - 1],
+
+        eligibleClientCount,
+        alreadyGeneratedCount,
+        generatedCount,
+        failedCount,
+        remainingCount,
+        failedClientIds,
+        status:
+          failedCount > 0
+            ? "Completed With Errors"
+            : "Completed",
+
+        completedAt: new Date(),
+      },
+    },
+    {
+      upsert: true,
+      new: true,
+      setDefaultsOnInsert: true,
+    }
+  );
+
+
+  // ✅ Iske baad tumhara existing return
+  return {
+    ...batchResult,
+
+    eligibleClientCount,
+    alreadyGeneratedCount,
+    pendingGenerationCount,
+    generatedCount,
+    failedCount,
+    completedCount,
+    remainingCount,
+
+    month,
+    year,
+    monthName: monthNames[month - 1],
+  };
+
 };
 
 const recalculateRentHistory = async (

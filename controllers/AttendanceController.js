@@ -1080,6 +1080,9 @@ const getAttendanceById = async (req, res) => {
 // ======================================================
 // CREATE / REGULARIZE ATTENDANCE STATUS
 // ======================================================
+// ======================================================
+// CREATE / REGULARIZE ATTENDANCE STATUS
+// ======================================================
 const createOrRegularizeAttendance = async (req, res) => {
   try {
     const { employeeId, attendanceDate, status, remarks, newWorkLog } =
@@ -1293,11 +1296,11 @@ const createOrRegularizeAttendance = async (req, res) => {
     // We need the previous values so the work log can tell exactly
     // what changed instead of only saying "Attendance updated".
 
-    const oldStatus = attendance.status;
-    const oldRemarks = attendance.remarks || "";
+    // ==================================================
+    // STORE OLD ATTENDANCE DATA
+    // ==================================================
+    const oldAttendanceData = attendance.toObject();
 
-    const oldStatusLabel = getAttendanceStatusLabel(oldStatus);
-    const newStatusLabel = getAttendanceStatusLabel(numericStatus);
     attendance.status = numericStatus;
 
     attendance.attendanceSource = "ADMIN";
@@ -1305,6 +1308,51 @@ const createOrRegularizeAttendance = async (req, res) => {
     attendance.remarks =
       remarks !== undefined ? remarks.trim() : attendance.remarks;
 
+    const newAttendanceData = attendance.toObject();
+
+    const automaticWorkLogs = generateWorkLogs({
+      oldData: oldAttendanceData,
+      newData: newAttendanceData,
+      createdBy: user,
+      ignoredFields: [
+        "workLogs",
+        "newWorkLog",
+        "_id",
+        "__v",
+        "createdAt",
+        "updatedAt",
+        "editedBy",
+        "editedAt",
+        "totalMinutes",
+        "overtimeMinutes",
+        "deficitMinutes",
+        "regularizationDocuments",
+      ],
+    });
+
+    attendance.workLogs.push(...automaticWorkLogs);
+
+    // Supporting documents
+    if (uploadedDocuments.length > 0) {
+      attendance.workLogs.push(
+        createWorkLog({
+          message: `${uploadedDocuments.length} supporting document${
+            uploadedDocuments.length > 1 ? "s" : ""
+          } added`,
+          createdBy: user,
+        }),
+      );
+    }
+
+    // Manual worklog
+    if (newWorkLog?.trim()) {
+      attendance.workLogs.push(
+        createWorkLog({
+          message: newWorkLog.trim(),
+          createdBy: user,
+        }),
+      );
+    }
     // ==================================================
     // WORKLOG
     // Add an audit entry for every attendance update
@@ -1326,26 +1374,10 @@ const createOrRegularizeAttendance = async (req, res) => {
     // --------------------------------------------------
     // Only add this to the work log when the status actually changed.
 
-    if (oldStatus !== numericStatus) {
-      changes.push(
-        `Status changed from ${oldStatusLabel} to ${newStatusLabel}`,
-      );
-    }
-
     // --------------------------------------------------
     // REMARKS CHANGE
     // --------------------------------------------------
     // Compare old and new remarks and record the actual values.
-
-    const newRemarks = remarks !== undefined ? remarks.trim() : oldRemarks;
-
-    if (oldRemarks !== newRemarks) {
-      changes.push(
-        `Remarks changed from "${oldRemarks || "Empty"}" to "${
-          newRemarks || "Empty"
-        }"`,
-      );
-    }
 
     // --------------------------------------------------
     // SUPPORTING DOCUMENTS

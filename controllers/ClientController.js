@@ -15,65 +15,83 @@ const uploadFile = require("../services/uploadFile");
 
 const ClientRentHistory = require("../models/clientRentHistory.model");
 const { generateWorkLogs, createWorkLog } = require("../utils/worklog");
+const calculateRentHistory = require("../utils/calculateRentHistory");
+const batchInsert = require("../utils/batchInsert");
+const clientRentHistoryModel = require("../models/clientRentHistory.model");
+const getDaysCount = require("../utils/getDaysCount");
 
+const monthNames = [
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
+];
 
-  exports.createDummyClients = async (req, res) => {
-    try {
-      const clients = [];
+  // exports.createDummyClients = async (req, res) => {
+  //   try {
+  //     const clients = [];
 
-      for (let i = 1; i <= 20000; i++) {
-        clients.push({
-          propertyId: "6aa39f3cdcc10950de7a73a6",
-          bedId: "6aafe275cf5270d535e14096",
-          bookingId: "6aab8c15ccb2b3635afa7408",
+  //     for (let i = 1; i <= 20000; i++) {
+  //       clients.push({
+  //         propertyId: "6aa39f3cdcc10950de7a73a6",
+  //         bedId: "6aafe275cf5270d535e14096",
+  //         bookingId: "6aab8c15ccb2b3635afa7408",
 
-          stayType: "P. Booked",
-          status: "Booked",
-          isBookingCancelled: false,
+  //         stayType: "P. Booked",
+  //         status: "Booked",
+  //         isBookingCancelled: false,
 
-          fullName: `Dummy Client ${i}`,
-          whatsappNo: `9000${String(i).padStart(6, "0")}`,
-          callingNo: `9000${String(i).padStart(6, "0")}`,
-          emailId: `dummy${i}@gmail.com`,
+  //         fullName: `Dummy Client ${i}`,
+  //         whatsappNo: `9000${String(i).padStart(6, "0")}`,
+  //         callingNo: `9000${String(i).padStart(6, "0")}`,
+  //         emailId: `dummy${i}@gmail.com`,
 
-          monthlyRent: 8000,
-          depositAmount: 16000,
-          parkingCharges: 100,
-          processingFees: 500,
+  //         monthlyRent: 8000,
+  //         depositAmount: 16000,
+  //         parkingCharges: 100,
+  //         processingFees: 500,
 
-          clientDoj: new Date("2026-06-15"),
+  //         clientDoj: new Date("2026-06-15"),
 
-          totalAmount: 24600,
-          bookingAmount: 2000,
-          balanceAmount: 22600,
+  //         totalAmount: 24600,
+  //         bookingAmount: 2000,
+  //         balanceAmount: 22600,
 
-          photo: [],
-          aadhaarCard: [],
-          pan: [],
-          collegeIdentification: [],
-          companyIdentification: [],
-          clientRentalAgreement: [],
-          clientPoliceNOC: [],
-          attachments: [],
-          bedHistory: [],
-          worklogs: [],
-        });
-      }
+  //         photo: [],
+  //         aadhaarCard: [],
+  //         pan: [],
+  //         collegeIdentification: [],
+  //         companyIdentification: [],
+  //         clientRentalAgreement: [],
+  //         clientPoliceNOC: [],
+  //         attachments: [],
+  //         bedHistory: [],
+  //         worklogs: [],
+  //       });
+  //     }
 
-      const result = await Client.insertMany(clients);
+  //     const result = await Client.insertMany(clients);
 
-      return res.status(200).json({
-        success: true,
-        message: `${result.length} Dummy Clients Created`,
-      });
-    } catch (err) {
-      console.error(err);
-      return res.status(500).json({
-        success: false,
-        message: err.message,
-      });
-    }
-  };
+  //     return res.status(200).json({
+  //       success: true,
+  //       message: `${result.length} Dummy Clients Created`,
+  //     });
+  //   } catch (err) {
+  //     console.error(err);
+  //     return res.status(500).json({
+  //       success: false,
+  //       message: err.message,
+  //     });
+  //   }
+  // };
 
 exports.createClientFromBooking = async (
   req,
@@ -2754,6 +2772,600 @@ exports.getClientsWithLatestRentHistory = async (req, res) => {
     return res.status(500).json({
       success: false,
       message: error.message,
+    });
+  }
+};
+
+
+
+
+
+exports.generateSingleClientMonthlyRent = async (req, res) => {
+    try {
+  const { clientId } = req.params;
+  const today = new Date();
+  const month = today.getMonth() + 1;
+  const year = today.getFullYear();
+  const todayFilterDate = today.toISOString().split("T")[0];
+
+
+  
+  // const todayFilterDate = new Date().toISOString().split("T")[0];
+  const clients = await Client.find({
+     _id: clientId,
+    isBookingCancelled: false,
+    $or: [
+      {
+        $and: [
+          {
+            $or: [
+              { noticeLastDate: { $exists: false } },
+              { noticeLastDate: null },
+              { noticeLastDate: "" },
+            ],
+          },
+          {
+            $or: [
+              { clientVacatingDate: { $exists: false } },
+              { clientVacatingDate: null },
+              { clientVacatingDate: "" },
+            ],
+          },
+        ],
+      },
+
+      {
+        noticeLastDate: {
+          $gte: todayFilterDate,
+        },
+      },
+
+      {
+        clientVacatingDate: {
+          $gte: todayFilterDate,
+        },
+      },
+    ],
+  })
+    .populate("bedId")
+    .lean();
+
+  const clientIds = clients.map((client) => client._id);
+  const rentHistoryData = [];
+  // Already Generated
+  const existingHistory = await clientRentHistoryModel.find({
+    month,
+    year,
+  })
+    .select("clientId bedId")
+    .lean();
+    
+  const existingHistorySet = new Set(
+    existingHistory.map(
+      (x) => `${x.clientId}_${x.bedId}`
+    )
+  );
+  // Previous Due
+  const previousHistory =
+    await ClientRentHistory.aggregate([
+      {
+        $match: {
+          clientId: {
+            $in: clientIds,
+          },
+        },
+      },
+      {
+        $sort: {
+          year: -1,
+          month: -1,
+          createdAt: -1,
+          _id: -1,
+        },
+      },
+      {
+        $group: {
+          _id: "$clientId",
+          currentDue: {
+            $first: "$currentDue",
+          },
+        },
+      },
+    ]);
+
+  const dueMap = new Map();
+  previousHistory.forEach((item) => {
+    dueMap.set(
+      String(item._id),
+      item.currentDue
+    );
+  });
+  for (const client of clients) {
+
+    if (!client.bedId) continue;
+    const key = `${client._id}_${client.bedId._id}`;
+if (existingHistorySet.has(key)) {
+  return res.status(200).json({
+    success: true,
+    message: `Already Exist for ${monthNames[month - 1]} ${year}`,
+  });
+}
+    const previousDue =
+      dueMap.get(String(client._id)) || 0;
+
+    const monthlyRent = Number(
+      client.monthlyRent || 0
+    );
+
+    const depositAmount = Number(
+      client.depositAmount || 0
+    );
+    const processingFees = Number(
+      client.processingFees || 0
+    );
+
+    const parkingCharges = Number(
+      client.parkingCharges || 0
+    );
+    const noticeLastDate = client.noticeLastDate
+      ? new Date(client.noticeLastDate)
+      : null;
+    const clientVacatingDate = client.clientVacatingDate
+      ? new Date(client.clientVacatingDate)
+      : null;
+    // Billing month ka last date (31 ko 30 treat karna)
+    const lastDay = new Date(year, month, 0).getDate();
+    const monthEndDate = new Date(
+      year,
+      month - 1,
+      lastDay === 31 ? 30 : lastDay
+    );
+    let endDate;
+    if (noticeLastDate && clientVacatingDate) {
+      const lastDate =
+        noticeLastDate > clientVacatingDate
+          ? noticeLastDate
+          : clientVacatingDate;
+      endDate =
+        lastDate > monthEndDate
+          ? monthEndDate
+          : lastDate;
+    } else if (noticeLastDate || clientVacatingDate) {
+      const lastDate =
+        noticeLastDate || clientVacatingDate;
+      endDate =
+        lastDate > monthEndDate
+          ? monthEndDate
+          : lastDate;
+    } else {
+      endDate = monthEndDate;
+    }
+    let startDate;
+    if (
+      month === new Date(client.clientDoj).getMonth() + 1 &&
+      year === new Date(client.clientDoj).getFullYear()
+    ) {
+      startDate = new Date(client.clientDoj);
+    } else {
+      startDate = new Date(year, month - 1, 1);
+    }
+    const daysCount = getDaysCount(
+      startDate,
+      endDate,
+      month,
+      year
+    );
+
+    const actualMonthDays = new Date(year, month, 0).getDate();
+
+    const rentDivider =
+      actualMonthDays === 31 ? 30 : actualMonthDays;
+
+    const calculation =
+      calculateRentHistory({
+        monthlyRent,
+        depositAmount: 0,  // for every month
+        daysCount,
+        rentDivider,
+        previousDue,
+        ebAmt: 0,
+        flatEB: 0,
+        adjEB: 0,
+        adjAmt: 0,
+        processingFees: 0,  // for every month
+        parkingCharges,
+        processingFeesReceived: 0,
+        depositAmountReceived: 0,
+        rentReceived: 0,
+      });
+    rentHistoryData.push({
+      clientId: client._id,
+
+      bookingId: client.bookingId || null,
+
+      propertyId: client.propertyId,
+
+      bedId: client.bedId._id,
+
+      stayType: client.stayType,
+
+      startDate,
+      endDate,
+
+      month,
+
+      year,
+
+      monthName: monthNames[month - 1],
+
+      ...calculation,
+
+      paymentComments: [],
+
+      remarks: "",
+    });
+  }
+
+ if (!rentHistoryData.length) {
+      return res.status(200).json({
+        success: true,
+        insertedCount: 0,
+        failedCount: 0,
+        total: 0,
+        message: "No Rent History Generated",
+      });
+    }
+const result = await batchInsert(
+  ClientRentHistory,
+  rentHistoryData,
+  500
+);
+
+     return res.status(200).json({
+      success: true,
+      ...result,
+    });
+  } catch (error) {
+    console.error(
+      "Generate Single Client Monthly Rent Error:",
+      error
+    );
+
+    return res.status(500).json({
+      success: false,
+      message:
+        error.message ||
+        "Failed to generate rent history",
+    });
+  }
+};
+
+
+
+exports.generateMonthlyRent = async (req, res) => {
+  try{
+  // const month = new Date().getMonth() + 1;
+  // const year = new Date().getFullYear();
+  // const month = 10;
+  // const year = 2026;
+  // const todayFilterDate = "2026-8-03";
+  const today = new Date();
+  let month = today.getMonth()+1;
+  let year = today.getFullYear();
+  
+const todayFilterDate = `${today.getFullYear()}-${String(
+  today.getMonth() + 1
+).padStart(2, "0")}-01`;
+
+  // console.log(11111111111111111111, today ,month , year ,todayFilterDate)
+  // // 27th ko next month's rent history generate hogi
+  // if (today.getDate() >= 27) {
+  //   month++;
+
+  //   if (month > 12) {
+  //     month = 1;
+  //     year++;
+  //   }
+  // }
+  // // Client filtering ke liye bhi next month ki 1st date use hogi
+  // let todayFilterDate;
+  // if (today.getDate() >= 27) {
+  //   const filterDate = new Date(
+  //     today.getFullYear(),
+  //     today.getMonth() + 1,
+  //     1
+  //   );
+  //   todayFilterDate = filterDate.toISOString().split("T")[0];
+  // } else {
+  //   todayFilterDate = today.toISOString().split("T")[0];
+  // }
+
+// const today = new Date();
+
+// let month = today.getMonth() + 1;
+// let year = today.getFullYear();
+
+// // 22nd ko next month's rent history generate hogi
+// if (today.getDate() >= 22) {
+//   month++;
+
+//   if (month > 12) {
+//     month = 1;
+//     year++;
+//   }
+// }
+
+// // Client filtering ke liye bhi next month's 1st date use hogi
+// let todayFilterDate;
+
+// if (today.getDate() >= 22) {
+//   const filterDate = new Date(
+//     today.getFullYear(),
+//     today.getMonth() + 1,
+//     1
+//   );
+
+//   todayFilterDate = filterDate.toISOString().split("T")[0];
+// } else {
+//   todayFilterDate = today.toISOString().split("T")[0];
+// }
+
+  
+  // const todayFilterDate = new Date().toISOString().split("T")[0];
+  const clients = await Client.find({
+    isBookingCancelled: false,
+    $or: [
+      {
+        $and: [
+          {
+            $or: [
+              { noticeLastDate: { $exists: false } },
+              { noticeLastDate: null },
+              { noticeLastDate: "" },
+            ],
+          },
+          {
+            $or: [
+              { clientVacatingDate: { $exists: false } },
+              { clientVacatingDate: null },
+              { clientVacatingDate: "" },
+            ],
+          },
+        ],
+      },
+
+      {
+        noticeLastDate: {
+          $gte: todayFilterDate,
+        },
+      },
+
+      {
+        clientVacatingDate: {
+          $gte: todayFilterDate,
+        },
+      },
+    ],
+  })
+    .populate("bedId")
+    .lean();
+
+
+
+  const clientIds = clients.map((client) => client._id);
+  const rentHistoryData = [];
+  // Already Generated
+  const existingHistory = await ClientRentHistory.find({
+    month,
+    year,
+  })
+    .select("clientId bedId")
+    .lean();
+  const existingHistorySet = new Set(
+    existingHistory.map(
+      (x) => `${x.clientId}_${x.bedId}`
+    )
+  );
+  // Previous Due
+  const previousHistory =
+    await ClientRentHistory.aggregate([
+      {
+        $match: {
+          clientId: {
+            $in: clientIds,
+          },
+        },
+      },
+      {
+        $sort: {
+          year: -1,
+          month: -1,
+          createdAt: -1,
+          _id: -1,
+        },
+      },
+      {
+        $group: {
+          _id: "$clientId",
+          currentDue: {
+            $first: "$currentDue",
+          },
+        },
+      },
+    ]);
+
+  const dueMap = new Map();
+  previousHistory.forEach((item) => {
+    dueMap.set(
+      String(item._id),
+      item.currentDue
+    );
+  });
+  for (const client of clients) {
+
+    if (!client.bedId) continue;
+    const key = `${client._id}_${client.bedId._id}`;
+    if (existingHistorySet.has(key)) {
+      continue;
+    }
+    const previousDue =
+      dueMap.get(String(client._id)) || 0;
+
+    const monthlyRent = Number(
+      client.monthlyRent || 0
+    );
+
+    const depositAmount = Number(
+      client.depositAmount || 0
+    );
+    const processingFees = Number(
+      client.processingFees || 0
+    );
+
+    const parkingCharges = Number(
+      client.parkingCharges || 0
+    );
+    const noticeLastDate = client.noticeLastDate
+      ? new Date(client.noticeLastDate)
+      : null;
+    const clientVacatingDate = client.clientVacatingDate
+      ? new Date(client.clientVacatingDate)
+      : null;
+    // Billing month ka last date (31 ko 30 treat karna)
+    const lastDay = new Date(year, month, 0).getDate();
+    const monthEndDate = new Date(
+      year,
+      month - 1,
+      lastDay === 31 ? 30 : lastDay
+    );
+    let endDate;
+    if (noticeLastDate && clientVacatingDate) {
+      const lastDate =
+        noticeLastDate > clientVacatingDate
+          ? noticeLastDate
+          : clientVacatingDate;
+      endDate =
+        lastDate > monthEndDate
+          ? monthEndDate
+          : lastDate;
+    } else if (noticeLastDate || clientVacatingDate) {
+      const lastDate =
+        noticeLastDate || clientVacatingDate;
+      endDate =
+        lastDate > monthEndDate
+          ? monthEndDate
+          : lastDate;
+    } else {
+      endDate = monthEndDate;
+    }
+    let startDate;
+    if (
+      month === new Date(client.clientDoj).getMonth() + 1 &&
+      year === new Date(client.clientDoj).getFullYear()
+    ) {
+      startDate = new Date(client.clientDoj);
+    } else {
+      startDate = new Date(year, month - 1, 1);
+    }
+    const daysCount = getDaysCount(
+      startDate,
+      endDate,
+      month,
+      year
+    );
+
+    const actualMonthDays = new Date(year, month, 0).getDate();
+
+    const rentDivider =
+      actualMonthDays === 31 ? 30 : actualMonthDays;
+
+    const calculation =
+      calculateRentHistory({
+        monthlyRent,
+        depositAmount: 0,  // for every month
+        daysCount,
+        rentDivider,
+        previousDue,
+        ebAmt: 0,
+        flatEB: 0,
+        adjEB: 0,
+        adjAmt: 0,
+        processingFees: 0,  // for every month
+        parkingCharges,
+        processingFeesReceived: 0,
+        depositAmountReceived: 0,
+        rentReceived: 0,
+      });
+    rentHistoryData.push({
+      clientId: client._id,
+
+      bookingId: client.bookingId || null,
+
+      propertyId: client.propertyId,
+
+      bedId: client.bedId._id,
+
+      stayType: client.stayType,
+
+      startDate,
+      endDate,
+
+      month,
+
+      year,
+
+      monthName: monthNames[month - 1],
+
+      ...calculation,
+
+      paymentComments: [],
+
+      remarks: "",
+    });
+  }
+
+   if (!rentHistoryData.length) {
+      return res.status(200).json({
+        success: true,
+        insertedCount: 0,
+        failedCount: 0,
+        total: 0,
+        message:
+          "No Rent History Generated",
+      });
+    }
+
+    
+    // ----------------------------------
+    // BATCH INSERT
+    // ----------------------------------
+
+    console.log("8. Batch insert START");
+
+    const result = await batchInsert(
+      ClientRentHistory,
+      rentHistoryData,
+      500
+    );
+
+    console.log("9. Batch insert COMPLETE");
+
+    return res.status(200).json({
+      success: true,
+      ...result,
+    });
+
+  } catch (error) {
+    console.error(
+      "Generate Monthly Rent Error:",
+      error
+    );
+
+    return res.status(500).json({
+      success: false,
+      message:
+        "Failed to generate monthly rent",
+      error: error.message,
     });
   }
 };
