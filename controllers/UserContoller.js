@@ -7,6 +7,7 @@ const { generateWorkLogs, createWorkLog } = require("../utils/worklog");
 // ==========================
 // GET ALL USERS
 // ==========================
+
 const getAllUsers = asyncHandler(async (req, res) => {
   const page = Math.max(Number(req.query.page) || 1, 1);
   const limit = Math.max(Number(req.query.limit) || 10, 1);
@@ -53,64 +54,6 @@ const getAllUsers = asyncHandler(async (req, res) => {
     .skip(skip)
     .limit(limit);
 
-  const usersWithCorrectDetails = await Promise.all(
-    users.map(async (user) => {
-      const userObj = user.toObject();
-
-      if (user.role === "Employee" && user.employeeId) {
-        const employee = await Employee.findById(user.employeeId).select(
-          "employeeName email",
-        );
-
-        if (employee) {
-          userObj.name = employee.employeeName;
-          userObj.email = employee.email;
-        }
-      }
-
-      if (user.role === "Client" && user.clientId) {
-        const client = await Client.findById(user.clientId).select(
-          "fullName emailId",
-        );
-
-        if (client) {
-          userObj.name = client.fullName;
-          userObj.email = client.emailId;
-        }
-      }
-
-      return userObj;
-    }),
-  );
-
-  res.status(200).json({
-    success: true,
-    page,
-    limit,
-    totalRecords,
-    totalPages: Math.ceil(totalRecords / limit),
-    hasNextPage: page < Math.ceil(totalRecords / limit),
-    hasPrevPage: page > 1,
-    count: usersWithCorrectDetails.length,
-    data: usersWithCorrectDetails,
-  });
-  // console.log(
-  //   "All User Emails:",
-  //   users.map((user) => user.email),
-  // );
-  // const employeeEmails = await Promise.all(
-  //   users
-  //     .filter((user) => user.role === "Employee" && user.employeeId)
-  //     .map(async (user) => {
-  //       const employee = await Employee.findById(user.employeeId).select(
-  //         "email",
-  //       );
-
-  //       return employee?.email;
-  //     }),
-  // );
-
-  console.log("Employee Emails:", employeeEmails);
   res.status(200).json({
     success: true,
     page,
@@ -123,6 +66,8 @@ const getAllUsers = asyncHandler(async (req, res) => {
     data: users,
   });
 });
+
+
 
 // ==========================
 // GET USER BY ID

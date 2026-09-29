@@ -601,7 +601,7 @@ const updateTicket = asyncHandler(async (req, res) => {
   if (auditorMessage) {
     auditorLogs.push({
       message: auditorMessage,
-      createdBy: req.body.updatedByName || "System",
+      createdBy: worklogsAddedBy || "System",
       createdAt: convertStringFormatDateTime(new Date()),
     });
   }

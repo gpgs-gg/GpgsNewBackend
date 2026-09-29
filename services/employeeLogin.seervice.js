@@ -53,7 +53,7 @@ const toggleEmployeeLogin = async (employeeId) => {
       existingEmailUser.name = employee.employeeName;
       existingEmailUser.email = email;
       existingEmailUser.role = "Employee";
-      existingEmailUser.employeeId = employee.employeeId;
+      existingEmailUser.employeeId = employee._id;
       existingEmailUser.employeeIdLable = employee.employeeId;
       existingEmailUser.isActive = true;
 

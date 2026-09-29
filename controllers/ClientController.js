@@ -2885,7 +2885,7 @@ exports.generateSingleClientMonthlyRent = async (req, res) => {
     if (!client.bedId) continue;
     const key = `${client._id}_${client.bedId._id}`;
 if (existingHistorySet.has(key)) {
-  return res.status(200).json({
+  return res.status(409).json({
     success: true,
     message: `Already Exist for ${monthNames[month - 1]} ${year}`,
   });
@@ -3296,6 +3296,7 @@ const todayFilterDate = `${today.getFullYear()}-${String(
         depositAmountReceived: 0,
         rentReceived: 0,
       });
+
     rentHistoryData.push({
       clientId: client._id,
 

@@ -24,6 +24,7 @@ const getLoginEnabledEmployeesController = async (req, res) => {
   }
 };
 // FOR ENABLING EMPLOYEE LOGIN, USE THE PATCH ROUTE /employees/enable-login WITH BODY { "employeeId": "<EMPLOYEE_ID>" }
+
 const toggleEmployeeLoginController = async (req, res) => {
   try {
     const { employeeId } = req.body;
@@ -55,6 +56,9 @@ const toggleEmployeeLoginController = async (req, res) => {
     });
   }
 };
+
+
+
 // ============================================================
 // HELPER: GET NEXT EMPLOYEE ID
 // ============================================================
