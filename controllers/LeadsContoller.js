@@ -605,7 +605,63 @@ const getLeadDropdown =
       Assignee: assignees,
     });
   });
+const bulkTransferLeads = asyncHandler(async (req, res) => {
+  const { leadIds, assignee, comment, UpdatedBy } = req.body;
 
+  if (!Array.isArray(leadIds) || leadIds.length === 0) {
+    throw new ApiError(400, "Please select at least one lead");
+  }
+
+  if (!assignee) {
+    throw new ApiError(400, "Assignee is required");
+  }
+
+  if (!comment || !comment.trim()) {
+    throw new ApiError(400, "Transfer comment is required");
+  }
+
+  const user = UpdatedBy || "System";
+
+  const leads = await Lead.find({
+    _id: { $in: leadIds },
+    IsActive: true,
+  });
+
+  if (!leads.length) {
+    throw new ApiError(404, "No leads found");
+  }
+
+  for (const lead of leads) {
+    const oldAssignee = lead.Assignee || "Unassigned";
+
+    // Assignee
+    lead.Assignee = assignee;
+
+    // Work Log
+    if (!Array.isArray(lead.workLogs)) {
+      lead.workLogs = [];
+    }
+
+    lead.workLogs.push({
+      message:
+        `Lead transferred from "${oldAssignee}" to "${assignee}"\n` +
+        `Comment: ${comment.trim()}`,
+      createdBy: user,
+      createdAt: new Date(),
+    });
+
+    // Updated By
+    lead.UpdatedBy = user;
+
+    await lead.save();
+  }
+
+  res.status(200).json({
+    success: true,
+    message: `${leads.length} leads transferred successfully`,
+    count: leads.length,
+  });
+});
 module.exports = {
   createLead,
   bulkCreateLead,
@@ -615,5 +671,6 @@ module.exports = {
   updateLead,
   deleteLead,
   addWorkLog,
-  getLeadDropdown
+  getLeadDropdown,
+  bulkTransferLeads
 };

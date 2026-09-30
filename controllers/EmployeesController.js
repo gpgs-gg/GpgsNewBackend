@@ -1301,13 +1301,14 @@ const EmployeeDocumentUpload = asyncHandler(async (req, res) => {
     uploadedDocuments,
   });
 });
+
 const getManagerEmployees = async (req, res) => {
   try {
     const managers = await Employee.find({
       status: { $regex: /^active$/i },
       designation: { $regex: /manager/i },
     })
-      .select("_id employeeId employeeName designation status")
+      .select("_id employeeId employeeName designation status loginEnabled")
       .sort({ employeeName: 1 })
       .lean();
 

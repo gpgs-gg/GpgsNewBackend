@@ -3,8 +3,8 @@ const Client = require("../models/client.model");
 const Property = require("../models/property.model");
 const Bed = require("../models/bed.model");
 const calculateRentHistory = require("../utils/calculateRentHistory");
-const getDaysCount = require("../utils/getDaysCount");
-
+// const getDaysCount = require("../utils/getDaysCount");
+const { generateWorkLogs, createWorkLog } = require("../utils/worklog");
 
 // exports.getClientCompleteRentHistory = async (req, res) => {
 //   try {
@@ -59,7 +59,7 @@ exports.getClientRentHistory = async (req, res) => {
     // Search filter
     if (search?.trim()) {
       const keyword = search.trim();
-        console.log()
+      console.log()
       const [clients, properties, beds] = await Promise.all([
         Client.find({
           $or: [
@@ -379,6 +379,10 @@ exports.updateClientRentHistory = async (req, res) => {
     } = req.body;
 
     const history = await ClientRentHistory.findById(id);
+
+    const user = req.body.updatedByName || req.body.createdByName || "System";
+    let workLogs = history.workLogs || [];
+
     if (!history) {
       return res.status(404).json({
         success: false,
@@ -397,17 +401,14 @@ exports.updateClientRentHistory = async (req, res) => {
         message: "Client not found",
       });
     }
-
-
     const daysCount = history.daysCount;
-
     const receivedAmount = Number(totalReceived || 0);
-
+    const oldRentHistoryData = history.toObject();
     const cumulativeReceived =
       (history.totalReceived || 0) + receivedAmount;
-      
-const cumulativeAdjAmt =
-  Number(history.adjAmt || 0) + Number(adjAmt || 0);
+
+    const cumulativeAdjAmt =
+      Number(history.adjAmt || 0) + Number(adjAmt || 0);
 
 
     const actualLastDay = new Date(
@@ -418,34 +419,21 @@ const cumulativeAdjAmt =
 
     const rentDivider =
       actualLastDay === 31 ? 30 : actualLastDay;
-
-
     const calculation = calculateRentHistory({
       // monthlyRent: history.monthlyRent,
       // depositAmount: history.depositAmount,
-
       monthlyRent: Number(monthlyRent),
-
       depositAmount: Number(depositAmount),
-
       daysCount,
-
       previousDue: history.previousDue,
-
       ebAmt: Number(ebAmt),
-
       flatEB: Number(flatEB),
-
       adjEB: Number(adjEB),
-
       adjAmt: cumulativeAdjAmt,
-
       processingFees: history.processingFees,
-
       processingFees: Number(processingFees),
       parkingCharges: Number(parkingCharges),
       depositAmount: Number(depositAmount),
-
       rentReceived: cumulativeReceived,
       rentDivider,
       bookingType: client.bookingType,
@@ -463,6 +451,9 @@ const cumulativeAdjAmt =
         date: new Date(),
       });
     }
+    const newRentHistoryData = {
+      ...history.toObject(),
+    };
     history.daysCount = daysCount;
     // Snapshot bhi update kar do
     history.clientDoj = client.clientDoj;
@@ -480,6 +471,47 @@ const cumulativeAdjAmt =
         date: new Date(),
       });
     }
+    // ============================================================
+    // AUTOMATIC WORKLOG FOR EVERY CHANGED FIELD
+    // ============================================================
+
+    const automaticWorkLogs = generateWorkLogs({
+      oldData: oldRentHistoryData,
+      newData: newRentHistoryData,
+      createdBy: user,
+
+      ignoredFields: [
+        "workLogs",
+        // Payment/adjustment history is generated automatically
+        "totalReceivedHistory",
+        "adjustedAmountHistory",
+        "paymentComments",
+        // Mongo/system fields
+        "_id",
+        "__v",
+        "createdAt",
+        "updatedAt",
+
+        // These are generated/updated automatically
+        "generatedAt",
+      ],
+    });
+
+    workLogs.push(...automaticWorkLogs);
+
+    const newWorkLog = String(req.body.newWorkLog || "").trim();
+
+    if (newWorkLog) {
+      workLogs.push(
+        createWorkLog({
+          message: newWorkLog,
+          createdBy: user,
+        }),
+      );
+    }
+
+    history.workLogs = workLogs;
+
     await history.save();
     // await history.save();
 

@@ -201,6 +201,16 @@ const clientRentHistorySchema = new mongoose.Schema(
       type: String,
       default: "",
     },
+    workLogs: [
+      {
+        message: String,
+        createdBy: String,
+        createdAt: {
+          type: String,
+          default: String,
+        },
+      },
+    ],
   },
   {
     timestamps: true,

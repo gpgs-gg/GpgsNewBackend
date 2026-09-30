@@ -7,8 +7,8 @@ const { convertStringFormatDateTime } = require("../utils/dateFormatter");
 
 
 const creaetElectricityBillData = asyncHandler(async (req, res) => {
-    const {
-        propertyCode,
+    const {propertyId,
+       
         billingMonth,
         flatUnits,
         flatEB,
@@ -19,8 +19,8 @@ const creaetElectricityBillData = asyncHandler(async (req, res) => {
         EBCycle,
     } = req.body;
 
-    if (!propertyCode) {
-        throw new ApiError(400, "PropertyCode is required");
+    if (!propertyId) {
+        throw new ApiError(400, "propertyId is required");
     }
 
     if (!billingMonth) {
@@ -29,9 +29,7 @@ const creaetElectricityBillData = asyncHandler(async (req, res) => {
 
     // ================= PROPERTY CHECK =================
 
-    const property = await Property.findOne({
-        propertyCode,
-    });
+   const property = await Property.findById(propertyId);
 
     if (!property) {
         throw new ApiError(404, "Property not found");
@@ -40,7 +38,7 @@ const creaetElectricityBillData = asyncHandler(async (req, res) => {
     // ================= CHECK EXISTING =================
 
     let monthlyData = await EBMonthly.findOne({
-        propertyCode,
+       propertyId,
         billingMonth,
         EBCycle
     });
@@ -49,22 +47,21 @@ const creaetElectricityBillData = asyncHandler(async (req, res) => {
 
     let uploadedFiles = [];
 
-    if (req.files?.length > 0) {
+  if (req.files?.length > 0) {
         uploadedFiles = await Promise.all(
             req.files.map((file) =>
                 uploadFile(
                     file,
-                    `EB/${billingMonth}/${propertyCode}`
+                    `EB/${billingMonth}/${property.propertyCode}`
                 )
             )
         );
     }
-
     // ================= CREATE =================
 
     if (!monthlyData) {
         monthlyData = new EBMonthly({
-            propertyCode,
+            propertyId,
             billingMonth,
             EBCycle,
             flatUnits:
@@ -206,13 +203,13 @@ const getElectricityBillData = asyncHandler(async (req, res) => {
         });
     }
 
-    const propertyCodes = properties
-        .map((property) => property.propertyCode)
-        .filter(Boolean);
+   const propertyIds = properties.map(
+        (property) => property._id
+    );
 
-    const monthlyQuery = {
+const monthlyQuery = {
         billingMonth,
-        propertyCode: { $in: propertyCodes },
+        propertyId: { $in: propertyIds },
     };
 
     if (status?.trim()) {
@@ -233,8 +230,11 @@ const getElectricityBillData = asyncHandler(async (req, res) => {
 
     const monthlyData = await EBMonthly.find(monthlyQuery).lean();
 
-    const monthlyMap = new Map(
-        monthlyData.map((item) => [item.propertyCode, item])
+   const monthlyMap = new Map(
+        monthlyData.map((item) => [
+            item.propertyId.toString(),
+            item,
+        ])
     );
 
     let filteredProperties = properties;
@@ -242,9 +242,9 @@ const getElectricityBillData = asyncHandler(async (req, res) => {
     const hasMonthlyFilters =
         status || ebPaidStatus || assignee || reviewer;
 
-    if (hasMonthlyFilters) {
+  if (hasMonthlyFilters) {
         filteredProperties = properties.filter((property) =>
-            monthlyMap.has(property.propertyCode)
+            monthlyMap.has(property._id.toString())
         );
     }
 
@@ -256,7 +256,7 @@ const getElectricityBillData = asyncHandler(async (req, res) => {
     );
 
     const data = paginatedProperties.map((property) => {
-        const monthly = monthlyMap.get(property.propertyCode);
+        const monthly = monthlyMap.get(property._id.toString());
 
     const EBCycle = property.utility?.ebStartCycle ?? "";
 
@@ -266,7 +266,11 @@ const getElectricityBillData = asyncHandler(async (req, res) => {
             : "";
 
         return {
-            propertyCode: property.propertyCode,
+          propertyId: {
+                _id: property._id,
+                propertyCode: property.propertyCode,
+                propertyLocation: property.propertyLocation ?? "",
+            },
             EBCycle,
             SubMeterDetails: property.subMeterDetails ?? "",
             EBCalnDate,
@@ -303,7 +307,11 @@ const getElectricityBillData = asyncHandler(async (req, res) => {
 const getSingleElectricityBillData = asyncHandler(async (req, res) => {
     const { id } = req.params;
 
-    const data = await EBMonthly.findById(id);
+const data = await EBMonthly.findById(id)
+        .populate({
+            path: "propertyId",
+            select: "propertyCode propertyLocation",
+        });
 
     if (!data) {
         throw new ApiError(404, "EB record not found");
@@ -323,7 +331,13 @@ const updateElectricityBillData = asyncHandler(async (req, res) => {
     if (!monthlyData) {
         throw new ApiError(404, "EB record not found");
     }
+const property = await Property.findById(
+        monthlyData.propertyId
+    );
 
+    if (!property) {
+        throw new ApiError(404, "Property not found");
+    }
     const user =
         req.body.updatedByName ||
         req.body.createdByName ||
@@ -335,12 +349,12 @@ const updateElectricityBillData = asyncHandler(async (req, res) => {
     // File Upload
     let uploadedFiles = [];
 
-    if (req.files?.length > 0) {
+ if (req.files?.length > 0) {
         uploadedFiles = await Promise.all(
             req.files.map((file) =>
                 uploadFile(
                     file,
-                    `EB/${monthlyData.billingMonth}/${monthlyData.propertyCode}`
+                    `EB/${monthlyData.billingMonth}/${property.propertyCode}`
                 )
             )
         );
@@ -456,10 +470,129 @@ const updateElectricityBillData = asyncHandler(async (req, res) => {
         data: monthlyData,
     });
 });
+const bulkTransferElectricityBill = asyncHandler(async (req, res) => {
+    const { propertyIds, billingMonth, assignee, comment, UpdatedBy } = req.body;
 
+    if (!Array.isArray(propertyIds) || propertyIds.length === 0) {
+        throw new ApiError(400, "Please select at least one property");
+    }
+
+    if (!billingMonth) {
+        throw new ApiError(400, "Billing month is required");
+    }
+
+    if (!assignee) {
+        throw new ApiError(400, "Assignee is required");
+    }
+
+    if (!comment || !comment.trim()) {
+        throw new ApiError(400, "Transfer comment is required");
+    }
+
+    const user = UpdatedBy || "System";
+
+    const properties = await Property.find({
+        _id: { $in: propertyIds },
+    }).lean();
+
+    if (!properties.length) {
+        throw new ApiError(404, "No properties found");
+    }
+
+    const existingRecords = await EBMonthly.find({
+        propertyId: { $in: propertyIds },
+        billingMonth,
+    });
+
+    const recordMap = new Map(
+        existingRecords.map((record) => [
+            record.propertyId.toString(),
+            record,
+        ])
+    );
+
+    let transferredCount = 0;
+    let createdCount = 0;
+
+    for (const property of properties) {
+        const propertyId = property._id;
+        const propertyIdString = propertyId.toString();
+        let record = recordMap.get(propertyIdString);
+
+        if (!record) {
+            const EBCycle = property.utility?.ebStartCycle ?? "";
+
+            record = new EBMonthly({
+                propertyId,
+                billingMonth,
+                EBCycle,
+                flatUnits: null,
+                flatEB: null,
+                assignee,
+                reviewer: "",
+                status: "Open",
+                ebPaidStatus: "",
+                attachment: "",
+                TransferHistory:
+                    `Unassigned → ${assignee}\n${comment.trim()}`,
+                workLogs: [
+                    {
+                        message:
+                            `Transferred from "Unassigned" to "${assignee}"\n` +
+                            `Comment: ${comment.trim()}`,
+                        createdBy: user,
+                        createdAt: new Date(),
+                    },
+                ],
+                UpdatedBy: user,
+            });
+
+            await record.save();
+            createdCount++;
+            continue;
+        }
+
+        const oldAssignee = record.assignee || "Unassigned";
+
+        record.assignee = assignee;
+
+        const transferHistory =
+            `${oldAssignee} → ${assignee}\n${comment.trim()}`;
+
+        record.TransferHistory = record.TransferHistory
+            ? `${record.TransferHistory}\n\n${transferHistory}`
+            : transferHistory;
+
+        if (!Array.isArray(record.workLogs)) {
+            record.workLogs = [];
+        }
+
+        record.workLogs.push({
+            message:
+                `Transferred from "${oldAssignee}" to "${assignee}"\n` +
+                `Comment: ${comment.trim()}`,
+            createdBy: user,
+            createdAt: new Date(),
+        });
+
+        record.UpdatedBy = user;
+
+        await record.save();
+        transferredCount++;
+    }
+
+    res.status(200).json({
+        success: true,
+        message: `${propertyIds.length} properties transferred successfully`,
+        count: propertyIds.length,
+        createdCount,
+        transferredCount,
+    });
+});
 module.exports = {
     getElectricityBillData,
     updateElectricityBillData,
     creaetElectricityBillData,
-    getSingleElectricityBillData
+    getSingleElectricityBillData,
+    bulkTransferElectricityBill
 };

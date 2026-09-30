@@ -11,6 +11,7 @@ const {
   deleteLead,
   addWorkLog,
   getLeadDropdown,
+  bulkTransferLeads,
 } = require("../controllers/LeadsContoller");
 
 
@@ -26,7 +27,7 @@ router.get("/",getAllLeads);
 
 // Dropdown Data
 router.get("/dropdown",getLeadDropdown);
-
+router.put("/bulk-transfer", bulkTransferLeads);
 // Navigation (Previous / Next)
 router.get("/navigation/:id",getLeadNavigation);
 

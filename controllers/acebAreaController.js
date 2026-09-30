@@ -5,12 +5,14 @@ const ApiError = require("../utils/ApiError");
 // ================= Create Property =================
 
 const createProperty = asyncHandler(async (req, res) => {
-    const { propertyId, location, areas = [] } = req.body;
+   const { propertyId, location, areaTypes = [] } = req.body;
 
     if (!propertyId) {
         throw new ApiError(400, "Property is required");
     }
-
+if (!Array.isArray(areaTypes) || areaTypes.length === 0) {
+        throw new ApiError(400, "At least one area type is required");
+    }
     // const propertyExists = await Property.findById(propertyId);
 
     // if (!propertyExists) {
@@ -24,7 +26,44 @@ const createProperty = asyncHandler(async (req, res) => {
     if (existingProperty) {
         throw new ApiError(409, "Property already exists");
     }
+const areas = [];
+    // Create areas according to type + count
+    areaTypes.forEach((areaType) => {
+        const type = areaType.type;
+        const isActive = areaType.isActive !== undefined ? areaType.isActive : true;
 
+        if (!["ROOM", "HALL", "KITCHEN"].includes(type)) {
+            throw new ApiError(400, "Invalid area type");
+        }
+
+        if (type === "ROOM") {
+            const count = Number(areaType.count);
+
+            if (!count || count < 1 || count > 100) {
+                throw new ApiError(400, "Room count must be between 1 and 100");
+            }
+
+            for (let i = 1; i <= count; i++) {
+                areas.push({
+                    name: `RoomNo_${i}_ACEB`,
+                    type: "ROOM",
+                    isActive,
+                });
+            }
+        } else if (type === "HALL") {
+            areas.push({
+                name: "RoomNo_Hall_ACEB",
+                type: "HALL",
+                isActive,
+            });
+        } else if (type === "KITCHEN") {
+            areas.push({
+                name: "RoomNo_Kitchen_ACEB",
+                type: "KITCHEN",
+                isActive,
+            });
+        }
+    });
     const property = await Property.create({
         propertyId,
         location,
@@ -166,11 +205,11 @@ const getPropertyById = asyncHandler(async (req, res) => {
 // });
 
 const updateProperty = asyncHandler(async (req, res) => {
-    const {
-        propertyCode,
-        propertyName,
+const {
+        propertyId,
         location,
-        areas,
+        areas = [],
+        areaTypes = [],
     } = req.body;
 
     const property = await Property.findById(
@@ -186,35 +225,27 @@ const updateProperty = asyncHandler(async (req, res) => {
 
     // ================= Property Code =================
 
-    if (propertyCode !== undefined) {
-        const trimmedCode =
-            propertyCode.trim();
+    if (propertyId !== undefined) {
+   if (!propertyId) {
+            throw new ApiError(400, "Please select a property.");
+        }
 
-        const duplicate =
-            await Property.findOne({
-                propertyCode: trimmedCode,
-                _id: {
-                    $ne: req.params.id,
-                },
-            });
+       const duplicate = await Property.findOne({
+            propertyId,
+            _id: { $ne: req.params.id },
+        });
 
         if (duplicate) {
             throw new ApiError(
                 409,
-                "Property Code already exists"
+               "This property already has areas created."
             );
         }
-
-        property.propertyCode =
-            trimmedCode;
+property.propertyId = propertyId;
+     
     }
 
-    // ================= Property Name =================
-
-    if (propertyName !== undefined) {
-        property.propertyName =
-            propertyName.trim();
-    }
+   
 
     // ================= Location =================
 
@@ -224,68 +255,228 @@ const updateProperty = asyncHandler(async (req, res) => {
 
     // ================= Areas =================
 
-    if (areas !== undefined) {
+  // ================= Validation =================
 
-        const oldAreas = property.areas || [];
+    if (!Array.isArray(areas)) {
+        throw new ApiError(
+            400,
+            "Invalid area data. Please provide valid areas."
+        );
+    }
 
-        property.areas = areas.map((area) => {
+    if (!Array.isArray(areaTypes)) {
+        throw new ApiError(
+            400,
+            "Invalid area type data."
+        );
+    }
 
-            // =========================================
-            // 1. If frontend already sends areaId
-            //    Keep that ID
-            // =========================================
+    // ================= Final Areas =================
 
-            if (area.areaId) {
-                return {
-                    areaId: area.areaId,
-                    name: area.name,
-                    type: area.type,
-                    isActive:
-                        area.isActive !== undefined
-                            ? area.isActive
-                            : true,
-                };
-            }
+    const finalAreas = [];
 
-            // =========================================
-            // 2. If areaId is missing
-            //    Find old area by name
-            // =========================================
+    // ================= Existing Areas =================
 
-            const oldArea = oldAreas.find(
+    for (const area of areas) {
+        if (!area.type) {
+            throw new ApiError(
+                400,
+                "Please select a valid area type."
+            );
+        }
+
+        if (!["ROOM", "HALL", "KITCHEN"].includes(area.type)) {
+            throw new ApiError(
+                400,
+                "Please select a valid area type."
+            );
+        }
+
+        if (!area.name || !area.name.trim()) {
+            throw new ApiError(
+                400,
+                "Please enter an area name."
+            );
+        }
+
+        const name = area.name.trim();
+
+        const duplicate = finalAreas.some(
+            (existingArea) =>
+                existingArea.name === name &&
+                existingArea.type === area.type
+        );
+
+        if (duplicate) {
+            throw new ApiError(
+                409,
+                `Area "${name}" already exists.`
+            );
+        }
+
+        // ================= Existing Area =================
+
+        if (area.areaId) {
+            const oldArea = property.areas.find(
                 (old) =>
-                    old.name === area.name &&
-                    old.type === area.type
+                    String(old.areaId) === String(area.areaId)
             );
 
-            if (oldArea) {
-                return {
-                    areaId: oldArea.areaId,
-                    name: area.name,
-                    type: area.type,
-                    isActive:
-                        area.isActive !== undefined
-                            ? area.isActive
-                            : oldArea.isActive,
-                };
+            if (!oldArea) {
+                throw new ApiError(
+                    404,
+                    `Area "${name}" not found.`
+                );
             }
 
-            // =========================================
-            // 3. Completely NEW area
-            //    Don't send areaId
-            //    Schema default generates it
-            // =========================================
+            finalAreas.push({
+                areaId: oldArea.areaId,
+                name,
+                type: area.type,
+                isActive:
+                    area.isActive !== undefined
+                        ? area.isActive
+                        : oldArea.isActive,
+            });
+        }
 
-            return {
-                name: area.name,
+        // ================= New Manual Area =================
+
+        else {
+            finalAreas.push({
+                name,
                 type: area.type,
                 isActive:
                     area.isActive !== undefined
                         ? area.isActive
                         : true,
-            };
-        });
+            });
+        }
     }
+
+    // ================= New Area Types =================
+
+    for (const areaType of areaTypes) {
+        const type = areaType.type;
+
+        const isActive =
+            areaType.isActive !== undefined
+                ? areaType.isActive
+                : true;
+
+        if (!["ROOM", "HALL", "KITCHEN"].includes(type)) {
+            throw new ApiError(
+                400,
+                "Please select a valid area type."
+            );
+        }
+
+        // ================= ROOM =================
+
+        if (type === "ROOM") {
+            const count = Number(areaType.count);
+
+            if (
+                !Number.isInteger(count) ||
+                count < 1 ||
+                count > 100
+            ) {
+                throw new ApiError(
+                    400,
+                    "Please select the number of rooms between 1 and 100."
+                );
+            }
+
+            // Find highest existing Room number
+            let maxRoomNumber = 0;
+
+            finalAreas.forEach((area) => {
+                if (area.type !== "ROOM") return;
+
+                const match = area.name.match(
+                    /^RoomNo_(\d+)_ACEB$/
+                );
+
+                if (match) {
+                    const roomNumber = Number(match[1]);
+
+                    if (roomNumber > maxRoomNumber) {
+                        maxRoomNumber = roomNumber;
+                    }
+                }
+            });
+
+            // Create next rooms
+            for (let i = 1; i <= count; i++) {
+                const roomNumber = maxRoomNumber + i;
+                const name = `RoomNo_${roomNumber}_ACEB`;
+
+                const alreadyExists = finalAreas.some(
+                    (area) =>
+                        area.name === name &&
+                        area.type === "ROOM"
+                );
+
+                if (alreadyExists) {
+                    continue;
+                }
+
+                finalAreas.push({
+                    name,
+                    type: "ROOM",
+                    isActive,
+                });
+            }
+        }
+
+        // ================= HALL =================
+
+        else if (type === "HALL") {
+            const name = "RoomNo_Hall_ACEB";
+
+            const alreadyExists = finalAreas.some(
+                (area) =>
+                    area.name === name &&
+                    area.type === "HALL"
+            );
+
+            if (alreadyExists) {
+                continue;
+            }
+
+            finalAreas.push({
+                name,
+                type: "HALL",
+                isActive,
+            });
+        }
+
+        // ================= KITCHEN =================
+
+        else if (type === "KITCHEN") {
+            const name = "RoomNo_Kitchen_ACEB";
+
+            const alreadyExists = finalAreas.some(
+                (area) =>
+                    area.name === name &&
+                    area.type === "KITCHEN"
+            );
+
+            if (alreadyExists) {
+                continue;
+            }
+
+            finalAreas.push({
+                name,
+                type: "KITCHEN",
+                isActive,
+            });
+        }
+    }
+
+    // ================= Save =================
+
+    property.areas = finalAreas;
 
     await property.save();
 

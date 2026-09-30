@@ -3,6 +3,7 @@ const ACEBPropertyArea = require("../models/acebArea.model");
 const asyncHandler = require("../middleware/asyncHandler");
 const ApiError = require("../utils/ApiError");
 const ACElectricityReading = require("../models/acebReading.model");
+const acebReadingModel = require("../models/acebReading.model");
 const roundValue = (value, decimals = 2) => {
   return Number(Number(value).toFixed(decimals));
 };
@@ -477,88 +478,51 @@ const getElectricityReadingById =
 
 // ================= Get Previous Electricity Reading =================
 
-const getPreviousElectricityReading = asyncHandler(
-  async (req, res) => {
-    const { roomId, month } = req.query;
+const getPreviousElectricityReading = asyncHandler(async (req, res) => {
+    const { roomId } = req.query;
 
-    if (!roomId || !month) {
-      throw new ApiError(
-        400,
-        "roomId and month are required"
-      );
+    if (!roomId) {
+        throw new ApiError(400, "roomId is required");
     }
 
-    const monthNames = [
-      "Jan", "Feb", "Mar", "Apr",
-      "May", "Jun", "Jul", "Aug",
-      "Sep", "Oct", "Nov", "Dec",
-    ];
+    const propertyArea = await ACEBPropertyArea
+        .findById(roomId)
+        .lean();
 
-    const getMonthDate = (value) => {
-      if (!value) return null;
-
-      const match = value.match(
-        /^(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)(\d{4})$/
-      );
-
-      if (!match) return null;
-
-      return new Date(
-        Number(match[2]),
-        monthNames.indexOf(match[1]),
-        1
-      );
-    };
-
-    const selectedMonthDate = getMonthDate(month);
-
-    if (!selectedMonthDate) {
-      throw new ApiError(
-        400,
-        "Invalid month format"
-      );
+    if (!propertyArea) {
+        throw new ApiError(404, "Property area not found");
     }
 
-    // ================= Exact Previous Month =================
+    const lastMonth = propertyArea.lastMonth;
 
-    const previousMonthDate = new Date(
-      selectedMonthDate
-    );
+    if (!lastMonth) {
+        return res.status(200).json({
+            success: true,
+            data: null,
+            message: "No previous month found",
+        });
+    }
 
-    previousMonthDate.setMonth(
-      previousMonthDate.getMonth() - 1
-    );
+    const previousReading = await acebReadingModel
+        .findOne({
+            ACEBPropertyAreaId: roomId,
+            month: lastMonth,
+        })
+        .lean();
 
-    // ================= Find Previous Month Reading =================
-
-    const readings =
-      await ElectricityReading.find({
-        ACEBPropertyAreaId: roomId,
-      }).lean();
-
-    const previousReading = readings.find(
-      (reading) => {
-        const readingMonthDate =
-          getMonthDate(reading.month);
-
-        return (
-          readingMonthDate &&
-          readingMonthDate.getTime() ===
-          previousMonthDate.getTime()
-        );
-      }
-    );
-
-    // ================= Response =================
-
-    res.status(200).json({
-      success: true,
-      data: previousReading || null,
+    return res.status(200).json({
+        success: true,
+        data: previousReading
+            ? {
+                month: lastMonth,
+                roomReadings: previousReading.roomReadings || [],
+            }
+            : {
+                month: lastMonth,
+                roomReadings: [],
+            },
     });
-  }
-);
-
-
+});
 
 
 const getLatestACConsumptionData = async (req, res) => {

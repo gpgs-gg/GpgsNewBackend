@@ -359,6 +359,7 @@ exports.updateBed = async (req, res) => {
       bedAdditionalStatus,
       freeEbAsPerBed,
       comment,
+      status
     } = req.body;
 
     // --------------------------------------------------
@@ -420,6 +421,7 @@ exports.updateBed = async (req, res) => {
       bedAdditionalStatus,
       freeEbAsPerBed,
       comment,
+      status
     };
 
     // --------------------------------------------------
@@ -488,6 +490,7 @@ exports.updateBed = async (req, res) => {
       bedAdditionalStatus,
       freeEbAsPerBed,
       comment,
+      status
     });
 
 

@@ -240,16 +240,31 @@ if (unavailableBedIds.length > 0) {
       sortOption = { monthlyRent: 1 };
     }
 
-    // 🔥 Dono queries parallel me chal rahi hain
-    const [totalRecords, beds] = await Promise.all([
-      Bed.countDocuments(query),
-      Bed.find(query)
-        .populate("propertyId", "propertyCode propertyLocation")
-        .sort(sortOption)
-        .skip(skip)
-        .limit(limit)
-        .lean()
-    ]);
+// 🔥 Dono queries parallel me chal rahi hain
+    let totalRecords;
+    let beds;
+
+    if (hasCvd === "true") {
+      // CVD sorting needs ALL matching beds before pagination
+      [totalRecords, beds] = await Promise.all([
+        Bed.countDocuments(query),
+        Bed.find(query)
+          .populate("propertyId", "propertyCode propertyLocation")
+          .sort(sortOption)
+          .lean(),
+      ]);
+    } else {
+      // Normal case: keep DB-level pagination for performance
+      [totalRecords, beds] = await Promise.all([
+        Bed.countDocuments(query),
+        Bed.find(query)
+          .populate("propertyId", "propertyCode propertyLocation")
+          .sort(sortOption)
+          .skip(skip)
+          .limit(limit)
+          .lean(),
+      ]);
+    }
 
     // ================= 💨 STEP 3: Get clients for these beds only =================
     const bedIds = beds.map(b => b._id);
@@ -315,6 +330,10 @@ if (unavailableBedIds.length > 0) {
       });
     }
 
+    // Apply pagination AFTER CVD sorting
+    if (hasCvd === "true") {
+      data = data.slice(skip, skip + limit);
+    }
     return res.status(200).json({
       success: true,
       page,

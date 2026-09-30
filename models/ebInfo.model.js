@@ -3,8 +3,9 @@ const mongoose = require("mongoose");
 const EBInfoSchema = new mongoose.Schema(
     {
         // ---------------- PROPERTY ----------------
-        propertyCode: {
-            type: String,
+   propertyId: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: "Property",
             required: true,
             index: true,
         },
@@ -78,7 +79,7 @@ const EBInfoSchema = new mongoose.Schema(
 
 // एक Property + एक Month = एकच monthly record
 EBInfoSchema.index(
-    { propertyCode: 1, billingMonth: 1 },
+    { propertyId: 1, billingMonth: 1 },
     { unique: true }
 );
 

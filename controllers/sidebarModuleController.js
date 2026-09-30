@@ -102,6 +102,67 @@ exports.getAllModules = async (req, res) => {
     }
 
     // Module type filter
+    // if (moduleType) {
+    //   filter.moduleType = moduleType;
+    // }
+
+    // Active filter
+    if (isActive !== undefined) {
+      filter.isActive = isActive === "true";
+    }
+
+    const modules = await Module.find(filter).sort({
+      sortOrder: 1,
+      createdAt: -1,
+    });
+
+    return res.status(200).json({
+      success: true,
+      count: modules.length,
+      data: modules,
+    });
+  } catch (error) {
+    console.error("Get Modules Error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch modules",
+      error: error.message,
+    });
+  }
+};
+
+exports.getAllMenuModules = async (req, res) => {
+  try {
+    const { search = "", moduleType, isActive } = req.query;
+
+    const filter = {};
+
+    // Search
+    if (search.trim()) {
+      filter.$or = [
+        {
+          key: {
+            $regex: search.trim(),
+            $options: "i",
+          },
+        },
+        {
+          name: {
+            $regex: search.trim(),
+            $options: "i",
+          },
+        },
+        {
+          path: {
+            $regex: search.trim(),
+            $options: "i",
+          },
+        },
+      ];
+    }
+
+    // Module type filter
     if (moduleType) {
       filter.moduleType = moduleType;
     }
@@ -131,7 +192,6 @@ exports.getAllModules = async (req, res) => {
     });
   }
 };
-
 // ===============================
 // Get Single Module
 // ===============================

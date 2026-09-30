@@ -425,6 +425,7 @@ const generateMonthlyRent = async () => {
     const monthlyRent = Number(
       client.monthlyRent || 0
     );
+    const bookingType = client.bookingType 
 
     const depositAmount = Number(
       client.depositAmount || 0
@@ -506,6 +507,7 @@ const generateMonthlyRent = async () => {
         processingFeesReceived: 0,
         depositAmountReceived: 0,
         rentReceived: 0,
+        bookingType
       });
     rentHistoryData.push({
       clientId: client._id,

@@ -7,6 +7,7 @@ const {
   updateModule,
   deleteModule,
   toggleModuleStatus,
+  getAllMenuModules,
 } = require("../controllers/sidebarModuleController");
 
 const router = express.Router();
@@ -16,7 +17,7 @@ router.post("/", createModule);
 
 // Get All Modules
 router.get("/", getAllModules);
-
+router.get("/menu", getAllMenuModules);
 // Get Single Module
 router.get("/:id", getSingleModule);
 
