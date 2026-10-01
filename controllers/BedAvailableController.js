@@ -121,7 +121,9 @@ exports.getAllAvailableBeds = async (req, res) => {
     if (status) query.status = status;
     if (roomNo) query.roomNo = roomNo;
     if (bedNo) query.bedNo = bedNo;
+          query.status = "Active";
 
+          
     if (monthlyRentMin || monthlyRentMax) {
       query.monthlyRent = {};
       if (monthlyRentMin) query.monthlyRent.$gte = Number(monthlyRentMin);
@@ -185,7 +187,7 @@ exports.getAllAvailableBeds = async (req, res) => {
     //     }
     //   ]
     // });
- // ................................................
+    // ................................................
     // const occupiedBedIds = await Client.distinct("bedId", {
     //   bedId: { $exists: true, $ne: null },
     //   isBookingCancelled: { $ne: true },
@@ -202,36 +204,36 @@ exports.getAllAvailableBeds = async (req, res) => {
     //   query._id = { $nin: occupiedBedIds };
     // }
 
-// 1️⃣ Active clients → Bed actually occupied
-const occupiedBedIds = await Client.distinct("bedId", {
-  bedId: { $exists: true, $ne: null },
-  isBookingCancelled: { $ne: true },
+    // 1️⃣ Active clients → Bed actually occupied
+    const occupiedBedIds = await Client.distinct("bedId", {
+      bedId: { $exists: true, $ne: null },
+      isBookingCancelled: { $ne: true },
 
-  // Sirf wahi clients occupied hain jinka notice nahi hai
-  $or: [
-    { noticeStartDate: { $exists: false } },
-    { noticeStartDate: "" },
-    { noticeStartDate: null }
-  ]
-});
+      // Sirf wahi clients occupied hain jinka notice nahi hai
+      $or: [
+        { noticeStartDate: { $exists: false } },
+        { noticeStartDate: "" },
+        { noticeStartDate: null }
+      ]
+    });
 
-// 2️⃣ Pending bookings → Bed temporarily reserved
-// Payment verify nahi hua + hold expire nahi hua
-const pendingBookingBedIds = await Booking.distinct("bedId", {
-  bedId: { $exists: true, $ne: null },
-  status: "Booked",
-  loginEnabled: false,
-});
+    // 2️⃣ Pending bookings → Bed temporarily reserved
+    // Payment verify nahi hua + hold expire nahi hua
+    const pendingBookingBedIds = await Booking.distinct("bedId", {
+      bedId: { $exists: true, $ne: null },
+      status: "Booked",
+      loginEnabled: false,
+    });
 
-// 3️⃣ Client occupied + pending booking reserved
-const unavailableBedIds = [
-  ...occupiedBedIds,
-  ...pendingBookingBedIds
-];
+    // 3️⃣ Client occupied + pending booking reserved
+    const unavailableBedIds = [
+      ...occupiedBedIds,
+      ...pendingBookingBedIds
+    ];
 
-if (unavailableBedIds.length > 0) {
-  query._id = { $nin: unavailableBedIds };
-}
+    if (unavailableBedIds.length > 0) {
+      query._id = { $nin: unavailableBedIds };
+    }
 
 
     // ================= 💨 STEP 2: Parallel queries (FASTER) =================
@@ -240,7 +242,7 @@ if (unavailableBedIds.length > 0) {
       sortOption = { monthlyRent: 1 };
     }
 
-// 🔥 Dono queries parallel me chal rahi hain
+    // 🔥 Dono queries parallel me chal rahi hain
     let totalRecords;
     let beds;
 

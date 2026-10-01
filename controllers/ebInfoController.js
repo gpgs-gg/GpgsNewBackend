@@ -7,8 +7,8 @@ const { convertStringFormatDateTime } = require("../utils/dateFormatter");
 
 
 const creaetElectricityBillData = asyncHandler(async (req, res) => {
-    const {propertyId,
-       
+    const { propertyId,
+
         billingMonth,
         flatUnits,
         flatEB,
@@ -29,7 +29,7 @@ const creaetElectricityBillData = asyncHandler(async (req, res) => {
 
     // ================= PROPERTY CHECK =================
 
-   const property = await Property.findById(propertyId);
+    const property = await Property.findById(propertyId);
 
     if (!property) {
         throw new ApiError(404, "Property not found");
@@ -38,7 +38,7 @@ const creaetElectricityBillData = asyncHandler(async (req, res) => {
     // ================= CHECK EXISTING =================
 
     let monthlyData = await EBMonthly.findOne({
-       propertyId,
+        propertyId,
         billingMonth,
         EBCycle
     });
@@ -47,7 +47,7 @@ const creaetElectricityBillData = asyncHandler(async (req, res) => {
 
     let uploadedFiles = [];
 
-  if (req.files?.length > 0) {
+    if (req.files?.length > 0) {
         uploadedFiles = await Promise.all(
             req.files.map((file) =>
                 uploadFile(
@@ -203,11 +203,11 @@ const getElectricityBillData = asyncHandler(async (req, res) => {
         });
     }
 
-   const propertyIds = properties.map(
+    const propertyIds = properties.map(
         (property) => property._id
     );
 
-const monthlyQuery = {
+    const monthlyQuery = {
         billingMonth,
         propertyId: { $in: propertyIds },
     };
@@ -230,7 +230,7 @@ const monthlyQuery = {
 
     const monthlyData = await EBMonthly.find(monthlyQuery).lean();
 
-   const monthlyMap = new Map(
+    const monthlyMap = new Map(
         monthlyData.map((item) => [
             item.propertyId.toString(),
             item,
@@ -242,7 +242,7 @@ const monthlyQuery = {
     const hasMonthlyFilters =
         status || ebPaidStatus || assignee || reviewer;
 
-  if (hasMonthlyFilters) {
+    if (hasMonthlyFilters) {
         filteredProperties = properties.filter((property) =>
             monthlyMap.has(property._id.toString())
         );
@@ -258,15 +258,15 @@ const monthlyQuery = {
     const data = paginatedProperties.map((property) => {
         const monthly = monthlyMap.get(property._id.toString());
 
-    const EBCycle = property.utility?.ebStartCycle ?? "";
+        const EBCycle = property.utility?.ebStartCycle ?? "";
 
-    const EBCalnDate =
-        EBCycle !== "" && !isNaN(Number(EBCycle))
-            ? Number(EBCycle) + 5
-            : "";
+        const EBCalnDate =
+            EBCycle !== "" && !isNaN(Number(EBCycle))
+                ? Number(EBCycle) + 5
+                : "";
 
         return {
-          propertyId: {
+            propertyId: {
                 _id: property._id,
                 propertyCode: property.propertyCode,
                 propertyLocation: property.propertyLocation ?? "",
@@ -307,7 +307,7 @@ const monthlyQuery = {
 const getSingleElectricityBillData = asyncHandler(async (req, res) => {
     const { id } = req.params;
 
-const data = await EBMonthly.findById(id)
+    const data = await EBMonthly.findById(id)
         .populate({
             path: "propertyId",
             select: "propertyCode propertyLocation",
@@ -331,7 +331,7 @@ const updateElectricityBillData = asyncHandler(async (req, res) => {
     if (!monthlyData) {
         throw new ApiError(404, "EB record not found");
     }
-const property = await Property.findById(
+    const property = await Property.findById(
         monthlyData.propertyId
     );
 
@@ -349,7 +349,7 @@ const property = await Property.findById(
     // File Upload
     let uploadedFiles = [];
 
- if (req.files?.length > 0) {
+    if (req.files?.length > 0) {
         uploadedFiles = await Promise.all(
             req.files.map((file) =>
                 uploadFile(
@@ -361,9 +361,19 @@ const property = await Property.findById(
     }
 
     // Attachments
-    let attachments = monthlyData.attachment
-        ? monthlyData.attachment.split(",").filter(Boolean)
-        : [];
+    let attachments = [];
+
+    if (req.body.existingAttachments) {
+        try {
+            const existingAttachments = JSON.parse(req.body.existingAttachments);
+
+            attachments = Array.isArray(existingAttachments)
+                ? existingAttachments.filter(Boolean)
+                : [];
+        } catch (error) {
+            attachments = [];
+        }
+    }
 
     if (uploadedFiles.length > 0) {
         attachments = [...attachments, ...uploadedFiles];
@@ -470,6 +480,14 @@ const property = await Property.findById(
         data: monthlyData,
     });
 });
+
+
+
+
+
+
+
+
 const bulkTransferElectricityBill = asyncHandler(async (req, res) => {
     const { propertyIds, billingMonth, assignee, comment, UpdatedBy } = req.body;
 

@@ -871,7 +871,9 @@ exports.getAllTransactions = async (req, res) => {
       { model: AC4Transaction, account: "AC4" },
       { model: AC5Transaction, account: "AC5" }
     ];
-
+    const selectedAccounts = req.query.account
+      ? accounts.filter((account) => account.account === req.query.account)
+      : accounts;
     const expenseCodeOptions = await OptionsData.findOne({
       categoryKey: "expensecode",
     })
@@ -890,7 +892,7 @@ exports.getAllTransactions = async (req, res) => {
     );
     let allTransactions = [];
 
-    for (const account of accounts) {
+    for (const account of selectedAccounts) {
       const data = await account.model
         .find(query)
         .populate("userId", "fullName")
@@ -925,12 +927,21 @@ exports.getAllTransactions = async (req, res) => {
       skip + limit
     );
 
+    const availableAccounts = accounts
+      .filter((account) =>
+        allTransactions.some(
+          (transaction) => transaction.account === account.account,
+        ),
+      )
+      .map((account) => account.account);
+
     return res.status(200).json({
       success: true,
       page,
       limit,
       totalRecords,
       totalPages,
+      availableAccounts,
       hasNextPage: page < totalPages,
       hasPrevPage: page > 1,
       count: transactions.length,
@@ -952,7 +963,7 @@ exports.getAllTransactions = async (req, res) => {
 exports.getTransactionById = async (req, res) => {
   try {
     const { account, id } = req.params;
-        console.log(1111111111, account ,  id)
+    console.log(1111111111, account, id)
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return res.status(400).json({
         success: false,
@@ -1764,10 +1775,10 @@ exports.updateClientRentHistoryReceived = async (req, res) => {
 };
 
 exports.getTransactionByNarration = async (req, res) => {
-   
+
   try {
     const { narration } = req.params;
-   console.log("narration", narration)
+    console.log("narration", narration)
     if (!narration?.trim()) {
       return res.status(400).json({
         success: false,
