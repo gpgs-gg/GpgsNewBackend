@@ -124,6 +124,7 @@ const LeadSchema = new mongoose.Schema(
       type: String,
       default: "",
     },
+
   },
   {
     timestamps: true,
@@ -136,5 +137,16 @@ LeadSchema.index({ LeadStatus: 1, Assignee: 1 });
 LeadSchema.index({ TeamCode: 1, LeadStatus: 1 });
 LeadSchema.index({ CallingNo: 1, LeadStatus: 1 });
 LeadSchema.index({ createdAt: -1 });
+
+// Prevent duplicate active lead for same CallingNo + Date
+LeadSchema.index(
+  { CallingNo: 1, Date: 1 },
+  {
+    unique: true,
+    partialFilterExpression: {
+      IsActive: true,
+    },
+  }
+);
 
 module.exports = mongoose.model("Lead", LeadSchema);

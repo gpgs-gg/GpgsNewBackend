@@ -27,105 +27,143 @@ const getTeamCodes = async () => {
 };
 // ================= CREATE LEAD =================
 const createLead = asyncHandler(async (req, res) => {
-  const today = new Date()
-    .toISOString()
-    .split("T")[0];
-  const currentTime = new Date()
-    .toLocaleTimeString();
+  const today = new Date().toISOString().split("T")[0];
+  const currentTime = new Date().toLocaleTimeString();
 
-  const existingLead = await Lead.findOne({
-    CallingNo: req.body.CallingNo,
-    isActive: true
-  });
+  try {
+    // Existing active lead check
+    const existingLead = await Lead.findOne({
+      CallingNo: String(req.body.CallingNo || "").trim(),
+      IsActive: true,
+    });
 
-  if (existingLead) {
-    if (existingLead.Date === today) {
-      throw new ApiError(
-        400,
-        "This lead already exists today"
-      );
-    }
+    if (existingLead) {
+      // Same number + same day
+      if (existingLead.Date === today) {
+        throw new ApiError(
+          400,
+          "This lead already exists today"
+        );
+      }
 
-    const lastLead = await Lead.findOne()
-      .sort({ LeadNo: -1 })
-      .select("LeadNo");
-    const LeadNo = lastLead
-      ? lastLead.LeadNo + 1
-      : 1;
+      // Previous date lead -> update same lead
+      const lastLead = await Lead.findOne()
+        .sort({ LeadNo: -1 })
+        .select("LeadNo");
 
-    const updatedLead =
-      await Lead.findByIdAndUpdate(
+      const LeadNo = lastLead
+        ? lastLead.LeadNo + 1
+        : 1;
+
+      const updatedLead = await Lead.findByIdAndUpdate(
         existingLead._id,
         {
           LeadNo,
           Date: today,
-          Time: currentTime
+          Time: currentTime,
         },
         {
-          returnDocument: "after"
+          new: true,
         }
       );
 
-    return res.status(200).json({
-      success: true,
-      message: "Lead updated for new day",
-      data: updatedLead
-    });
-  }
-  const lastLead = await Lead.findOne()
-    .sort({ LeadNo: -1 })
-    .select("LeadNo TeamCode");
+      return res.status(200).json({
+        success: true,
+        message: "Lead updated for new day",
+        data: updatedLead,
+      });
+    }
 
-  const LeadNo = lastLead
-    ? lastLead.LeadNo + 1
-    : 1;
-  let TeamCode = req.body.TeamCode || "";
-  if (!TeamCode) {
-    const teamCodes = await getTeamCodes();
-    if (teamCodes.length) {
-      const currentIndex = teamCodes.indexOf(lastLead?.TeamCode);
-      // First lead
-      TeamCode = teamCodes[0];
-      // Next team
-      if (currentIndex !== -1) {
-        TeamCode =
-          teamCodes[(currentIndex + 1) % teamCodes.length];
+    // Get last LeadNo
+    const lastLead = await Lead.findOne()
+      .sort({ LeadNo: -1 })
+      .select("LeadNo TeamCode");
+
+    const LeadNo = lastLead
+      ? lastLead.LeadNo + 1
+      : 1;
+
+    // Team assignment
+    let TeamCode = req.body.TeamCode || "";
+
+    if (!TeamCode) {
+      const teamCodes = await getTeamCodes();
+
+      if (teamCodes.length) {
+        const currentIndex = teamCodes.indexOf(
+          lastLead?.TeamCode
+        );
+
+        TeamCode = teamCodes[0];
+
+        if (currentIndex !== -1) {
+          TeamCode =
+            teamCodes[
+              (currentIndex + 1) % teamCodes.length
+            ];
+        }
       }
     }
-  }
-  const workLogs = [];
-  const messages = [];
-  // Default Create Log
-  messages.push("Lead Created");
-  // User Comment
-  if (req.body.Comments && req.body.Comments.trim()) {
-    messages.push(req.body.Comments.trim());
-  }
-  if (messages.length) {
-    workLogs.push({
-      message: messages.join("\n"),
-      createdBy: req.body.CreatedBy || "System",
-      createdAt: new Date(),
+
+    // Work logs
+    const workLogs = [];
+    const messages = [];
+
+    messages.push("Lead Created");
+
+    if (
+      req.body.Comments &&
+      req.body.Comments.trim()
+    ) {
+      messages.push(req.body.Comments.trim());
+    }
+
+    if (messages.length) {
+      workLogs.push({
+        message: messages.join("\n"),
+        createdBy: req.body.CreatedBy || "System",
+        createdAt: new Date(),
+      });
+    }
+
+    // Comments DB mein save nahi hoga
+    const {
+      Comments,
+      CreatedBy,
+      ...leadData
+    } = req.body;
+
+    const lead = await Lead.create({
+      ...leadData,
+      CallingNo: String(
+        req.body.CallingNo || ""
+      ).trim(),
+      LeadNo,
+      TeamCode,
+      Date: today,
+      Time: currentTime,
+      IsActive: true,
+      workLogs,
+      CreatedBy,
     });
+
+    return res.status(201).json({
+      success: true,
+      message: "Lead created successfully",
+      data: lead,
+    });
+
+  } catch (error) {
+    // MongoDB duplicate key error
+    if (error?.code === 11000) {
+      return res.status(400).json({
+        success: false,
+        message: "This lead already exists today",
+      });
+    }
+
+    throw error;
   }
-
-  // Comments DB मध्ये save होऊ देऊ नका
-  const { Comments, CreatedBy, ...leadData } = req.body;
-
-  const lead = await Lead.create({
-    ...leadData,
-    LeadNo,
-    TeamCode,
-    Date: today,
-    Time: currentTime,
-    workLogs,
-    CreatedBy,
-  });
-  res.status(201).json({
-    success: true,
-    message: "Lead created successfully",
-    data: lead
-  });
 });
 
 
@@ -136,117 +174,302 @@ const bulkCreateLead = asyncHandler(async (req, res) => {
     throw new ApiError(400, "No leads found");
   }
 
-  const today = new Date().toISOString().split("T")[0];
-  const time = new Date().toLocaleTimeString();
+  // =========================================================
+  // CURRENT DATE / TIME
+  // =========================================================
+  const now = new Date();
 
+  const today = now.toISOString().split("T")[0];
+  const time = now.toLocaleTimeString();
+
+  // =========================================================
+  // GLOBAL SETTINGS
+  // =========================================================
   const settings = await GlobalSettings.findOne().lean();
 
   const teamAutoAssignment =
     settings?.teamAutoAssignment ?? true;
 
+  // =========================================================
+  // LAST LEAD NUMBER
+  // =========================================================
   const lastLead = await Lead.findOne()
     .sort({ LeadNo: -1 })
-    .select("LeadNo TeamCode");
+    .select("LeadNo TeamCode")
+    .lean();
 
+  let startNo = lastLead
+    ? Number(lastLead.LeadNo) + 1
+    : 1;
+
+  // =========================================================
+  // TEAM ASSIGNMENT
+  // =========================================================
   let teamCodes = [];
   let teamIndex = 0;
 
   if (teamAutoAssignment) {
     teamCodes = await getTeamCodes();
 
-    if (lastLead) {
-      const currentIndex = teamCodes.indexOf(lastLead.TeamCode);
+    if (lastLead && teamCodes.length) {
+      const currentIndex = teamCodes.indexOf(
+        lastLead.TeamCode
+      );
 
       if (currentIndex !== -1) {
-        teamIndex = (currentIndex + 1) % teamCodes.length;
+        teamIndex =
+          (currentIndex + 1) % teamCodes.length;
       }
     }
   }
 
-  let startNo = lastLead ? lastLead.LeadNo + 1 : 1;
+  // =========================================================
+  // REMOVE EMPTY + DUPLICATE NUMBERS FROM REQUEST
+  // =========================================================
+  const uniqueLeadsMap = new Map();
 
-  const callingNumbers = leads.map((x) => x.CallingNo);
+  for (const item of leads) {
+    const callingNo = String(
+      item.CallingNo || ""
+    ).trim();
+
+    if (!callingNo) {
+      continue;
+    }
+
+    // Same number multiple times in same request
+    // will be processed only once.
+    if (!uniqueLeadsMap.has(callingNo)) {
+      uniqueLeadsMap.set(callingNo, {
+        ...item,
+        CallingNo: callingNo,
+      });
+    }
+  }
+
+  const uniqueLeads = Array.from(
+    uniqueLeadsMap.values()
+  );
+
+  // =========================================================
+  // GET EXISTING ACTIVE LEADS
+  // =========================================================
+  const callingNumbers = uniqueLeads.map(
+    (item) => item.CallingNo
+  );
 
   const existingLeads = await Lead.find({
-    CallingNo: { $in: callingNumbers },
-    isActive: true
-  });
+    CallingNo: {
+      $in: callingNumbers,
+    },
+    IsActive: true,
+  })
+    .sort({ _id: -1 })
+    .lean();
 
+  // =========================================================
+  // EXISTING LEAD MAP
+  // =========================================================
   const existingMap = new Map();
 
-  existingLeads.forEach((item) => {
-    existingMap.set(item.CallingNo, item);
-  });
+  for (const lead of existingLeads) {
+    const callingNo = String(
+      lead.CallingNo || ""
+    ).trim();
 
+    // Keep latest record if duplicate old records
+    // already exist in database.
+    if (!existingMap.has(callingNo)) {
+      existingMap.set(callingNo, lead);
+    }
+  }
+
+  // =========================================================
+  // PREPARE DATA
+  // =========================================================
   const insertData = [];
   const updateData = [];
 
-  leads.forEach((item) => {
-    const oldLead = existingMap.get(item.CallingNo,);
+  // This Set gives additional protection
+  // inside current request.
+  const processedNumbers = new Set();
 
+  // =========================================================
+  // PROCESS UNIQUE LEADS
+  // =========================================================
+  for (const item of uniqueLeads) {
+    const callingNo = String(
+      item.CallingNo || ""
+    ).trim();
+
+    // Extra duplicate protection
+    if (processedNumbers.has(callingNo)) {
+      continue;
+    }
+
+    processedNumbers.add(callingNo);
+
+    const oldLead = existingMap.get(callingNo);
+
+    // =======================================================
+    // EXISTING LEAD
+    // =======================================================
     if (oldLead) {
-      // Same day duplicate -> Skip
+      // -----------------------------------------------------
+      // SAME NUMBER + SAME DATE
+      // -----------------------------------------------------
       if (oldLead.Date === today) {
-        return;
+        // Do absolutely nothing.
+        // Existing today's lead remains unchanged.
+        continue;
       }
 
-      // Previous day -> Update
+      // -----------------------------------------------------
+      // SAME NUMBER + OLD DATE
+      // -----------------------------------------------------
+      // Move existing lead to today.
+      // Other existing fields remain unchanged.
       updateData.push({
         id: oldLead._id,
+
         LeadNo: startNo++,
+
         Date: today,
+
         Time: time,
       });
 
-      return;
+      continue;
     }
 
+    // =======================================================
+    // NEW LEAD
+    // =======================================================
     insertData.push({
       ...item,
+
+      CallingNo: callingNo,
+
       LeadNo: startNo++,
+
       TeamCode:
-        teamAutoAssignment && teamCodes.length
+        teamAutoAssignment &&
+        teamCodes.length
           ? teamCodes[teamIndex]
           : "",
+
       Date: today,
+
       Time: time,
-      WhatsAppNo: item.WhatsAppNo || item.CallingNo,
-      LeadStatus: item.LeadStatus || "New",
-      FollowupDate: item.FollowupDate || "",
+
+      WhatsAppNo:
+        item.WhatsAppNo || callingNo,
+
+      LeadStatus:
+        item.LeadStatus || "New",
+
+      FollowupDate:
+        item.FollowupDate || "",
     });
 
-    if (teamAutoAssignment && teamCodes.length) {
-      teamIndex = (teamIndex + 1) % teamCodes.length;
+    // =======================================================
+    // NEXT TEAM
+    // =======================================================
+    if (
+      teamAutoAssignment &&
+      teamCodes.length
+    ) {
+      teamIndex =
+        (teamIndex + 1) % teamCodes.length;
     }
-  });
-
-  // Update existing leads
-  for (const item of updateData) {
-    await Lead.findByIdAndUpdate(item.id, {
-      LeadNo: item.LeadNo,
-      Date: item.Date,
-      Time: item.Time,
-    });
   }
 
-  // Insert new leads
+  // =========================================================
+  // UPDATE OLD DATE LEADS
+  // =========================================================
+  for (const item of updateData) {
+    await Lead.findByIdAndUpdate(
+      item.id,
+      {
+        $set: {
+          LeadNo: item.LeadNo,
+          Date: item.Date,
+          Time: item.Time,
+        },
+      },
+      {
+        new: true,
+      }
+    );
+  }
+
+  // =========================================================
+  // INSERT NEW LEADS
+  // =========================================================
   let result = [];
 
   if (insertData.length) {
-    result = await Lead.insertMany(insertData);
+    try {
+      result = await Lead.insertMany(
+        insertData,
+        {
+          ordered: false,
+        }
+      );
+    } catch (error) {
+      // If some records were inserted and some failed
+      // because of duplicate-key/other DB error,
+      // don't crash the whole API.
+
+      if (
+        error?.name === "MongoBulkWriteError" ||
+        error?.code === 11000
+      ) {
+        result = error.insertedDocs || [];
+
+        // In some Mongoose versions insertedDocs may
+        // not be available. Re-fetch today's records.
+        if (!Array.isArray(result)) {
+          result = [];
+        }
+      } else {
+        throw error;
+      }
+    }
   }
 
-  res.status(201).json({
+  // =========================================================
+  // FINAL COUNTS
+  // =========================================================
+  const insertedCount = result.length;
+  const updatedCount = updateData.length;
+
+  const skippedCount =
+    leads.length -
+    insertedCount -
+    updatedCount;
+
+  // =========================================================
+  // RESPONSE
+  // =========================================================
+  return res.status(201).json({
     success: true,
-    message: "Bulk leads processed successfully",
-    inserted: result.length,
-    updated: updateData.length,
-    skipped: leads.length - (result.length + updateData.length),
-    count: result.length + updateData.length,
+
+    message:
+      "Bulk leads processed successfully",
+
+    inserted: insertedCount,
+
+    updated: updatedCount,
+
+    skipped: Math.max(skippedCount, 0),
+
+    count:
+      insertedCount + updatedCount,
+
     data: result,
   });
 });
-
 // ================= GET ALL LEADS =================
 const getAllLeads = asyncHandler(async (req, res) => {
   const page = Math.max(Number(req.query.page) || 1, 1);
@@ -662,6 +885,8 @@ const bulkTransferLeads = asyncHandler(async (req, res) => {
     count: leads.length,
   });
 });
+
+
 module.exports = {
   createLead,
   bulkCreateLead,
