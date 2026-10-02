@@ -1659,7 +1659,8 @@ exports.updateClientRentHistoryReceived = async (req, res) => {
       transactionId,
       expenseCategory,
       user,
-      status
+      status,
+      assignee
     } = req.body;
     // ===============================
     // Check Transaction
@@ -1792,6 +1793,7 @@ exports.updateClientRentHistoryReceived = async (req, res) => {
     // existing transaction values ko preserve karo
     transaction.expenseCategory = expenseCategory;
     transaction.status = status;
+    transaction.assignee = assignee;
 
     await transaction.save();
     return res.status(200).json({
