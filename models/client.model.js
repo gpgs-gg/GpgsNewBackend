@@ -22,6 +22,10 @@ const BedHistorySchema = new mongoose.Schema(
             type: String,
             trim: true
         },
+        noticeStartDate: Date,
+        noticeLastDate: Date,
+        clientVacatingDate: Date,
+
         remarks: String,
     },
     { _id: false }
@@ -180,6 +184,30 @@ const ClientSchema = new mongoose.Schema(
         monthlyRent: Number,
         depositAmount: Number,
 
+        latestRentHistory: {
+            historyId: {
+                type: mongoose.Schema.Types.ObjectId,
+                ref: "ClientRentHistory",
+                default: null,
+            },
+
+            month: {
+                type: Number,
+                default: null,
+            },
+
+            year: {
+                type: Number,
+                default: null,
+            },
+
+            currentDue: {
+                type: Number,
+                default: 0,
+            },
+        },
+
+
         ebDoj: {
             type: String,
             trim: true
@@ -295,17 +323,17 @@ const ClientSchema = new mongoose.Schema(
         // WORKLOGS
         // ===================================
 
-      worklogs: [
-      {
-        message: String,
-        // Why: We need to know which user created the worklog.
-        createdBy: String,
-        createdAt: {
-          type: Date,
-          default: Date.now,
-        },
-      },
-    ],
+        worklogs: [
+            {
+                message: String,
+                // Why: We need to know which user created the worklog.
+                createdBy: String,
+                createdAt: {
+                    type: Date,
+                    default: Date.now,
+                },
+            },
+        ],
     },
     {
         timestamps: true,
@@ -330,4 +358,7 @@ ClientSchema.index({
     status: 1,
 });
 
+ClientSchema.index({
+    "latestRentHistory.currentDue": 1,
+});
 module.exports = mongoose.model("Client", ClientSchema);

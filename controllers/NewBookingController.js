@@ -150,12 +150,14 @@ exports.getAllBookings = async (req, res) => {
       bookingAmountMax,
       balanceAmountMin,
       balanceAmountMax,
-// Today's bookings
+      // Today's bookings
       todayBookings,
       // Pagination
       page = 1,
       limit = 10,
       search = "",
+      bookingCreatedFrom,
+      bookingCreatedTo,
     } = req.query;
 
     // Build filter object
@@ -180,6 +182,25 @@ exports.getAllBookings = async (req, res) => {
         $lt: startOfTomorrow,
       };
     }
+    // Booking Created Date filter
+    if (bookingCreatedFrom || bookingCreatedTo) {
+      filter.createdAt = {};
+
+      if (bookingCreatedFrom) {
+        filter.createdAt.$gte = new Date(
+          `${bookingCreatedFrom}T00:00:00+05:30`,
+        );
+      }
+
+      if (bookingCreatedTo) {
+        const endDate = new Date(`${bookingCreatedTo}T00:00:00+05:30`);
+
+        endDate.setDate(endDate.getDate() + 1);
+
+        filter.createdAt.$lt = endDate;
+      }
+    }
+
     if (propertyLocation) {
       const properties = await Property.find({
         propertyLocation: propertyLocation,

@@ -47,6 +47,9 @@ const transferBed = async (req, res) => {
       });
     }
 
+    const vacatingDate = new Date(endDate);
+    vacatingDate.setHours(0, 0, 0, 0);
+
     // Same Bed Check
     if (
       String(client.propertyId) === String(newPropertyId) &&
@@ -87,8 +90,8 @@ const transferBed = async (req, res) => {
         message: "New bed not found",
       });
     }
-const newMonthlyRent = Number(newBed.monthlyRent || 0);
-const newDepositAmount = Number(newBed.depositAmount || 0);
+    const newMonthlyRent = Number(newBed.monthlyRent || 0);
+    const newDepositAmount = Number(newBed.depositAmount || 0);
 
     // Occupied Check
     const occupied = await Client.findOne({
@@ -127,6 +130,10 @@ const newDepositAmount = Number(newBed.depositAmount || 0);
         parkingCharges: client.parkingCharges,
         fromDate: client.clientDoj || now,
         toDate: now,
+        // OLD BED VACATING DETAILS
+        noticeStartDate: vacatingDate,
+        noticeLastDate: vacatingDate,
+        clientVacatingDate: vacatingDate,
       });
     } else {
       const active =
@@ -135,6 +142,10 @@ const newDepositAmount = Number(newBed.depositAmount || 0);
       if (!active.toDate) {
         active.toDate = now;
       }
+      // OLD BED VACATING DETAILS
+      active.noticeStartDate = vacatingDate;
+      active.noticeLastDate = vacatingDate;
+      active.clientVacatingDate = vacatingDate;
     }
 
     // New Bed History
@@ -432,7 +443,7 @@ const newDepositAmount = Number(newBed.depositAmount || 0);
       depositAmountReceived: 0,
     });
 
-    await ClientRentHistory.create({
+    const newRentHistory = await ClientRentHistory.create({
       clientId: client._id,
 
       bookingId: client.bookingId,
@@ -453,7 +464,7 @@ const newDepositAmount = Number(newBed.depositAmount || 0);
       remarks: "",
     });
     // ................................................
-
+    await updateClientLatestRent(newRentHistory);
 
     const updatedClient = await Client.findById(client._id)
       .populate(

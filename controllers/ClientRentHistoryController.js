@@ -42,7 +42,23 @@ const { generateWorkLogs, createWorkLog } = require("../utils/worklog");
 //     });
 //   }
 // };
+const updateClientLatestRent = async (history) => {
+  if (!history?.clientId) return;
 
+  await Client.updateOne(
+    { _id: history.clientId },
+    {
+      $set: {
+        "latestRentHistory.historyId": history._id,
+        "latestRentHistory.month": history.month,
+        "latestRentHistory.year": history.year,
+        "latestRentHistory.currentDue": Number(
+          history.currentDue || 0
+        ),
+      },
+    }
+  );
+};
 
 exports.getClientRentHistory = async (req, res) => {
   try {
@@ -212,8 +228,6 @@ exports.getClientRentHistoryByBookingId = async (req, res) => {
   }
 };
 
-
-
 exports.createClientRentHistory = async (client) => {
   try {
     // Bed Details
@@ -355,10 +369,6 @@ exports.createClientRentHistory = async (client) => {
     throw err;
   }
 };
-
-
-
-
 
 exports.updateClientRentHistory = async (req, res) => {
   try {
@@ -530,6 +540,7 @@ exports.updateClientRentHistory = async (req, res) => {
       createdAt: 1,
     });
 
+    let latestHistory = history;
     let previousDue = Number(history.currentDue || 0);
 
     for (const futureHistory of futureHistories) {
@@ -584,11 +595,14 @@ exports.updateClientRentHistory = async (req, res) => {
       futureHistory.previousDue = previousDue;
 
       await futureHistory.save();
-
+        // Ye latest history ko track karega
+  latestHistory = futureHistory;
       previousDue = Number(
         futureHistory.currentDue || 0
       );
     }
+    // ⭐ FINAL LATEST RENT SNAPSHOT
+await updateClientLatestRent(latestHistory);
     return res.status(200).json({
       success: true,
       message: "Rent history updated successfully",

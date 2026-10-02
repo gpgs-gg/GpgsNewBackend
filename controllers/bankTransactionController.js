@@ -16,6 +16,23 @@ const {
 } = require("../models/bankTranscation.model");
 const OptionsData = require("../models/options.model");
 
+const updateClientLatestRent = async (history) => {
+  if (!history?.clientId) return;
+
+  await Client.updateOne(
+    { _id: history.clientId },
+    {
+      $set: {
+        "latestRentHistory.historyId": history._id,
+        "latestRentHistory.month": history.month,
+        "latestRentHistory.year": history.year,
+        "latestRentHistory.currentDue": Number(
+          history.currentDue || 0
+        ),
+      },
+    }
+  );
+};
 
 
 function findColumn(headers, possibleNames) {
@@ -472,6 +489,10 @@ exports.uploadBankStatement = async (req, res) => {
         "ref no",
         "reference no",
         "chq.no",
+        "chq./ref.no.",
+        "chq/ref no",
+        "chq/ref.no",
+        "chq ref no",
       ]),
 
       withdrawal: findColumn(headers, [
@@ -556,9 +577,12 @@ exports.uploadBankStatement = async (req, res) => {
 
           narration,
 
+          // Excel: Chq./Ref.No.
+          // Internal DB field: chqNo
           chqNo: columnMap.chqNo
             ? String(row[columnMap.chqNo] || "").trim()
             : "",
+
 
           withdrawal,
 
@@ -614,21 +638,26 @@ exports.uploadBankStatement = async (req, res) => {
         .trim()
         .toLowerCase();
 
-      return `${dateKey}|${narrationKey}|${valueDateKey}`;
+      const chqNoKey = String(
+        transaction.chqNo || ""
+      )
+        .trim()
+        .toLowerCase();
+
+      return `${dateKey}|${narrationKey}|${valueDateKey}|${chqNoKey}`;
     };
 
     // ================= FIND EXISTING RECORDS =================
-
     const existingTxns = await TransactionModel.find({
       $or: transactions.map((t) => ({
         date: t.date,
         narration: t.narration,
         valueDate: t.valueDate,
+        chqNo: t.chqNo,
       })),
     })
-      .select("_id date narration valueDate")
+      .select("_id date narration valueDate chqNo")
       .lean();
-
     // ================= EXISTING KEYS =================
 
     const existingKeys = new Map();
@@ -963,7 +992,6 @@ exports.getAllTransactions = async (req, res) => {
 exports.getTransactionById = async (req, res) => {
   try {
     const { account, id } = req.params;
-    console.log(1111111111, account, id)
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return res.status(400).json({
         success: false,
@@ -1629,7 +1657,9 @@ exports.updateClientRentHistoryReceived = async (req, res) => {
       year,
       amount,
       transactionId,
-      expenseCategory
+      expenseCategory,
+      user,
+      status
     } = req.body;
     // ===============================
     // Check Transaction
@@ -1682,6 +1712,9 @@ exports.updateClientRentHistoryReceived = async (req, res) => {
       bedId,
       month,
       year,
+    }).sort({
+      createdAt: -1,
+      _id: -1,
     });
 
     if (!history) {
@@ -1738,7 +1771,7 @@ exports.updateClientRentHistoryReceived = async (req, res) => {
     }
 
     history.paymentComments.push({
-      comment: `Amount: ₹${receivedAmount} - Narration: ${transaction.narration || "-"
+      comment: `${user} - Amount: ₹${receivedAmount} - Narration: ${transaction.narration || "-"
         } - Value Date: ${transaction.valueDate
           ? new Date(transaction.valueDate).toLocaleDateString("en-IN")
           : "-"
@@ -1746,6 +1779,7 @@ exports.updateClientRentHistoryReceived = async (req, res) => {
       date: new Date(),
     });
     await history.save();
+    await updateClientLatestRent(history);
     // ===============================
     // Mark Transaction Used
     // ===============================
@@ -1757,6 +1791,7 @@ exports.updateClientRentHistoryReceived = async (req, res) => {
     transaction.rentHistoryId = history._id;
     // existing transaction values ko preserve karo
     transaction.expenseCategory = expenseCategory;
+    transaction.status = status;
 
     await transaction.save();
     return res.status(200).json({

@@ -93,6 +93,27 @@ const monthNames = [
   //   }
   // };
 
+
+const updateClientLatestRent = async (history) => {
+  if (!history?.clientId) return;
+
+  await Client.updateOne(
+    { _id: history.clientId },
+    {
+      $set: {
+        "latestRentHistory.historyId": history._id,
+        "latestRentHistory.month": history.month,
+        "latestRentHistory.year": history.year,
+        "latestRentHistory.currentDue": Number(
+          history.currentDue || 0
+        ),
+      },
+    }
+  );
+};
+
+
+
 exports.createClientFromBooking = async (
   req,
   res
@@ -3020,6 +3041,25 @@ const result = await batchInsert(
   rentHistoryData,
   500
 );
+
+// Latest generated rent history ko Client me update karo
+for (const rentData of rentHistoryData) {
+  const latestHistory = await ClientRentHistory.findOne({
+    clientId: rentData.clientId,
+    month: rentData.month,
+    year: rentData.year,
+  })
+    .sort({
+      createdAt: -1,
+      _id: -1,
+    })
+    .lean();
+
+  if (latestHistory) {
+    await updateClientLatestRent(latestHistory);
+  }
+}
+
 
      return res.status(200).json({
       success: true,

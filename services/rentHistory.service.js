@@ -22,6 +22,24 @@ const monthNames = [
 ];
 
 
+const updateClientLatestRent = async (history) => {
+  if (!history?.clientId) return;
+
+  await Client.updateOne(
+    { _id: history.clientId },
+    {
+      $set: {
+        "latestRentHistory.historyId": history._id,
+        "latestRentHistory.month": history.month,
+        "latestRentHistory.year": history.year,
+        "latestRentHistory.currentDue": Number(
+          history.currentDue || 0
+        ),
+      },
+    }
+  );
+};
+
 const createClientRentHistory = async (client) => {
   try {
     // Bed Details
@@ -199,6 +217,7 @@ const createClientRentHistory = async (client) => {
       }
 
       await history.save();
+      await updateClientLatestRent(history);
 
       return history;
     }
@@ -232,7 +251,7 @@ const createClientRentHistory = async (client) => {
 
       remarks: "",
     });
-
+    await updateClientLatestRent(history);
     return history;
   } catch (err) {
     console.error(
@@ -244,13 +263,14 @@ const createClientRentHistory = async (client) => {
 };
 
 const generateMonthlyRent = async () => {
+ 
   // const month = new Date().getMonth() + 1;
   // const year = new Date().getFullYear();
   // const month = 10;
   // const year = 2026;
   // const todayFilterDate = "2026-8-03";
   const today = new Date();
-  let month = today.getMonth() + 1;
+  let month = today.getMonth() + 2;
   let year = today.getFullYear();
   // 27th ko next month's rent history generate hogi
   if (today.getDate() >= 20) {
@@ -425,7 +445,7 @@ const generateMonthlyRent = async () => {
     const monthlyRent = Number(
       client.monthlyRent || 0
     );
-    const bookingType = client.bookingType 
+    const bookingType = client.bookingType
 
     const depositAmount = Number(
       client.depositAmount || 0
@@ -564,12 +584,66 @@ const generateMonthlyRent = async () => {
     rentHistoryData,
     500
   );
+ const generatedCount = batchResult.insertedCount;
 
-  const generatedCount = batchResult.insertedCount;
+if (generatedCount > 0) {
+  const generatedClientIds = rentHistoryData.map(
+    (item) => item.clientId
+  );
 
+  const generatedHistories = await ClientRentHistory.find({
+    clientId: { $in: generatedClientIds },
+    month,
+    year,
+  })
+    .select("_id clientId month year currentDue createdAt")
+    .sort({
+      createdAt: -1,
+      _id: -1,
+    })
+    .lean();
+
+  const latestHistoryMap = new Map();
+
+  for (const history of generatedHistories) {
+    const clientId = String(history.clientId);
+
+    if (!latestHistoryMap.has(clientId)) {
+      latestHistoryMap.set(clientId, history);
+    }
+  }
+
+  const clientBulkOperations = [];
+
+  for (const history of latestHistoryMap.values()) {
+    clientBulkOperations.push({
+      updateOne: {
+        filter: {
+          _id: history.clientId,
+        },
+        update: {
+          $set: {
+            "latestRentHistory.historyId": history._id,
+            "latestRentHistory.month": history.month,
+            "latestRentHistory.year": history.year,
+            "latestRentHistory.currentDue": Number(
+              history.currentDue || 0
+            ),
+          },
+        },
+      },
+    });
+  }
+
+  if (clientBulkOperations.length > 0) {
+    await Client.bulkWrite(clientBulkOperations, {
+      ordered: false,
+    });
+  }
+}
   const failedCount = batchResult.failedCount;
 
-const failedClientIds = batchResult.failedClients || [];
+  const failedClientIds = batchResult.failedClients || [];
 
   const completedCount =
     alreadyGeneratedCount + generatedCount;
@@ -924,6 +998,9 @@ const recalculateRentHistory = async (
     await nextHistory.save();
     previousHistory = nextHistory;
   }
+
+   await updateClientLatestRent(previousHistory);
+
   return history;
 };
 

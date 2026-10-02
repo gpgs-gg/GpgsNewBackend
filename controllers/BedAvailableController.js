@@ -121,9 +121,9 @@ exports.getAllAvailableBeds = async (req, res) => {
     if (status) query.status = status;
     if (roomNo) query.roomNo = roomNo;
     if (bedNo) query.bedNo = bedNo;
-          query.status = "Active";
+    query.status = "Active";
 
-          
+
     if (monthlyRentMin || monthlyRentMax) {
       query.monthlyRent = {};
       if (monthlyRentMin) query.monthlyRent.$gte = Number(monthlyRentMin);
@@ -268,45 +268,104 @@ exports.getAllAvailableBeds = async (req, res) => {
       ]);
     }
 
-    // ================= 💨 STEP 3: Get clients for these beds only =================
+    // ================= 💨 STEP 3: Get clients for these beds =================
+
     const bedIds = beds.map(b => b._id);
 
-    // 🔥 Sirf 10-20 clients fetch ho rahe hain, 40K nahi
     let clients = [];
+
     if (bedIds.length > 0) {
       clients = await Client.find({
-        bedId: { $in: bedIds }
-        // ❌ Koi extra filter nahi - sab clients chahiye
+        $or: [
+          // Current bed clients
+          {
+            bedId: { $in: bedIds }
+          },
+
+          // Transfer ke baad old bed par historical client
+          {
+            "bedHistory.bedId": { $in: bedIds }
+          }
+        ]
       })
-        .select("_id bedId fullName callingNo whatsappNo noticeStartDate noticeLastDate clientVacatingDate clientDoj isBookingCancelled")
+        .select(
+          "_id bedId fullName callingNo whatsappNo noticeStartDate noticeLastDate clientVacatingDate clientDoj isBookingCancelled bedHistory"
+        )
         .lean();
     }
 
-    // ================= 💨 STEP 4: Map for O(1) lookup =================
-    const clientMap = new Map();
-    clients.forEach(c => {
-      clientMap.set(String(c.bedId), c);
-    });
+ // ================= 💨 STEP 4: Map for O(1) lookup =================
 
-    // ================= 💨 STEP 5: Format response =================
-    let data = beds.map(bed => {
-      const client = clientMap.get(String(bed._id));
-      return {
-        ...bed,
-        client: client ? {
+const clientMap = new Map();
+
+clients.forEach(c => {
+  // Current bed client
+  if (c.bedId) {
+    clientMap.set(String(c.bedId), c);
+  }
+
+  // Old bed from bedHistory
+  if (Array.isArray(c.bedHistory)) {
+    c.bedHistory.forEach(history => {
+      if (!history.bedId) return;
+
+      // Old bed ka historical record
+      if (
+        history.clientVacatingDate ||
+        history.noticeStartDate ||
+        history.noticeLastDate ||
+        history.toDate
+      ) {
+        clientMap.set(String(history.bedId), {
+          ...c,
+
+          // Old bed ki dates
+          noticeStartDate:
+            history.noticeStartDate || c.noticeStartDate,
+
+          noticeLastDate:
+            history.noticeLastDate || c.noticeLastDate,
+
+          clientVacatingDate:
+            history.clientVacatingDate ||
+            history.toDate ||
+            c.clientVacatingDate,
+
+          clientDoj:
+            history.fromDate || c.clientDoj,
+
+          bedId: history.bedId,
+        });
+      }
+    });
+  }
+});
+
+
+// ================= 💨 STEP 5: Format response =================
+let data = beds.map(bed => {
+  const client = clientMap.get(String(bed._id));
+
+  return {
+    ...bed,
+
+    client: client
+      ? {
           _id: client._id,
           fullName: client.fullName,
           callingNo: client.callingNo,
           whatsappNo: client.whatsappNo,
+
           noticeStartDate: client.noticeStartDate,
           noticeLastDate: client.noticeLastDate,
           clientVacatingDate: client.clientVacatingDate,
-          clientDoj: client.clientDoj,
-          isBookingCancelled: client.isBookingCancelled
-        } : null
-      };
-    });
 
+          clientDoj: client.clientDoj,
+          isBookingCancelled: client.isBookingCancelled,
+        }
+      : null,
+  };
+});
     // ================= 💨 STEP 6: CVD sorting (Sirf 10-20 records pe) =================
     if (hasCvd === "true") {
       data.sort((a, b) => {
