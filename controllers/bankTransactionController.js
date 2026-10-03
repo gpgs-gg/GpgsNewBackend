@@ -850,7 +850,9 @@ exports.getAllTransactions = async (req, res) => {
 
     if (req.query.source) query.source = req.query.source;
     if (req.query.userId) query.userId = req.query.userId;
-
+   if (req.query.status) {
+      query.status = req.query.status;
+    }
     if (req.query.chqNo) {
       query.chqNo = { $regex: req.query.chqNo, $options: "i" };
     }

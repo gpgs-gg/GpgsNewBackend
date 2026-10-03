@@ -95,9 +95,7 @@ exports.getAllAvailableBeds = async (req, res) => {
     const {
       search,
       propertyId,
-      propertyLocation,
       gender,
-      sharingType,
       bathAttached,
       acRoom,
       roomNo,
@@ -111,11 +109,23 @@ exports.getAllAvailableBeds = async (req, res) => {
       sortByRent,
     } = req.query;
 
+    const propertyLocation =
+      req.query.propertyLocation || req.query["propertyLocation[]"];
+
+    const sharingType = req.query.sharingType || req.query["sharingType[]"];
+
     const query = {};
 
     if (propertyId) query.propertyId = propertyId;
     if (gender) query.gender = gender;
-    if (sharingType) query.sharingType = sharingType;
+    if (sharingType) {
+      const sharingTypes = Array.isArray(sharingType)
+        ? sharingType
+        : [sharingType];
+      query.sharingType = {
+        $in: sharingTypes,
+      };
+    }
     if (bathAttached) query.bathAttached = bathAttached;
     if (acRoom) query.acRoom = acRoom;
     if (status) query.status = status;
@@ -137,8 +147,19 @@ exports.getAllAvailableBeds = async (req, res) => {
     }
 
     if (propertyLocation) {
-      const properties = await Property.find({ propertyLocation }).select("_id").lean();
-      query.propertyId = { $in: properties.map(p => p._id) };
+      const locations = Array.isArray(propertyLocation)
+        ? propertyLocation
+        : [propertyLocation];
+
+      const properties = await Property.find({
+        propertyLocation: { $in: locations },
+      })
+        .select("_id")
+        .lean();
+
+      query.propertyId = {
+        $in: properties.map((p) => p._id),
+      };
     }
 
     if (search?.trim()) {
@@ -294,78 +315,78 @@ exports.getAllAvailableBeds = async (req, res) => {
         .lean();
     }
 
- // ================= 💨 STEP 4: Map for O(1) lookup =================
+    // ================= 💨 STEP 4: Map for O(1) lookup =================
 
-const clientMap = new Map();
+    const clientMap = new Map();
 
-clients.forEach(c => {
-  // Current bed client
-  if (c.bedId) {
-    clientMap.set(String(c.bedId), c);
-  }
+    clients.forEach(c => {
+      // Current bed client
+      if (c.bedId) {
+        clientMap.set(String(c.bedId), c);
+      }
 
-  // Old bed from bedHistory
-  if (Array.isArray(c.bedHistory)) {
-    c.bedHistory.forEach(history => {
-      if (!history.bedId) return;
+      // Old bed from bedHistory
+      if (Array.isArray(c.bedHistory)) {
+        c.bedHistory.forEach(history => {
+          if (!history.bedId) return;
 
-      // Old bed ka historical record
-      if (
-        history.clientVacatingDate ||
-        history.noticeStartDate ||
-        history.noticeLastDate ||
-        history.toDate
-      ) {
-        clientMap.set(String(history.bedId), {
-          ...c,
-
-          // Old bed ki dates
-          noticeStartDate:
-            history.noticeStartDate || c.noticeStartDate,
-
-          noticeLastDate:
-            history.noticeLastDate || c.noticeLastDate,
-
-          clientVacatingDate:
+          // Old bed ka historical record
+          if (
             history.clientVacatingDate ||
-            history.toDate ||
-            c.clientVacatingDate,
+            history.noticeStartDate ||
+            history.noticeLastDate ||
+            history.toDate
+          ) {
+            clientMap.set(String(history.bedId), {
+              ...c,
 
-          clientDoj:
-            history.fromDate || c.clientDoj,
+              // Old bed ki dates
+              noticeStartDate:
+                history.noticeStartDate || c.noticeStartDate,
 
-          bedId: history.bedId,
+              noticeLastDate:
+                history.noticeLastDate || c.noticeLastDate,
+
+              clientVacatingDate:
+                history.clientVacatingDate ||
+                history.toDate ||
+                c.clientVacatingDate,
+
+              clientDoj:
+                history.fromDate || c.clientDoj,
+
+              bedId: history.bedId,
+            });
+          }
         });
       }
     });
-  }
-});
 
 
-// ================= 💨 STEP 5: Format response =================
-let data = beds.map(bed => {
-  const client = clientMap.get(String(bed._id));
+    // ================= 💨 STEP 5: Format response =================
+    let data = beds.map(bed => {
+      const client = clientMap.get(String(bed._id));
 
-  return {
-    ...bed,
+      return {
+        ...bed,
 
-    client: client
-      ? {
-          _id: client._id,
-          fullName: client.fullName,
-          callingNo: client.callingNo,
-          whatsappNo: client.whatsappNo,
+        client: client
+          ? {
+            _id: client._id,
+            fullName: client.fullName,
+            callingNo: client.callingNo,
+            whatsappNo: client.whatsappNo,
 
-          noticeStartDate: client.noticeStartDate,
-          noticeLastDate: client.noticeLastDate,
-          clientVacatingDate: client.clientVacatingDate,
+            noticeStartDate: client.noticeStartDate,
+            noticeLastDate: client.noticeLastDate,
+            clientVacatingDate: client.clientVacatingDate,
 
-          clientDoj: client.clientDoj,
-          isBookingCancelled: client.isBookingCancelled,
-        }
-      : null,
-  };
-});
+            clientDoj: client.clientDoj,
+            isBookingCancelled: client.isBookingCancelled,
+          }
+          : null,
+      };
+    });
     // ================= 💨 STEP 6: CVD sorting (Sirf 10-20 records pe) =================
     if (hasCvd === "true") {
       data.sort((a, b) => {

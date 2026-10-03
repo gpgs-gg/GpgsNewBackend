@@ -121,6 +121,8 @@ exports.getAllBookings = async (req, res) => {
       status,
       bookingType,
       teamCode,
+      sharingType,
+      paymentStatus,
       // Property related
       propertyId,
       propertyLocation,
@@ -202,13 +204,40 @@ exports.getAllBookings = async (req, res) => {
     }
 
     if (propertyLocation) {
+      const locations = (
+        Array.isArray(propertyLocation)
+          ? propertyLocation
+          : propertyLocation.split(",")
+      )
+        .map((location) => location.trim())
+        .filter(Boolean);
+
       const properties = await Property.find({
-        propertyLocation: propertyLocation,
-      }).select("_id propertyLocation");
+        propertyLocation: { $in: locations },
+      }).select("_id");
+
       filter.propertyId = {
         $in: properties.map((p) => p._id),
-      }
+      };
     }
+
+    if (sharingType) {
+      const sharingTypes = (
+        Array.isArray(sharingType) ? sharingType : sharingType.split(",")
+      )
+        .map((type) => type.trim())
+        .filter(Boolean);
+
+      const matchingBeds = await Bed.find({
+        sharingType: { $in: sharingTypes },
+      }).select("_id");
+
+      filter.bedId = {
+        $in: matchingBeds.map((bed) => bed._id),
+      };
+    }
+
+
     // Text filters (case-insensitive regex)
     if (fullName) {
       filter.fullName = { $regex: fullName, $options: "i" };
@@ -230,6 +259,15 @@ exports.getAllBookings = async (req, res) => {
     }
     if (bookingType === "Permanent") {
       filter.propertyId = { $ne: null };
+    }
+
+    // Payment Verification filter
+    // loginEnabled is used as the payment verification flag
+    if (paymentStatus === "Verified") {
+      filter.loginEnabled = true;
+    }
+    if (paymentStatus === "Pending") {
+      filter.loginEnabled = false;
     }
 
     if (bookingType === "Temporary") {
@@ -560,6 +598,23 @@ exports.updateBooking = async (req, res) => {
         newBookingData.temporaryBedId = newTemporaryBed.bedNo;
       }
     }
+
+
+    // ============================================================
+    // LOGIN ENABLED WORKLOG
+    // ============================================================
+
+    if (
+      oldBookingData.loginEnabled === false &&
+      newBookingData.loginEnabled === true
+    ) {
+      workLogs.push(
+        createWorkLog({
+          message: `Login Enabled changed from "No" to "Yes"`,
+          createdBy: user,
+        }),
+      );
+    }
     // ============================================================
     // AUTOMATIC WORKLOG FOR EVERY CHANGED FIELD
     // ============================================================
@@ -604,13 +659,26 @@ exports.updateBooking = async (req, res) => {
         }),
       );
     }
-
     // ============================================================
     // UPDATE BOOKING
     // ============================================================
-
     Object.assign(booking, updateData);
     booking.workLogs = workLogs;
+    if (booking.loginEnabled === false) {
+      booking.workLogs = booking.workLogs || [];
+      booking.workLogs.push(
+        createWorkLog({
+          message: `Payment verification Changed From Pending to Verified"`,
+          createdBy:
+            req.body.user ||
+            req.body.updatedByName ||
+            req.user?.name ||
+            "system",
+        }),
+      );
+    }
+
+    await booking.save();
 
     const updatedBooking = await booking.save();
 
