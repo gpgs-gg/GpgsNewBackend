@@ -114,6 +114,8 @@ exports.createVacation = async (req, res) => {
       vacationLastDate1,
       vacationStartDate2,
       vacationLastDate2,
+      vacationComments,
+      user
     } = req.body;
 
     // Check if client exists
@@ -147,6 +149,15 @@ exports.createVacation = async (req, res) => {
       vacationLastDate1: vacationLastDate1 || null,
       vacationStartDate2: vacationStartDate2 || null,
       vacationLastDate2: vacationLastDate2 || null,
+      vacationComments: vacationComments?.trim()
+        ? [
+          {
+            message: vacationComments.trim(),
+            createdBy: user || "System",
+            createdAt: new Date(),
+          },
+        ]
+        : [],
     });
 
     await vacation.save();
@@ -180,6 +191,8 @@ exports.updateVacation = async (req, res) => {
       vacationLastDate1,
       vacationStartDate2,
       vacationLastDate2,
+      vacationComments,
+      user
     } = req.body;
 
     // Find and update
@@ -196,6 +209,13 @@ exports.updateVacation = async (req, res) => {
     if (vacationLastDate1 !== undefined) vacation.vacationLastDate1 = vacationLastDate1 || null;
     if (vacationStartDate2 !== undefined) vacation.vacationStartDate2 = vacationStartDate2 || null;
     if (vacationLastDate2 !== undefined) vacation.vacationLastDate2 = vacationLastDate2 || null;
+    if (vacationComments?.trim()) {
+      vacation.vacationComments.push({
+        message: vacationComments.trim(),
+        createdBy: user || "System",
+        createdAt: new Date(),
+      });
+    }
 
     await vacation.save();
 

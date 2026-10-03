@@ -42,6 +42,17 @@ const clientVacationHistorySchema = new mongoose.Schema(
       type: String,
       default: null,
     },
+    vacationComments: [
+      {
+        message: String,
+        // Why: We need to know which user created the worklog.
+        createdBy: String,
+        createdAt: {
+          type: Date,
+          default: Date.now,
+        },
+      },
+    ],
   },
   {
     timestamps: true,

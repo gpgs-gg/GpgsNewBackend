@@ -20,6 +20,26 @@ const monthNames = [
   "December",
 ];
 
+
+const updateClientLatestRent = async (history) => {
+  if (!history?.clientId) return;
+
+  await Client.updateOne(
+    { _id: history.clientId },
+    {
+      $set: {
+        "latestRentHistory.historyId": history._id,
+        "latestRentHistory.month": history.month,
+        "latestRentHistory.year": history.year,
+        "latestRentHistory.currentDue": Number(
+          history.currentDue || 0
+        ),
+      },
+    }
+  );
+};
+
+
 const transferBed = async (req, res) => {
   try {
     const {

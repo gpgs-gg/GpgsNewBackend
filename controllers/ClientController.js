@@ -1303,6 +1303,7 @@ const responseClients = clients.map((client) => {
         vacationLastDate1: vacation.vacationLastDate1 || null,
         vacationStartDate2: vacation.vacationStartDate2 || null,
         vacationLastDate2: vacation.vacationLastDate2 || null,
+        vacationComments: vacation.vacationComments || [ ],
     }));
    
   if (

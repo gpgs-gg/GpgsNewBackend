@@ -3,7 +3,7 @@ const router = express.Router();
 
 const {
   getAllAvailableBeds,
-  getPropertyWiseAvailableBeds,
+  // getPropertyWiseAvailableBeds,
 } = require("../controllers/BedAvailableController");
 
 const {verifyJWT} = require("../middleware/verifyJWT");
@@ -11,9 +11,9 @@ const {verifyJWT} = require("../middleware/verifyJWT");
 
 router.get("/available-beds",verifyJWT, getAllAvailableBeds);
 
-router.get(
-  "/available-beds/:propertyId", verifyJWT,
-  getPropertyWiseAvailableBeds
-);
+// router.get(
+//   "/available-beds/:propertyId", verifyJWT,
+//   getPropertyWiseAvailableBeds
+// );
 
 module.exports = router;
