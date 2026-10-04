@@ -50,7 +50,7 @@ exports.createBookingEnquiry = async (req, res) => {
     // CREATE
     // ==============================
 
-    const bookingEnquiry = await BookingEnquiryModel.create({
+    const bookingEnquiry = await BookingEnquiry.create({
       fullName: fullName.trim(),
       whatsappNumber: whatsappNumber.trim(),
       callingNumber: callingNumber?.trim() || "",

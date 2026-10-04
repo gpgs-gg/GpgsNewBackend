@@ -617,3 +617,161 @@ await updateClientLatestRent(latestHistory);
     });
   }
 };
+
+exports.deleteClientRentHistory = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const history = await ClientRentHistory.findById(id);
+
+    if (!history) {
+      return res.status(404).json({
+        success: false,
+        message: "Rent history not found",
+      });
+    }
+
+    const client = await Client.findById(history.clientId)
+      .select("clientDoj noticeLastDate bookingType")
+      .lean();
+
+    if (!client) {
+      return res.status(404).json({
+        success: false,
+        message: "Client not found",
+      });
+    }
+
+    const deletedYear = history.year;
+    const deletedMonth = history.month;
+
+    const clientId = history.clientId;
+
+    // Delete selected month
+    await ClientRentHistory.findByIdAndDelete(id);
+
+    // Find the previous rent history before deleted month
+    const previousHistory = await ClientRentHistory.findOne({
+      clientId,
+      $or: [
+        { year: { $lt: deletedYear } },
+        {
+          year: deletedYear,
+          month: { $lt: deletedMonth },
+        },
+      ],
+    }).sort({
+      year: -1,
+      month: -1,
+      createdAt: -1,
+    });
+
+    let previousDue = Number(previousHistory?.currentDue || 0);
+
+    // Get all future rent histories
+    const futureHistories = await ClientRentHistory.find({
+      clientId,
+      $or: [
+        { year: { $gt: deletedYear } },
+        {
+          year: deletedYear,
+          month: { $gt: deletedMonth },
+        },
+      ],
+    }).sort({
+      year: 1,
+      month: 1,
+      createdAt: 1,
+    });
+
+    let latestHistory = previousHistory || null;
+
+    // Recalculate all future months
+    for (const futureHistory of futureHistories) {
+      const actualLastDay = new Date(
+        futureHistory.year,
+        futureHistory.month,
+        0,
+      ).getDate();
+
+      const rentDivider = actualLastDay === 31 ? 30 : actualLastDay;
+
+      const futureCalculation = calculateRentHistory({
+        monthlyRent: Number(futureHistory.monthlyRent || 0),
+
+        depositAmount: Number(futureHistory.depositAmount || 0),
+
+        daysCount: Number(futureHistory.daysCount || 0),
+
+        previousDue,
+
+        ebAmt: Number(futureHistory.ebAmt || 0),
+
+        flatEB: Number(futureHistory.flatEB || 0),
+
+        adjEB: Number(futureHistory.adjEB || 0),
+
+        adjAmt: Number(futureHistory.adjAmt || 0),
+
+        processingFees: Number(futureHistory.processingFees || 0),
+
+        parkingCharges: Number(futureHistory.parkingCharges || 0),
+
+        processingFeesReceived: Number(
+          futureHistory.processingFeesReceived || 0,
+        ),
+
+        depositAmountReceived: Number(futureHistory.depositAmountReceived || 0),
+
+        rentReceived: Number(futureHistory.totalReceived || 0),
+
+        rentDivider,
+
+        bookingType: client.bookingType,
+      });
+
+      Object.assign(futureHistory, futureCalculation);
+
+      futureHistory.previousDue = previousDue;
+
+      await futureHistory.save();
+
+      latestHistory = futureHistory;
+
+      previousDue = Number(futureHistory.currentDue || 0);
+    }
+
+    // If there are no future histories,
+    // previous history becomes the latest history.
+    if (!latestHistory) {
+      latestHistory = await ClientRentHistory.findOne({
+        clientId,
+      }).sort({
+        year: -1,
+        month: -1,
+        createdAt: -1,
+      });
+    }
+
+    // Update latest rent snapshot
+    if (latestHistory) {
+      await updateClientLatestRent(latestHistory);
+    } else {
+      // If this was the client's only rent history,
+      // clear the latest rent snapshot if your helper supports it.
+      await updateClientLatestRent(null);
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Rent history deleted successfully",
+    });
+  } catch (error) {
+    console.error("Delete Rent History Error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};

@@ -162,12 +162,6 @@ const calculateEligibleAttendanceDays = (attendance = []) => {
 // CALCULATE WEEKLY OFF ELIGIBILITY
 // ============================================================
 
-const calculateWeeklyOffEligibility = (eligibleAttendanceDays) => {
-  // For every 7 days of eligible attendance, employee gets 1 weekly off
-  const weeklyOffs = Math.floor(eligibleAttendanceDays / 7);
-  return Math.min(weeklyOffs, MAX_WEEKLY_OFFS);
-};
-
 // ============================================================
 // CALCULATE PAYABLE SALARY
 // ============================================================
@@ -180,61 +174,69 @@ const calculatePayableSalary = ({
   perDaySalary = 0,
   adjustedAmount = 0,
   totalDaysInMonth = 30,
+  month,
+  year,
 }) => {
   const salary = Number(monthlySalary) || 0;
   const dailySalary = Number(perDaySalary) || 0;
   const adjustment = Number(adjustedAmount) || 0;
-  const leaveDays = Number(paidLeaveDays) || 0;
-  // Public holidays are also treated as payable days.
-  // They are added to Present Days and Paid Leaves.
-  const holidayDays = Number(publicHolidayDays) || 0;
+
+  const holidayDays = Math.max(Number(publicHolidayDays) || 0, 0);
 
   // ==========================================================
-  // TOTAL PRESENT DAYS (All days including Thursday)
+  // ACTUAL PRESENT DAYS
   // ==========================================================
 
   const totalPresentDays = calculatePresentDays(attendance);
 
   // ==========================================================
-  // APPLICABLE ABSENT DAYS (Absence on non-Thursday)
+  // ABSENT DAYS
   // ==========================================================
 
   const applicableAbsentDays = calculateApplicableAbsentDays(attendance);
 
   // ==========================================================
-  // ELIGIBLE ATTENDANCE DAYS (For weekly off calculation)
+  // ELIGIBLE ATTENDANCE DAYS
   // ==========================================================
 
   const eligibleAttendanceDays = calculateEligibleAttendanceDays(attendance);
 
   // ==========================================================
-  // WEEKLY OFF ELIGIBILITY
+  // WEEKLY OFF
   // ==========================================================
 
-  const weeklyOffEligibility = calculateWeeklyOffEligibility(
-    eligibleAttendanceDays,
-  );
+  // ==========================================================
+  // PAYABLE DAYS
+  // ==========================================================
+  // ONLY:
+  //
+  // Actual Present Days
+  // + Weekly Off
+  // + Public Holiday
+  //
+  // Paid Leave is NOT included.
+  // Absent days are NOT included.
+
+  // ==========================================================
+  // WEEKLY OFF
+  // ==========================================================
+
+  const weeklyOffEligibility = calculateWeeklyOffEligibility(month, year);
 
   // ==========================================================
   // PAYABLE DAYS
   // ==========================================================
 
-  // IMPORTANT FIX: Payable days should be based on actual attendance
-  // If employee has attendance records, use total present days + paid leaves
-  // Otherwise, use 30 - applicable absent days (for full month employees)
+  // ONLY:
+  // Actual Present Days
+  // + Weekly Off
+  // + Public Holiday
+  //
+  // Paid Leave is NOT included.
+  // Absent days are NOT included.
 
-  if (attendance.length > 0) {
-    // Payable Days = Present + Paid Leave + Public Holiday.
-    // Never allow payable days to exceed the actual days in the month.
-    payableDays = Math.min(
-      totalPresentDays + leaveDays + holidayDays,
-      totalDaysInMonth,
-    );
-  } else {
-    // When there is no attendance record, consider the full actual
-    // calendar month as payable, not a fixed 30 days.
-    payableDays = totalDaysInMonth;
-  }
+  const payableDays = totalPresentDays + weeklyOffEligibility + holidayDays;
+
   // ==========================================================
   // ABSENCE DEDUCTION
   // ==========================================================
@@ -242,23 +244,47 @@ const calculatePayableSalary = ({
   const absenceDeduction = applicableAbsentDays * dailySalary;
 
   // ==========================================================
-  // FINAL SALARY
+  // FINAL PAYABLE SALARY
   // ==========================================================
 
-  // Calculate payable salary based on payable days
   const payableSalary = payableDays * dailySalary + adjustment;
 
   return {
     totalPresentDays: roundAmount(totalPresentDays),
+
     eligibleAttendanceDays: roundAmount(eligibleAttendanceDays),
+
     applicableAbsentDays: roundAmount(applicableAbsentDays),
+
     weeklyOffEligibility: roundAmount(weeklyOffEligibility),
+
     absenceDeduction: roundAmount(absenceDeduction),
+
     payableDays: roundAmount(Math.max(payableDays, 0)),
+
     payableSalary: roundAmount(Math.max(payableSalary, 0)),
   };
 };
+// ============================================================
+// CALCULATE WEEKLY OFF ELIGIBILITY
+// ============================================================
 
+const calculateWeeklyOffEligibility = (month, year) => {
+  const totalDays = getDaysInMonth(month, year);
+  let weeklyOffs = 0;
+
+  for (let day = 1; day <= totalDays; day++) {
+    const date = new Date(Number(year), Number(month) - 1, day);
+
+    // Thursday = 4
+    if (date.getDay() === 4) {
+      weeklyOffs++;
+    }
+  }
+
+  // Maximum 5 weekly offs in a month
+  return Math.min(weeklyOffs, MAX_WEEKLY_OFFS);
+};
 // ============================================================
 // CALCULATE CURRENT DUE
 // ============================================================
@@ -388,22 +414,12 @@ const calculateSalaryData = ({
   // ----------------------------------------------------------
   // TOTAL DAYS IN MONTH (Actual calendar days)
   // ----------------------------------------------------------
-
-  const totalDaysInMonth = getDaysInMonth(
-    attendance.length > 0
-      ? new Date(attendance[0].attendanceDate).getMonth() + 1
-      : 1,
-    2026,
-  );
+  const totalDaysInMonth = new Date(year, month, 0).getDate();
   // ----------------------------------------------------------
   // PER DAY SALARY
   // ----------------------------------------------------------
-
-  const perDaySalary = calculatePerDaySalary(
-    normalizedMonthlySalary,
-    month,
-    year,
-  );
+  const perDaySalary =
+    totalDaysInMonth > 0 ? monthlySalary / totalDaysInMonth : 0;
   // ----------------------------------------------------------
   // CALCULATE PAYABLE SALARY
   // ----------------------------------------------------------
@@ -412,10 +428,12 @@ const calculateSalaryData = ({
     monthlySalary: normalizedMonthlySalary,
     attendance,
     paidLeaveDays: normalizedPaidLeaveDays,
-    publicHolidayDays: normalizedPublicHolidayDays, // Add public holidays to payable days
+    publicHolidayDays: normalizedPublicHolidayDays,
     perDaySalary,
     adjustedAmount: normalizedAdjustedAmount,
     totalDaysInMonth,
+    month,
+    year,
   });
   // ----------------------------------------------------------
   // EXTRACT CALCULATED VALUES
@@ -1011,7 +1029,7 @@ const getEmployeeSalary = asyncHandler(async (req, res) => {
       // Salary
       monthlySalary: calculated.monthlySalary,
       perDaySalary: calculated.perDaySalary,
-      // Total payable days = Present Days + Paid Leaves + Public Holidays.
+      // Total payable days = Present Days + Weekly Offs + Public Holidays.
       // This value is calculated by the backend.
       totalPayableDays: calculated.payableDays,
 
@@ -1241,11 +1259,9 @@ const upsertEmployeeSalary = asyncHandler(async (req, res) => {
       paidLeaveDays: 0,
       publicHolidayDays: 0,
       monthlySalary: 0,
-
       perDaySalary: 0,
-
-      payableDays: 30,
-
+      totalDaysInMonth: getDaysInMonth(salaryMonth, salaryYear),
+      payableDays: 0,
       absenceDeduction: 0,
 
       adjustedAmount: 0,
@@ -1619,11 +1635,13 @@ const upsertEmployeeSalary = asyncHandler(async (req, res) => {
   // ============================================================
   // SAVE SALARY CALCULATIONS
   // ============================================================
+  // ============================================================
+  // SAVE SALARY CALCULATIONS
+  // ============================================================
 
+  salary.totalDaysInMonth = calculated.totalDaysInMonth;
   salary.monthlySalary = calculated.monthlySalary;
-
   salary.perDaySalary = calculated.perDaySalary;
-
   salary.payableDays = calculated.payableDays;
 
   salary.absenceDeduction = calculated.absenceDeduction;

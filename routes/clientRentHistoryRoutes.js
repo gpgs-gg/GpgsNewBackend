@@ -7,7 +7,7 @@ const {
  getClientRentHistory,
  getClientRentHistoryById,
  getClientCompleteRentHistory,
- getClientRentHistoryByBookingId
+ getClientRentHistoryByBookingId, deleteClientRentHistory
 } = require("../controllers/ClientRentHistoryController");
 
 router.post("/", createClientRentHistory);
@@ -23,6 +23,6 @@ router.get(
 );
 router.put("/:id", updateClientRentHistory);
 
-// router.delete("/:id", rentHistory);
+router.delete("/:id", deleteClientRentHistory);
 
 module.exports = router;

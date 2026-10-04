@@ -150,6 +150,12 @@ const salarySchema = new mongoose.Schema(
       min: 2000,
       index: true,
     },
+    totalDaysInMonth: {
+      type: Number,
+      default: 0,
+      min: 28,
+      max: 31,
+    },
 
     // =====================================================
     // ATTENDANCE
@@ -177,9 +183,8 @@ const salarySchema = new mongoose.Schema(
       type: Number,
       default: 0,
       min: 0,
-      max: 4,
+      max: 5,
     },
-
     // =====================================================
     // PAID LEAVE
     // =====================================================
@@ -216,11 +221,9 @@ const salarySchema = new mongoose.Schema(
 
     payableDays: {
       type: Number,
-      default: 30,
+      default: 0,
       min: 0,
-      max: 30,
     },
-
     // =====================================================
     // ABSENCE DEDUCTION
     // =====================================================

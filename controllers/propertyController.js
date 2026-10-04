@@ -162,6 +162,77 @@ const getAllProperties = asyncHandler(async (req, res) => {
     .skip(skip)
     .limit(limit);
 
+  // Get properties and apply PropertySequence order
+
+  // const properties = await Property.aggregate([
+  //   // Apply property filters
+  //   {
+  //     $match: query,
+  //   },
+
+  //   // Match PropertySequence using propertyCode
+  //   {
+  //     $lookup: {
+  //       from: "propertysequences",
+  //       localField: "propertyCode",
+  //       foreignField: "propertyCode",
+  //       as: "propertySequence",
+  //     },
+  //   },
+
+  //   // Convert sequence array into one object
+  //   {
+  //     $unwind: {
+  //       path: "$propertySequence",
+  //       preserveNullAndEmptyArrays: true,
+  //     },
+  //   },
+
+  //   // Mark whether property has a sequence
+  //   {
+  //     $addFields: {
+  //       hasSequence: {
+  //         $cond: [
+  //           {
+  //             $ne: [
+  //               {
+  //                 $type: "$propertySequence.sequence",
+  //               },
+  //               "missing",
+  //             ],
+  //           },
+  //           1,
+  //           0,
+  //         ],
+  //       },
+  //     },
+  //   },
+
+  //   // Sequence order:
+  //   // 1, 2, 3, 4, 5...
+  //   // Properties without sequence come after them
+  //   {
+  //     $sort: {
+  //       hasSequence: -1,
+  //       "propertySequence.sequence": 1,
+  //       createdAt: -1,
+  //     },
+  //   },
+
+  //   // Pagination
+  //   {
+  //     $skip: skip,
+  //   },
+  //   {
+  //     $limit: limit,
+  //   },
+
+  //   // Remove helper fields from response
+  //   {
+  //     $unset: ["propertySequence", "hasSequence"],
+  //   },
+  // ]);
+
   res.status(200).json({
     success: true,
     page,
@@ -362,6 +433,7 @@ const deleteProperty = asyncHandler(async (req, res) => {
     message: "Property deleted successfully",
   });
 });
+
 const deleteMultipleProperties = asyncHandler(async (req, res) => {
   const { ids } = req.body;
 
@@ -385,8 +457,6 @@ const deleteMultipleProperties = asyncHandler(async (req, res) => {
     deletedCount: result.deletedCount,
   });
 });
-
-
 
 // ADD WORKLOG
 const addWorklog = asyncHandler(async (req, res) => {
@@ -416,9 +486,7 @@ const addWorklog = asyncHandler(async (req, res) => {
     data: property,
   });
 });
-
 // Property Dropdown List
-
 const getPropertyDropdown = async (req, res) => {
   try {
     const page = Number(req.query.page) || 1;
@@ -469,10 +537,6 @@ const getPropertyDropdown = async (req, res) => {
     });
   }
 };
-
-
-
-
 module.exports = {
   createProperty,
   getAllProperties,

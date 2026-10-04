@@ -26,30 +26,25 @@ const updateClientLatestRent = async (history) => {
         "latestRentHistory.historyId": history._id,
         "latestRentHistory.month": history.month,
         "latestRentHistory.year": history.year,
-        "latestRentHistory.currentDue": Number(
-          history.currentDue || 0
-        ),
+        "latestRentHistory.currentDue": Number(history.currentDue || 0),
       },
-    }
+    },
   );
 };
 
-
 function findColumn(headers, possibleNames) {
-  const lowerHeaders = headers.map((h) =>
-    String(h).toLowerCase().trim()
-  );
+  const lowerHeaders = headers.map((h) => String(h).toLowerCase().trim());
 
   for (const name of possibleNames) {
     const index = lowerHeaders.findIndex(
-      (h) => h === name.toLowerCase().trim()
+      (h) => h === name.toLowerCase().trim(),
     );
     if (index !== -1) return headers[index];
   }
 
   for (const name of possibleNames) {
-    const index = lowerHeaders.findIndex(
-      (h) => h.includes(name.toLowerCase().trim())
+    const index = lowerHeaders.findIndex((h) =>
+      h.includes(name.toLowerCase().trim()),
     );
     if (index !== -1) return headers[index];
   }
@@ -62,9 +57,7 @@ const excelSerialDateToJSDate = (serial) => {
 
   const excelEpoch = new Date(Date.UTC(1899, 11, 30));
 
-  return new Date(
-    excelEpoch.getTime() + serial * 24 * 60 * 60 * 1000
-  );
+  return new Date(excelEpoch.getTime() + serial * 24 * 60 * 60 * 1000);
 };
 
 const parseDate = (value) => {
@@ -424,16 +417,13 @@ exports.uploadBankStatement = async (req, res) => {
     if (!TransactionModel) {
       return res.status(400).json({
         success: false,
-        message:
-          "Valid account is required. Use AC1, AC2, AC3, AC4 or AC5.",
+        message: "Valid account is required. Use AC1, AC2, AC3, AC4 or AC5.",
       });
     }
 
     // ================= FILE READ =================
 
-    const fileExtension = path
-      .extname(req.file.originalname)
-      .toLowerCase();
+    const fileExtension = path.extname(req.file.originalname).toLowerCase();
 
     let workbook;
 
@@ -470,11 +460,7 @@ exports.uploadBankStatement = async (req, res) => {
     const headers = Object.keys(rawData[0]);
 
     const columnMap = {
-      date: findColumn(headers, [
-        "date",
-        "transaction date",
-        "tran date",
-      ]),
+      date: findColumn(headers, ["date", "transaction date", "tran date"]),
 
       narration: findColumn(headers, [
         "narration",
@@ -551,17 +537,11 @@ exports.uploadBankStatement = async (req, res) => {
           return;
         }
 
-        const narration = String(
-          row[columnMap.narration] || ""
-        ).trim();
+        const narration = String(row[columnMap.narration] || "").trim();
 
-        const withdrawal = parseNumber(
-          row[columnMap.withdrawal] || 0
-        );
+        const withdrawal = parseNumber(row[columnMap.withdrawal] || 0);
 
-        const deposit = parseNumber(
-          row[columnMap.deposit] || 0
-        );
+        const deposit = parseNumber(row[columnMap.deposit] || 0);
 
         if (withdrawal === 0 && deposit === 0) {
           skippedRows.push(excelRow);
@@ -582,7 +562,6 @@ exports.uploadBankStatement = async (req, res) => {
           chqNo: columnMap.chqNo
             ? String(row[columnMap.chqNo] || "").trim()
             : "",
-
 
           withdrawal,
 
@@ -632,15 +611,11 @@ exports.uploadBankStatement = async (req, res) => {
         ? new Date(transaction.valueDate).toISOString()
         : "";
 
-      const narrationKey = String(
-        transaction.narration || ""
-      )
+      const narrationKey = String(transaction.narration || "")
         .trim()
         .toLowerCase();
 
-      const chqNoKey = String(
-        transaction.chqNo || ""
-      )
+      const chqNoKey = String(transaction.chqNo || "")
         .trim()
         .toLowerCase();
 
@@ -687,8 +662,7 @@ exports.uploadBankStatement = async (req, res) => {
 
           reason: "Transaction already exists",
 
-          matchedTransactionId:
-            existingTransaction._id,
+          matchedTransactionId: existingTransaction._id,
 
           date: transaction.date,
 
@@ -721,19 +695,15 @@ exports.uploadBankStatement = async (req, res) => {
 
     if (uniqueTransactions.length > 0) {
       try {
-        const result = await TransactionModel.insertMany(
-          uniqueTransactions,
-          {
-            ordered: false,
-          }
-        );
+        const result = await TransactionModel.insertMany(uniqueTransactions, {
+          ordered: false,
+        });
 
         importedCount = result.length;
         insertedDocs = result;
       } catch (error) {
         if (error.writeErrors) {
-          importedCount =
-            error.insertedDocs?.length || 0;
+          importedCount = error.insertedDocs?.length || 0;
 
           failedCount = error.writeErrors.length;
 
@@ -750,16 +720,11 @@ exports.uploadBankStatement = async (req, res) => {
 
     const duplicateCount = duplicateDetails.length;
 
-    const skippedCount =
-      skippedRows.length + duplicateCount;
+    const skippedCount = skippedRows.length + duplicateCount;
 
     const failedRows = rowErrors
       .map((e) => e.row)
-      .concat(
-        writeErrors?.map(
-          (e) => e.index + 2
-        ) || []
-      );
+      .concat(writeErrors?.map((e) => e.index + 2) || []);
 
     // ================= RESPONSE =================
 
@@ -810,7 +775,6 @@ exports.uploadBankStatement = async (req, res) => {
   }
 };
 
-
 // ===================== GET ALL TRANSACTIONS =====================
 exports.getAllTransactions = async (req, res) => {
   try {
@@ -820,12 +784,16 @@ exports.getAllTransactions = async (req, res) => {
     const query = {};
 
     if (req.query.search?.trim()) {
-      const regex = new RegExp(req.query.search.trim(), "i");
-      query.$or = [
-        { narration: regex },
-        { chqNo: regex },
-        { source: regex }
-      ];
+      const searchValue = req.query.search.trim();
+      const regex = new RegExp(searchValue, "i");
+      const searchConditions = [{ narration: regex }, { chqNo: regex }];
+      // Search by withdrawal amount
+      if (!isNaN(Number(searchValue))) {
+        const amount = Number(searchValue);
+        searchConditions.push({ withdrawal: amount }, { deposit: amount });
+      }
+
+      query.$or = searchConditions;
     }
 
     if (req.query.fromDate || req.query.toDate) {
@@ -840,7 +808,8 @@ exports.getAllTransactions = async (req, res) => {
 
     if (req.query.valueFromDate || req.query.valueToDate) {
       query.valueDate = {};
-      if (req.query.valueFromDate) query.valueDate.$gte = new Date(req.query.valueFromDate);
+      if (req.query.valueFromDate)
+        query.valueDate.$gte = new Date(req.query.valueFromDate);
       if (req.query.valueToDate) {
         const end = new Date(req.query.valueToDate);
         end.setHours(23, 59, 59, 999);
@@ -850,9 +819,49 @@ exports.getAllTransactions = async (req, res) => {
 
     if (req.query.source) query.source = req.query.source;
     if (req.query.userId) query.userId = req.query.userId;
-   if (req.query.status) {
+
+
+    if (req.query.assignee) {
+      query.assignee = {
+        $regex: req.query.assignee,
+        $options: "i",
+      };
+    }
+
+    if (req.query.propertyId) {
+      query.propertyId = req.query.propertyId;
+    }
+
+    if (req.query.status) {
       query.status = req.query.status;
     }
+    const expenseCategoryParam =
+      req.query.expenseCategory ?? req.query["expenseCategory[]"];
+
+    if (expenseCategoryParam) {
+      const expenseCategories = Array.isArray(expenseCategoryParam)
+        ? expenseCategoryParam
+        : [expenseCategoryParam];
+
+      const validCategories = expenseCategories
+        .map((category) => String(category).trim())
+        .filter(Boolean);
+
+      //  console.log("EXPENSE CATEGORIES:", validCategories);
+
+      if (validCategories.length > 0) {
+        query.expenseCategory = {
+          $in: validCategories.map(
+            (category) =>
+              new RegExp(
+                `^${category.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`,
+                "i",
+              ),
+          ),
+        };
+      }
+    }
+
     if (req.query.chqNo) {
       query.chqNo = { $regex: req.query.chqNo, $options: "i" };
     }
@@ -860,18 +869,18 @@ exports.getAllTransactions = async (req, res) => {
     if (req.query.narration) {
       query.narration = {
         $regex: req.query.narration,
-        $options: "i"
+        $options: "i",
       };
     } else if (req.query.transactionType === "salary") {
       // Salary table → ONLY salary transactions
       query.narration = {
         $regex: "salary",
-        $options: "i"
+        $options: "i",
       };
     } else {
       // Normal table → Salary transactions exclude
       query.narration = {
-        $not: /salary/i
+        $not: /salary/i,
       };
     }
 
@@ -879,12 +888,14 @@ exports.getAllTransactions = async (req, res) => {
       const min = Number(req.query.minAmount || 0);
       const max = Number(req.query.maxAmount || Number.MAX_SAFE_INTEGER);
 
-      query.$and = [{
-        $or: [
-          { withdrawal: { $gte: min, $lte: max } },
-          { deposit: { $gte: min, $lte: max } }
-        ]
-      }];
+      query.$and = [
+        {
+          $or: [
+            { withdrawal: { $gte: min, $lte: max } },
+            { deposit: { $gte: min, $lte: max } },
+          ],
+        },
+      ];
     }
 
     if (req.query.transactionType === "deposit") {
@@ -900,7 +911,7 @@ exports.getAllTransactions = async (req, res) => {
       { model: AC2Transaction, account: "AC2" },
       { model: AC3Transaction, account: "AC3" },
       { model: AC4Transaction, account: "AC4" },
-      { model: AC5Transaction, account: "AC5" }
+      { model: AC5Transaction, account: "AC5" },
     ];
     const selectedAccounts = req.query.account
       ? accounts.filter((account) => account.account === req.query.account)
@@ -919,7 +930,7 @@ exports.getAllTransactions = async (req, res) => {
           value: item.value,
           id: item._id,
         },
-      ])
+      ]),
     );
     let allTransactions = [];
 
@@ -931,19 +942,18 @@ exports.getAllTransactions = async (req, res) => {
         .lean();
 
       allTransactions.push(
-        ...data.map(transaction => ({
+        ...data.map((transaction) => ({
           ...transaction,
           expenseCode: transaction.expenseCode
             ? expenseCodeMap.get(String(transaction.expenseCode)) || null
             : null,
-          account: account.account
-        }))
+          account: account.account,
+        })),
       );
     }
 
     allTransactions.sort((a, b) => {
-      const createdDiff =
-        new Date(b.createdAt) - new Date(a.createdAt);
+      const createdDiff = new Date(b.createdAt) - new Date(a.createdAt);
 
       if (createdDiff !== 0) return createdDiff;
 
@@ -953,11 +963,16 @@ exports.getAllTransactions = async (req, res) => {
     const totalRecords = allTransactions.length;
     const totalPages = Math.ceil(totalRecords / limit);
 
-    const transactions = allTransactions.slice(
-      skip,
-      skip + limit
+    const transactions = allTransactions.slice(skip, skip + limit);
+    const totalDeposit = allTransactions.reduce(
+      (sum, transaction) => sum + Number(transaction.deposit || 0),
+      0,
     );
 
+    const totalWithdrawal = allTransactions.reduce(
+      (sum, transaction) => sum + Number(transaction.withdrawal || 0),
+      0,
+    );
     const availableAccounts = accounts
       .filter((account) =>
         allTransactions.some(
@@ -976,16 +991,17 @@ exports.getAllTransactions = async (req, res) => {
       hasNextPage: page < totalPages,
       hasPrevPage: page > 1,
       count: transactions.length,
-      data: transactions
+      data: transactions,
+      totalDeposit,
+      totalWithdrawal,
     });
-
   } catch (error) {
     console.error("Get Transactions Error:", error);
 
     return res.status(500).json({
       success: false,
       message: "Failed to fetch transactions",
-      error: error.message
+      error: error.message,
     });
   }
 };
@@ -997,7 +1013,7 @@ exports.getTransactionById = async (req, res) => {
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return res.status(400).json({
         success: false,
-        message: "Invalid transaction ID"
+        message: "Invalid transaction ID",
       });
     }
 
@@ -1006,7 +1022,7 @@ exports.getTransactionById = async (req, res) => {
       AC2: AC2Transaction,
       AC3: AC3Transaction,
       AC4: AC4Transaction,
-      AC5: AC5Transaction
+      AC5: AC5Transaction,
     };
 
     const accountKey = account?.toUpperCase();
@@ -1025,12 +1041,12 @@ exports.getTransactionById = async (req, res) => {
           value: item.value,
           id: item._id,
         },
-      ])
+      ]),
     );
     if (!TransactionModel) {
       return res.status(400).json({
         success: false,
-        message: "Invalid account. Use AC1, AC2, AC3, AC4 or AC5."
+        message: "Invalid account. Use AC1, AC2, AC3, AC4 or AC5.",
       });
     }
 
@@ -1042,39 +1058,35 @@ exports.getTransactionById = async (req, res) => {
     if (!transactionData) {
       return res.status(404).json({
         success: false,
-        message: "Transaction not found"
+        message: "Transaction not found",
       });
     }
 
     const transaction = {
       ...transactionData,
 
-      propertyCode:
-        transactionData.propertyId?.propertyCode || "",
+      propertyCode: transactionData.propertyId?.propertyCode || "",
 
       propertyId:
-        transactionData.propertyId?._id ||
-        transactionData.propertyId ||
-        "",
+        transactionData.propertyId?._id || transactionData.propertyId || "",
       expenseCode: transactionData.expenseCode
         ? expenseCodeMap.get(String(transactionData.expenseCode)) || null
         : null,
 
-      account: accountKey
+      account: accountKey,
     };
 
     return res.status(200).json({
       success: true,
-      data: transaction
+      data: transaction,
     });
-
   } catch (error) {
     console.error("Get Transaction Error:", error);
 
     return res.status(500).json({
       success: false,
       message: "Failed to fetch transaction",
-      error: error.message
+      error: error.message,
     });
   }
 };
@@ -1162,7 +1174,8 @@ exports.updateTransaction = async (req, res) => {
     }
 
     if (req.body.isMapped !== undefined) {
-      updates.isMapped = req.body.isMapped === true || req.body.isMapped === "true";
+      updates.isMapped =
+        req.body.isMapped === true || req.body.isMapped === "true";
     }
 
     // Work log changes
@@ -1178,18 +1191,15 @@ exports.updateTransaction = async (req, res) => {
       const oldValue = transaction[key] ?? "";
       const newValue = req.body[key];
 
-      if (
-        newValue !== undefined &&
-        String(oldValue) !== String(newValue)
-      ) {
+      if (newValue !== undefined && String(oldValue) !== String(newValue)) {
         if (key === "isMapped") {
           changes.push(
             `${label} changed from "${oldValue ? "Yes" : "No"}" to "${newValue === true || newValue === "true" ? "Yes" : "No"
-            }"`
+            }"`,
           );
         } else {
           changes.push(
-            `${label} changed from "${oldValue || "Blank"}" to "${newValue || "Blank"}"`
+            `${label} changed from "${oldValue || "Blank"}" to "${newValue || "Blank"}"`,
           );
         }
       }
@@ -1201,7 +1211,7 @@ exports.updateTransaction = async (req, res) => {
 
     if (propertyId && oldPropertyId !== propertyId) {
       changes.push(
-        `Property changed from "${oldPropertyId || "Blank"}" to "${propertyId}"`
+        `Property changed from "${oldPropertyId || "Blank"}" to "${propertyId}"`,
       );
     }
 
@@ -1216,36 +1226,28 @@ exports.updateTransaction = async (req, res) => {
       }).lean();
 
       const expenseItem = expenseCodeData?.items?.find(
-        (item) => String(item._id) === String(expenseCode)
+        (item) => String(item._id) === String(expenseCode),
       );
 
       const expenseCodeName =
-        expenseItem?.label ||
-        expenseItem?.value ||
-        expenseCode;
+        expenseItem?.label || expenseItem?.value || expenseCode;
 
       changes.push(
-        `Expense Code changed from "${oldExpenseCode || "Blank"}" to "${expenseCodeName}"`
+        `Expense Code changed from "${oldExpenseCode || "Blank"}" to "${expenseCodeName}"`,
       );
     }
 
     // Comment
     const newComment = req.body.comment;
 
-    if (
-      newComment !== undefined &&
-      String(newComment).trim() !== ""
-    ) {
+    if (newComment !== undefined && String(newComment).trim() !== "") {
       changes.push(`Comment: "${String(newComment).trim()}"`);
     }
 
     // Status user assignment
     const newStatus = req.body.status;
 
-    if (
-      newStatus &&
-      String(transaction.status || "") !== String(newStatus)
-    ) {
+    if (newStatus && String(transaction.status || "") !== String(newStatus)) {
       updates.assignee = userName;
       changes.push(`Assigned to "${userName}"`);
 
@@ -1273,26 +1275,24 @@ exports.updateTransaction = async (req, res) => {
 
     updates.workLogs = workLogs;
 
-    const updatedTransaction =
-      await TransactionModel.findByIdAndUpdate(
-        id,
-        { $set: updates },
-        {
-          new: true,
-          runValidators: true,
-        }
-      )
-        .populate("userId", "fullName")
-        .populate("propertyId", "propertyCode")
-        .lean();
+    const updatedTransaction = await TransactionModel.findByIdAndUpdate(
+      id,
+      { $set: updates },
+      {
+        new: true,
+        runValidators: true,
+      },
+    )
+      .populate("userId", "fullName")
+      .populate("propertyId", "propertyCode")
+      .lean();
 
     return res.status(200).json({
       success: true,
       message: "Transaction updated successfully",
       data: {
         ...updatedTransaction,
-        propertyCode:
-          updatedTransaction.propertyId?.propertyCode || "",
+        propertyCode: updatedTransaction.propertyId?.propertyCode || "",
         propertyId:
           updatedTransaction.propertyId?._id ||
           updatedTransaction.propertyId ||
@@ -1311,7 +1311,6 @@ exports.updateTransaction = async (req, res) => {
   }
 };
 
-
 exports.deleteTransaction = async (req, res) => {
   try {
     const { id } = req.params;
@@ -1319,7 +1318,7 @@ exports.deleteTransaction = async (req, res) => {
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return res.status(400).json({
         success: false,
-        message: "Invalid transaction ID"
+        message: "Invalid transaction ID",
       });
     }
 
@@ -1328,7 +1327,7 @@ exports.deleteTransaction = async (req, res) => {
       { model: AC2Transaction, account: "AC2" },
       { model: AC3Transaction, account: "AC3" },
       { model: AC4Transaction, account: "AC4" },
-      { model: AC5Transaction, account: "AC5" }
+      { model: AC5Transaction, account: "AC5" },
     ];
 
     let transaction = null;
@@ -1347,23 +1346,22 @@ exports.deleteTransaction = async (req, res) => {
     if (!transaction) {
       return res.status(404).json({
         success: false,
-        message: "Transaction not found"
+        message: "Transaction not found",
       });
     }
 
     return res.status(200).json({
       success: true,
       message: "Transaction deleted successfully",
-      account
+      account,
     });
-
   } catch (error) {
     console.error("Delete Transaction Error:", error);
 
     return res.status(500).json({
       success: false,
       message: "Failed to delete transaction",
-      error: error.message
+      error: error.message,
     });
   }
 };
@@ -1376,19 +1374,17 @@ exports.deleteMultipleTransactions = async (req, res) => {
     if (!ids || !Array.isArray(ids) || ids.length === 0) {
       return res.status(400).json({
         success: false,
-        message: "Please provide an array of transaction IDs"
+        message: "Please provide an array of transaction IDs",
       });
     }
 
-    const invalidIds = ids.filter(
-      id => !mongoose.Types.ObjectId.isValid(id)
-    );
+    const invalidIds = ids.filter((id) => !mongoose.Types.ObjectId.isValid(id));
 
     if (invalidIds.length > 0) {
       return res.status(400).json({
         success: false,
         message: "Invalid transaction IDs provided",
-        invalidIds
+        invalidIds,
       });
     }
 
@@ -1397,7 +1393,7 @@ exports.deleteMultipleTransactions = async (req, res) => {
       { model: AC2Transaction, account: "AC2" },
       { model: AC3Transaction, account: "AC3" },
       { model: AC4Transaction, account: "AC4" },
-      { model: AC5Transaction, account: "AC5" }
+      { model: AC5Transaction, account: "AC5" },
     ];
 
     let deletedCount = 0;
@@ -1405,20 +1401,22 @@ exports.deleteMultipleTransactions = async (req, res) => {
     const notFoundIds = [...ids];
 
     for (const item of accounts) {
-      const transactions = await item.model.find({
-        _id: { $in: ids }
-      }).select("_id");
+      const transactions = await item.model
+        .find({
+          _id: { $in: ids },
+        })
+        .select("_id");
 
       if (transactions.length > 0) {
-        const foundIds = transactions.map(t => t._id.toString());
+        const foundIds = transactions.map((t) => t._id.toString());
 
         const result = await item.model.deleteMany({
-          _id: { $in: transactions.map(t => t._id) }
+          _id: { $in: transactions.map((t) => t._id) },
         });
 
         deletedCount += result.deletedCount;
 
-        foundIds.forEach(id => {
+        foundIds.forEach((id) => {
           const index = notFoundIds.indexOf(id);
           if (index !== -1) {
             notFoundIds.splice(index, 1);
@@ -1426,7 +1424,7 @@ exports.deleteMultipleTransactions = async (req, res) => {
 
           deletedTransactions.push({
             id,
-            account: item.account
+            account: item.account,
           });
         });
       }
@@ -1437,16 +1435,15 @@ exports.deleteMultipleTransactions = async (req, res) => {
       message: `${deletedCount} transactions deleted successfully`,
       deletedCount,
       deletedTransactions,
-      notFoundIds
+      notFoundIds,
     });
-
   } catch (error) {
     console.error("Delete Multiple Error:", error);
 
     return res.status(500).json({
       success: false,
       message: "Failed to delete transactions",
-      error: error.message
+      error: error.message,
     });
   }
 };
@@ -1472,7 +1469,7 @@ exports.getSummary = async (req, res) => {
       { model: AC2Transaction, account: "AC2" },
       { model: AC3Transaction, account: "AC3" },
       { model: AC4Transaction, account: "AC4" },
-      { model: AC5Transaction, account: "AC5" }
+      { model: AC5Transaction, account: "AC5" },
     ];
 
     let totalDeposits = 0;
@@ -1491,24 +1488,28 @@ exports.getSummary = async (req, res) => {
             transactionCount: { $sum: 1 },
             uniqueDays: {
               $addToSet: {
-                $dateToString: { format: "%Y-%m-%d", date: "$date" }
-              }
-            }
-          }
-        }
+                $dateToString: { format: "%Y-%m-%d", date: "$date" },
+              },
+            },
+          },
+        },
       ]);
 
       if (summary.length) {
         totalDeposits += summary[0].totalDeposits || 0;
         totalWithdrawals += summary[0].totalWithdrawals || 0;
         totalTransactions += summary[0].transactionCount || 0;
-        summary[0].uniqueDays.forEach(day => uniqueDays.add(day));
+        summary[0].uniqueDays.forEach((day) => uniqueDays.add(day));
       }
     }
 
     const netBalance = totalDeposits - totalWithdrawals;
-    const averageDeposit = totalTransactions ? totalDeposits / totalTransactions : 0;
-    const averageWithdrawal = totalTransactions ? totalWithdrawals / totalTransactions : 0;
+    const averageDeposit = totalTransactions
+      ? totalDeposits / totalTransactions
+      : 0;
+    const averageWithdrawal = totalTransactions
+      ? totalWithdrawals / totalTransactions
+      : 0;
 
     res.status(200).json({
       success: true,
@@ -1519,15 +1520,15 @@ exports.getSummary = async (req, res) => {
         netBalance,
         averageDeposit,
         averageWithdrawal,
-        dayCount: uniqueDays.size
-      }
+        dayCount: uniqueDays.size,
+      },
     });
   } catch (error) {
     console.error("Summary Error:", error);
     res.status(500).json({
       success: false,
       message: "Failed to get summary",
-      error: error.message
+      error: error.message,
     });
   }
 };
@@ -1647,8 +1648,6 @@ exports.getClientsByPropertyId = async (req, res) => {
   }
 };
 
-
-
 exports.updateClientRentHistoryReceived = async (req, res) => {
   try {
     const {
@@ -1662,7 +1661,7 @@ exports.updateClientRentHistoryReceived = async (req, res) => {
       expenseCategory,
       user,
       status,
-      assignee
+      assignee,
     } = req.body;
     // ===============================
     // Check Transaction
@@ -1670,7 +1669,7 @@ exports.updateClientRentHistoryReceived = async (req, res) => {
     if (!mongoose.Types.ObjectId.isValid(transactionId)) {
       return res.status(400).json({
         success: false,
-        message: "Invalid transaction ID"
+        message: "Invalid transaction ID",
       });
     }
 
@@ -1679,7 +1678,7 @@ exports.updateClientRentHistoryReceived = async (req, res) => {
       { model: AC2Transaction, account: "AC2" },
       { model: AC3Transaction, account: "AC3" },
       { model: AC4Transaction, account: "AC4" },
-      { model: AC5Transaction, account: "AC5" }
+      { model: AC5Transaction, account: "AC5" },
     ];
 
     let transaction = null;
@@ -1732,14 +1731,9 @@ exports.updateClientRentHistoryReceived = async (req, res) => {
     const cumulativeReceived =
       Number(history.totalReceived || 0) + receivedAmount;
 
-    const actualLastDay = new Date(
-      history.year,
-      history.month,
-      0
-    ).getDate();
+    const actualLastDay = new Date(history.year, history.month, 0).getDate();
 
-    const rentDivider =
-      actualLastDay === 31 ? 30 : actualLastDay;
+    const rentDivider = actualLastDay === 31 ? 30 : actualLastDay;
     // ===============================
     // Recalculate
     // ===============================
@@ -1754,12 +1748,10 @@ exports.updateClientRentHistoryReceived = async (req, res) => {
       adjAmt: history.adjAmt,
       processingFees: history.processingFees,
       parkingCharges: history.parkingCharges,
-      processingFeesReceived:
-        history.processingFeesReceived,
-      depositAmountReceived:
-        history.depositAmountReceived,
+      processingFeesReceived: history.processingFeesReceived,
+      depositAmountReceived: history.depositAmountReceived,
       rentReceived: cumulativeReceived,
-      rentDivider
+      rentDivider,
     });
     Object.assign(history, calculation);
     history.totalReceived = cumulativeReceived;
@@ -1814,14 +1806,13 @@ exports.updateClientRentHistoryReceived = async (req, res) => {
 };
 
 exports.getTransactionByNarration = async (req, res) => {
-
   try {
     const { narration } = req.params;
-    console.log("narration", narration)
+    console.log("narration", narration);
     if (!narration?.trim()) {
       return res.status(400).json({
         success: false,
-        message: "Narration is required"
+        message: "Narration is required",
       });
     }
 
@@ -1830,16 +1821,18 @@ exports.getTransactionByNarration = async (req, res) => {
       { model: AC2Transaction, account: "AC2" },
       { model: AC3Transaction, account: "AC3" },
       { model: AC4Transaction, account: "AC4" },
-      { model: AC5Transaction, account: "AC5" }
+      { model: AC5Transaction, account: "AC5" },
     ];
 
     let transaction = null;
     let account = null;
 
     for (const item of accounts) {
-      const found = await item.model.findOne({
-        narration: narration.trim()
-      }).lean();
+      const found = await item.model
+        .findOne({
+          narration: narration.trim(),
+        })
+        .lean();
 
       if (found) {
         transaction = found;
@@ -1851,23 +1844,22 @@ exports.getTransactionByNarration = async (req, res) => {
     if (!transaction) {
       return res.status(404).json({
         success: false,
-        message: "Transaction not found"
+        message: "Transaction not found",
       });
     }
 
     return res.status(200).json({
       success: true,
       account,
-      data: transaction
+      data: transaction,
     });
-
   } catch (error) {
     console.error("Get Transaction By Narration Error:", error);
 
     return res.status(500).json({
       success: false,
       message: "Failed to fetch transaction",
-      error: error.message
+      error: error.message,
     });
   }
 };

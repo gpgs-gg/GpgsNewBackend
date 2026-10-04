@@ -305,6 +305,21 @@ const ClientSchema = new mongoose.Schema(
         clientPoliceNOC: [String],
 
         attachments: [String],
+        // ===================================
+    // DOCUMENT STATUS
+    // ===================================
+
+    clientDocsStatus: {
+      type: String,
+      enum: ["Pending", "KYC Done", "AG Done", "P NOC Done"],
+      default: "Pending",
+    },
+
+    parentDocsStatus: {
+      type: String,
+      enum: ["Pending", "KYC Done"],
+      default: "Pending",
+    },
 
         // ===================================
         // EMERGENCY CONTACTS

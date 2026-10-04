@@ -15,7 +15,6 @@ const {
 } = require("../controllers/propertyController");
 const { verifyJWT } = require("../middleware/verifyJWT");
 
-
 router.get("/dropdown", getPropertyDropdown);
 
 router.post("/", upload.fields([
