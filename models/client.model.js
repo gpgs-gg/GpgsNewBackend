@@ -310,7 +310,7 @@ const ClientSchema = new mongoose.Schema(
     // ===================================
 
     clientDocsStatus: {
-      type: String,
+      type: [String],
       enum: ["Pending", "KYC Done", "AG Done", "P NOC Done"],
       default: "Pending",
     },

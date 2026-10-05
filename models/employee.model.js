@@ -222,6 +222,11 @@ ticketManager: {
       max: 24,
       default: 9,
     },
+    salary: {
+      type: Number,
+      min: 0,
+      default: 0,
+    },
     halfDayHours: {
       type: Number,
       min: 0,

@@ -167,24 +167,7 @@ const salarySchema = new mongoose.Schema(
       min: 0,
     },
 
-    eligibleAttendanceDays: {
-      type: Number,
-      default: 0,
-      min: 0,
-    },
 
-    applicableAbsentDays: {
-      type: Number,
-      default: 0,
-      min: 0,
-    },
-
-    weeklyOffEligibility: {
-      type: Number,
-      default: 0,
-      min: 0,
-      max: 5,
-    },
     // =====================================================
     // PAID LEAVE
     // =====================================================
@@ -219,7 +202,7 @@ const salarySchema = new mongoose.Schema(
       min: 0,
     },
 
-    payableDays: {
+    totalPayableDays: {
       type: Number,
       default: 0,
       min: 0,

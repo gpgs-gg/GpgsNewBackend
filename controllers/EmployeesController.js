@@ -431,6 +431,7 @@ const createEmployee = asyncHandler(async (req, res) => {
     // Work Details
     workingHours = 9,
     halfDayHours = 5,
+    salary = 0,
     // Dates
     dateOfJoining,
     dateOfBirth,
@@ -556,7 +557,22 @@ const createEmployee = asyncHandler(async (req, res) => {
   // if (password) {
   //   hashedPassword = await bcrypt.hash(password, 12);
   // }
+  // ========================================================
+  // SALARY VALIDATION
+  // ========================================================
 
+  let employeeSalary = 0;
+
+  if (salary !== undefined && salary !== "") {
+    employeeSalary = Number(salary);
+
+    if (Number.isNaN(employeeSalary) || employeeSalary < 0) {
+      throw new ApiError(
+        400,
+        "Salary must be a valid number greater than or equal to 0.",
+      );
+    }
+  }
   // ========================================================
   // CREATE EMPLOYEE
   // ========================================================
@@ -786,7 +802,26 @@ const updateEmployee = asyncHandler(async (req, res) => {
   const body = {
     ...req.body,
   };
+  // ========================================================
+  // SALARY
+  // ========================================================
 
+  if (body.salary !== undefined) {
+    if (body.salary === "" || body.salary === null) {
+      body.salary = 0;
+    } else {
+      const salary = Number(body.salary);
+
+      if (Number.isNaN(salary) || salary < 0) {
+        throw new ApiError(
+          400,
+          "Salary must be a valid number greater than or equal to 0.",
+        );
+      }
+
+      body.salary = salary;
+    }
+  }
   // ========================================================
   // REMOVE IMMUTABLE / UNSAFE FIELDS
   // ========================================================

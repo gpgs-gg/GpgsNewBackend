@@ -88,13 +88,49 @@ exports.createBookingEnquiry = async (req, res) => {
 
 exports.getBookingEnquiries = async (req, res) => {
   try {
-    const enquiries = await BookingEnquiry.find()
-      .sort({ createdAt: -1 })
-      .lean();
+    const {
+      page = 1,
+      limit = 10,
+      search = "",
+    } = req.query;
+
+    const pageNumber = Math.max(Number(page), 1);
+    const limitNumber = Math.max(Number(limit), 1);
+    const skip = (pageNumber - 1) * limitNumber;
+
+    const query = {};
+
+    if (search.trim()) {
+      const regex = new RegExp(search.trim(), "i");
+
+      query.$or = [
+        { fullName: regex },
+        { mobile: regex },
+        { email: regex },
+        { property: regex },
+        { message: regex },
+      ];
+    }
+
+    const [enquiries, total] = await Promise.all([
+      BookingEnquiry.find(query)
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limitNumber)
+        .lean(),
+
+      BookingEnquiry.countDocuments(query),
+    ]);
 
     return res.status(200).json({
       success: true,
       data: enquiries,
+      pagination: {
+        page: pageNumber,
+        limit: limitNumber,
+        total,
+        totalPages: Math.ceil(total / limitNumber),
+      },
     });
   } catch (error) {
     console.error("GET BOOKING ENQUIRIES ERROR:", error);
@@ -106,7 +142,6 @@ exports.getBookingEnquiries = async (req, res) => {
     });
   }
 };
-
 // =====================================================
 // GET SINGLE BOOKING ENQUIRY
 // =====================================================

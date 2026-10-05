@@ -10,7 +10,6 @@ const ApiError = require("../utils/ApiError");
 // ============================================================
 
 const COMPANY_TIMEZONE = "Asia/Kolkata";
-const MAX_WEEKLY_OFFS = 5; // Maximum weekly offs in a month
 
 // ============================================================
 // HELPERS
@@ -113,53 +112,13 @@ const calculatePerDaySalary = (monthlySalary, month, year) => {
 
   return roundAmount(salary / daysInMonth);
 };
-// ============================================================
-// CHECK IF DATE IS THURSDAY
-// ============================================================
-
-const isThursday = (date) => {
-  const d = new Date(date);
-  return d.getDay() === 4;
-};
-
-// ============================================================
-// CALCULATE APPLICABLE ABSENT DAYS (Non-Thursday absences only)
-// ============================================================
-
-const calculateApplicableAbsentDays = (attendance = []) => {
-  // Only count absences on NON-Thursday days
-  const applicableAbsences = attendance.filter((item) => {
-    const status = Number(item?.status || 0);
-    const date = new Date(item.attendanceDate);
-    return status === 0 && !isThursday(date); // Absent and not Thursday
-  });
-
-  return roundAmount(applicableAbsences.length);
-};
-
-// ============================================================
-// CALCULATE ELIGIBLE ATTENDANCE DAYS (For weekly off calculation)
-// ============================================================
-
-const calculateEligibleAttendanceDays = (attendance = []) => {
-  // Count days with status > 0 (present, half-day, etc.)
-  // Exclude Thursdays from eligibility calculation
-  const eligibleDays = attendance.filter((item) => {
-    const status = Number(item?.status || 0);
-    const date = new Date(item.attendanceDate);
-    return status > 0 && !isThursday(date); // Present on non-Thursday
-  });
-
-  return roundAmount(
-    eligibleDays.reduce((total, item) => {
-      const status = Number(item?.status || 0);
-      return total + (status === 1 ? 1 : status === 0.5 ? 0.5 : 0);
-    }, 0),
-  );
-};
 
 // ============================================================
 // CALCULATE WEEKLY OFF ELIGIBILITY
+// ============================================================
+
+// ============================================================
+// CALCULATE PAYABLE SALARY
 // ============================================================
 
 // ============================================================
@@ -173,15 +132,9 @@ const calculatePayableSalary = ({
   publicHolidayDays = 0,
   perDaySalary = 0,
   adjustedAmount = 0,
-  totalDaysInMonth = 30,
-  month,
-  year,
 }) => {
-  const salary = Number(monthlySalary) || 0;
   const dailySalary = Number(perDaySalary) || 0;
   const adjustment = Number(adjustedAmount) || 0;
-
-  const holidayDays = Math.max(Number(publicHolidayDays) || 0, 0);
 
   // ==========================================================
   // ACTUAL PRESENT DAYS
@@ -190,101 +143,56 @@ const calculatePayableSalary = ({
   const totalPresentDays = calculatePresentDays(attendance);
 
   // ==========================================================
-  // ABSENT DAYS
+  // PAID LEAVE DAYS
   // ==========================================================
 
-  const applicableAbsentDays = calculateApplicableAbsentDays(attendance);
+  const normalizedPaidLeaveDays = Math.max(Number(paidLeaveDays) || 0, 0);
 
   // ==========================================================
-  // ELIGIBLE ATTENDANCE DAYS
+  // PUBLIC HOLIDAY DAYS
   // ==========================================================
 
-  const eligibleAttendanceDays = calculateEligibleAttendanceDays(attendance);
+  const normalizedPublicHolidayDays = Math.max(
+    Number(publicHolidayDays) || 0,
+    0,
+  );
 
   // ==========================================================
-  // WEEKLY OFF
+  // TOTAL PAYABLE DAYS
   // ==========================================================
-
-  // ==========================================================
-  // PAYABLE DAYS
-  // ==========================================================
+  //
   // ONLY:
   //
   // Actual Present Days
-  // + Weekly Off
-  // + Public Holiday
+  // + Paid Leave Days
+  // + Public Holiday Days
   //
-  // Paid Leave is NOT included.
+  // Weekly offs are NOT included.
   // Absent days are NOT included.
-
-  // ==========================================================
-  // WEEKLY OFF
   // ==========================================================
 
-  const weeklyOffEligibility = calculateWeeklyOffEligibility(month, year);
+  const totalPayableDays =
+    totalPresentDays + normalizedPaidLeaveDays + normalizedPublicHolidayDays;
 
   // ==========================================================
-  // PAYABLE DAYS
+  // PAYABLE SALARY
   // ==========================================================
 
-  // ONLY:
-  // Actual Present Days
-  // + Weekly Off
-  // + Public Holiday
-  //
-  // Paid Leave is NOT included.
-  // Absent days are NOT included.
-
-  const payableDays = totalPresentDays + weeklyOffEligibility + holidayDays;
-
-  // ==========================================================
-  // ABSENCE DEDUCTION
-  // ==========================================================
-
-  const absenceDeduction = applicableAbsentDays * dailySalary;
-
-  // ==========================================================
-  // FINAL PAYABLE SALARY
-  // ==========================================================
-
-  const payableSalary = payableDays * dailySalary + adjustment;
+  const payableSalary = totalPayableDays * dailySalary + adjustment;
 
   return {
     totalPresentDays: roundAmount(totalPresentDays),
 
-    eligibleAttendanceDays: roundAmount(eligibleAttendanceDays),
+    paidLeaveDays: roundAmount(normalizedPaidLeaveDays),
 
-    applicableAbsentDays: roundAmount(applicableAbsentDays),
+    publicHolidayDays: roundAmount(normalizedPublicHolidayDays),
 
-    weeklyOffEligibility: roundAmount(weeklyOffEligibility),
-
-    absenceDeduction: roundAmount(absenceDeduction),
-
-    payableDays: roundAmount(Math.max(payableDays, 0)),
+    totalPayableDays: roundAmount(Math.max(totalPayableDays, 0)),
 
     payableSalary: roundAmount(Math.max(payableSalary, 0)),
   };
 };
-// ============================================================
-// CALCULATE WEEKLY OFF ELIGIBILITY
-// ============================================================
 
-const calculateWeeklyOffEligibility = (month, year) => {
-  const totalDays = getDaysInMonth(month, year);
-  let weeklyOffs = 0;
-
-  for (let day = 1; day <= totalDays; day++) {
-    const date = new Date(Number(year), Number(month) - 1, day);
-
-    // Thursday = 4
-    if (date.getDay() === 4) {
-      weeklyOffs++;
-    }
-  }
-
-  // Maximum 5 weekly offs in a month
-  return Math.min(weeklyOffs, MAX_WEEKLY_OFFS);
-};
 // ============================================================
 // CALCULATE CURRENT DUE
 // ============================================================
@@ -375,7 +283,6 @@ const createAttendanceByDay = (attendance = []) => {
       totalMinutes: item.totalMinutes,
       overtimeMinutes: item.overtimeMinutes,
       deficitMinutes: item.deficitMinutes,
-      isThursday: isThursday(date),
     };
   });
 
@@ -441,11 +348,9 @@ const calculateSalaryData = ({
 
   const {
     totalPresentDays,
-    eligibleAttendanceDays,
-    applicableAbsentDays,
-    weeklyOffEligibility,
-    absenceDeduction,
-    payableDays,
+    paidLeaveDays: calculatedPaidLeaveDays,
+    publicHolidayDays: calculatedPublicHolidayDays,
+    totalPayableDays,
     payableSalary,
   } = payableCalculation;
 
@@ -466,20 +371,18 @@ const calculateSalaryData = ({
   return {
     // Attendance
     totalPresentDays,
-    eligibleAttendanceDays,
-    applicableAbsentDays,
-    weeklyOffEligibility,
 
     // Salary
     monthlySalary: normalizedMonthlySalary,
     perDaySalary,
-    payableDays,
-    absenceDeduction,
+
+    // Payable Days
+    totalPayableDays,
 
     // Adjustment
     adjustedAmount: normalizedAdjustedAmount,
 
-    // Payable
+    // Payable Salary
     payableSalary,
 
     // Payment
@@ -487,9 +390,11 @@ const calculateSalaryData = ({
     previousDue: normalizedPreviousDue,
     currentDue,
 
-    // Legacy compatibility
-    paidLeaveDays: normalizedPaidLeaveDays,
-    publicHolidayDays: normalizedPublicHolidayDays,
+    // Leave / Holiday
+    paidLeaveDays: calculatedPaidLeaveDays,
+    publicHolidayDays: calculatedPublicHolidayDays,
+
+    // Month
     totalDaysInMonth,
   };
 };
@@ -616,7 +521,16 @@ const getSalaries = asyncHandler(async (req, res) => {
     {
       $match: employeeFilter,
     },
-
+    // --------------------------------------------------------
+    // PRESERVE EMPLOYEE MASTER SALARY
+    // --------------------------------------------------------
+    // Salary lookup below also uses the field name "salary".
+    // Save Employee.salary separately before the lookup.
+    {
+      $set: {
+        employeeSalary: "$salary",
+      },
+    },
     // --------------------------------------------------------
     // SALARY
     // --------------------------------------------------------
@@ -766,7 +680,7 @@ const getSalaries = asyncHandler(async (req, res) => {
         attendance,
         paidLeaveDays: salary.paidLeaveDays || 0,
         publicHolidayDays: salary.publicHolidayDays || 0, // Add saved public holidays
-        monthlySalary: salary.monthlySalary || 0,
+        monthlySalary: Number(employee.employeeSalary) || 0,
         adjustedAmount: salary.adjustedAmount || 0,
         paidAmount: salary.paidAmount || 0,
         previousDue: previousMonthDue,
@@ -790,6 +704,7 @@ const getSalaries = asyncHandler(async (req, res) => {
           level: employee.level,
           role: employee.role,
           status: employee.status,
+          salary: employee.employeeSalary,
         },
 
         employeeId: employee.employeeId,
@@ -807,30 +722,15 @@ const getSalaries = asyncHandler(async (req, res) => {
         attendance,
 
         attendanceByDay: createAttendanceByDay(attendance),
-
         totalPresentDays: calculated.totalPresentDays,
-
-        eligibleAttendanceDays: calculated.eligibleAttendanceDays,
-
-        applicableAbsentDays: calculated.applicableAbsentDays,
-
-        weeklyOffEligibility: calculated.weeklyOffEligibility,
 
         // ======================================================
         // SALARY
         // ======================================================
 
-        monthlySalary: calculated.monthlySalary,
-
         perDaySalary: calculated.perDaySalary,
 
-        payableDays: calculated.payableDays,
-
-        // ======================================================
-        // DEDUCTIONS
-        // ======================================================
-
-        absenceDeduction: calculated.absenceDeduction,
+        totalPayableDays: calculated.totalPayableDays,
 
         paidLeaveDays: calculated.paidLeaveDays,
         publicHolidayDays: salary.publicHolidayDays || 0,
@@ -953,7 +853,7 @@ const getEmployeeSalary = asyncHandler(async (req, res) => {
     employeeId: employeeId.trim(),
   })
     .select(
-      "_id employeeId employeeName department designation level role status",
+      "_id employeeId employeeName department designation level role status salary",
     )
     .lean();
 
@@ -993,7 +893,7 @@ const getEmployeeSalary = asyncHandler(async (req, res) => {
     attendance,
     paidLeaveDays: salary?.paidLeaveDays || 0,
     publicHolidayDays: salary?.publicHolidayDays || 0,
-    monthlySalary: salary?.monthlySalary || 0,
+    monthlySalary: Number(employee.salary) || 0,
     adjustedAmount: salary?.adjustedAmount || 0,
     paidAmount: salary?.paidAmount || 0,
     previousDue: previousMonthDue,
@@ -1022,19 +922,16 @@ const getEmployeeSalary = asyncHandler(async (req, res) => {
       attendance,
       attendanceByDay: createAttendanceByDay(attendance),
       totalPresentDays: calculated.totalPresentDays,
-      eligibleAttendanceDays: calculated.eligibleAttendanceDays,
-      applicableAbsentDays: calculated.applicableAbsentDays,
-      weeklyOffEligibility: calculated.weeklyOffEligibility,
 
       // Salary
       monthlySalary: calculated.monthlySalary,
       perDaySalary: calculated.perDaySalary,
       // Total payable days = Present Days + Weekly Offs + Public Holidays.
       // This value is calculated by the backend.
-      totalPayableDays: calculated.payableDays,
+      totalPayableDays: calculated.totalPayableDays,
 
       // Deductions
-      absenceDeduction: calculated.absenceDeduction,
+
       paidLeaveDays: calculated.paidLeaveDays,
       publicHolidayDays: calculated.publicHolidayDays,
 
@@ -1168,7 +1065,6 @@ const upsertEmployeeSalary = asyncHandler(async (req, res) => {
     year,
     paidLeaveDays,
     publicHolidayDays,
-    monthlySalary,
     adjustmentDetails,
     paidAmountDetails,
     newWorkLog,
@@ -1258,7 +1154,7 @@ const upsertEmployeeSalary = asyncHandler(async (req, res) => {
 
       paidLeaveDays: 0,
       publicHolidayDays: 0,
-      monthlySalary: 0,
+      monthlySalary: Number(employee.salary) || 0,
       perDaySalary: 0,
       totalDaysInMonth: getDaysInMonth(salaryMonth, salaryYear),
       payableDays: 0,
@@ -1341,22 +1237,6 @@ const upsertEmployeeSalary = asyncHandler(async (req, res) => {
     }
 
     salary.publicHolidayDays = value;
-  }
-  // ============================================================
-  // MONTHLY SALARY
-  // ============================================================
-
-  if (monthlySalary !== undefined) {
-    const value = Number(monthlySalary);
-
-    if (!Number.isFinite(value) || value < 0) {
-      throw new ApiError(
-        400,
-        "Monthly salary must be a valid non-negative number.",
-      );
-    }
-
-    salary.monthlySalary = value;
   }
 
   // ============================================================
@@ -1607,7 +1487,7 @@ const upsertEmployeeSalary = asyncHandler(async (req, res) => {
     attendance,
     paidLeaveDays: salary.paidLeaveDays || 0,
     publicHolidayDays: salary.publicHolidayDays || 0,
-    monthlySalary: salary.monthlySalary || 0,
+    monthlySalary: Number(employee.salary) || 0,
     adjustedAmount: salary.adjustedAmount || 0,
     paidAmount: salary.paidAmount || 0,
 
@@ -1625,16 +1505,6 @@ const upsertEmployeeSalary = asyncHandler(async (req, res) => {
   // ============================================================
 
   salary.totalPresentDays = calculated.totalPresentDays;
-
-  salary.eligibleAttendanceDays = calculated.eligibleAttendanceDays;
-
-  salary.applicableAbsentDays = calculated.applicableAbsentDays;
-
-  salary.weeklyOffEligibility = calculated.weeklyOffEligibility;
-
-  // ============================================================
-  // SAVE SALARY CALCULATIONS
-  // ============================================================
   // ============================================================
   // SAVE SALARY CALCULATIONS
   // ============================================================
@@ -1642,18 +1512,16 @@ const upsertEmployeeSalary = asyncHandler(async (req, res) => {
   salary.totalDaysInMonth = calculated.totalDaysInMonth;
   salary.monthlySalary = calculated.monthlySalary;
   salary.perDaySalary = calculated.perDaySalary;
-  salary.payableDays = calculated.payableDays;
 
-  salary.absenceDeduction = calculated.absenceDeduction;
+  salary.totalPayableDays = calculated.totalPayableDays;
 
   salary.paidLeaveDays = calculated.paidLeaveDays;
   salary.publicHolidayDays = calculated.publicHolidayDays;
-  salary.adjustedAmount = calculated.adjustedAmount;
 
+  salary.adjustedAmount = calculated.adjustedAmount;
   salary.payableSalary = calculated.payableSalary;
 
   salary.paidAmount = calculated.paidAmount;
-
   salary.previousDue = calculated.previousDue;
   salary.currentDue = calculated.currentDue;
   // ============================================================
@@ -1679,7 +1547,6 @@ const upsertEmployeeSalary = asyncHandler(async (req, res) => {
       oldData: {
         paidLeaveDays: oldSalaryData.paidLeaveDays,
         publicHolidayDays: oldSalaryData.publicHolidayDays || 0,
-        monthlySalary: oldSalaryData.monthlySalary,
 
         adjustmentDetails: {
           specialPerks: oldSalaryData.adjustmentDetails?.specialPerks || [],
@@ -1698,7 +1565,6 @@ const upsertEmployeeSalary = asyncHandler(async (req, res) => {
       newData: {
         paidLeaveDays: salary.paidLeaveDays,
         publicHolidayDays: salary.publicHolidayDays || 0,
-        monthlySalary: salary.monthlySalary,
 
         adjustmentDetails: {
           specialPerks: salary.adjustmentDetails?.specialPerks || [],
@@ -1782,19 +1648,9 @@ const upsertEmployeeSalary = asyncHandler(async (req, res) => {
       totalDays: calculated.totalDaysInMonth,
 
       totalPresentDays: calculated.totalPresentDays,
-
-      eligibleAttendanceDays: calculated.eligibleAttendanceDays,
-
-      applicableAbsentDays: calculated.applicableAbsentDays,
-
-      weeklyOffEligibility: calculated.weeklyOffEligibility,
-
-      absenceDeduction: calculated.absenceDeduction,
-
-      payableDays: calculated.payableDays,
-
+      totalPayableDays: calculated.totalPayableDays,
       paidLeaveDays: calculated.paidLeaveDays,
-      publicHolidayDays: salary.publicHolidayDays || 0,
+      publicHolidayDays: calculated.publicHolidayDays,
       monthlySalary: calculated.monthlySalary,
 
       perDaySalary: calculated.perDaySalary,
