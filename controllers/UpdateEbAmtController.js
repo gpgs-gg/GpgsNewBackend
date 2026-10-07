@@ -73,17 +73,29 @@ const getEBCalculationById = async (req, res) => {
 // =====================================================
 // UPDATE EB AMOUNT IN RENT HISTORY
 // =====================================================
+const updateClientLatestRent = async (history) => {
+    if (!history?.clientId) return;
+
+    await Client.updateOne(
+        { _id: history.clientId },
+        {
+            $set: {
+                "latestRentHistory.historyId": history._id,
+                "latestRentHistory.month": history.month,
+                "latestRentHistory.year": history.year,
+                "latestRentHistory.currentDue": Number(
+                    history.currentDue || 0
+                ),
+            },
+        }
+    );
+};
+
+
 
 const updateEBAmountInRentHistory = async (req, res) => {
     try {
-        console.log("====================================");
-        console.log("UPDATE EB RENT HISTORY BODY:");
-        console.log(JSON.stringify(req.body, null, 2));
-        console.log("IS ARRAY:", Array.isArray(req.body));
-        console.log("====================================");
-
         const ebData = req.body;
-
         // =====================================================
         // VALIDATE REQUEST
         // =====================================================
@@ -149,11 +161,6 @@ const updateEBAmountInRentHistory = async (req, res) => {
             );
         });
 
-        console.log(
-            "CLIENTS FOUND:",
-            clients.length
-        );
-
         // =====================================================
         // RESULTS
         // =====================================================
@@ -206,13 +213,6 @@ const updateEBAmountInRentHistory = async (req, res) => {
                 history,
             ])
         );
-
-
-
-
-
-
-
 
 
         for (const ebClient of ebData) {
@@ -482,22 +482,7 @@ const updateEBAmountInRentHistory = async (req, res) => {
                 // =================================================
 
                 await targetRentHistory.save();
-
-
-                console.log(
-                    "TARGET HISTORY UPDATED:",
-                    {
-                        ClientID,
-                        ClientName,
-                        year:
-                            targetRentHistory.year,
-                        month:
-                            targetRentHistory.month,
-                        ebAmt:
-                            targetRentHistory.ebAmt,
-                    }
-                );
-
+                await updateClientLatestRent(targetRentHistory);
 
                 results.push({
                     ClientID,
@@ -545,20 +530,6 @@ const updateEBAmountInRentHistory = async (req, res) => {
             const hasVacatingDate =
                 !!clientVacatingDate;
 
-
-            console.log(
-                "TARGET HISTORY NOT FOUND:",
-                {
-                    ClientID,
-                    ClientName,
-                    targetYear,
-                    targetMonth,
-                    clientVacatingDate,
-                    hasVacatingDate,
-                }
-            );
-
-
             // =================================================
             // CASE 2A:
             // TARGET HISTORY NOT FOUND
@@ -601,17 +572,6 @@ const updateEBAmountInRentHistory = async (req, res) => {
             //
             // => FIND LATEST HISTORY
             // =================================================
-
-            console.log(
-                "VACATING DATE EXISTS. FINDING LATEST HISTORY:",
-                {
-                    ClientID,
-                    ClientName,
-                    clientVacatingDate,
-                }
-            );
-
-
             const latestRentHistory =
                 await ClientRentHistory.findOne({
                     clientId: ClientID,
@@ -654,38 +614,12 @@ const updateEBAmountInRentHistory = async (req, res) => {
                 continue;
             }
 
-
-            // =================================================
-            // LATEST HISTORY FOUND
-            // =================================================
-
-            console.log(
-                "LATEST RENT HISTORY FOUND:",
-                {
-                    ClientID,
-                    ClientName,
-
-                    historyId:
-                        latestRentHistory._id,
-
-                    year:
-                        latestRentHistory.year,
-
-                    month:
-                        latestRentHistory.month,
-
-                    clientVacatingDate,
-                }
-            );
-
-
             // =================================================
             // UPDATE EB AMOUNT IN LATEST HISTORY
             // =================================================
 
             latestRentHistory.ebAmt =
                 ebAmount;
-
 
             // =================================================
             // RENT DIVIDER
@@ -703,7 +637,6 @@ const updateEBAmountInRentHistory = async (req, res) => {
                 actualLastDay === 31
                     ? 30
                     : actualLastDay;
-
 
             // =================================================
             // RECALCULATE LATEST RENT HISTORY
@@ -775,27 +708,6 @@ const updateEBAmountInRentHistory = async (req, res) => {
             // =================================================
 
             await latestRentHistory.save();
-
-
-            console.log(
-                "LATEST HISTORY UPDATED:",
-                {
-                    ClientID,
-                    ClientName,
-
-                    updatedHistoryYear:
-                        latestRentHistory.year,
-
-                    updatedHistoryMonth:
-                        latestRentHistory.month,
-
-                    ebAmt:
-                        latestRentHistory.ebAmt,
-
-                    clientVacatingDate,
-                }
-            );
-
 
             results.push({
                 ClientID,
@@ -948,6 +860,6 @@ const createEBCalculation = async (req, res) => {
 module.exports = {
     updateEBAmountInRentHistory,
     createEBCalculation,
-      getAllEBCalculations,
+    getAllEBCalculations,
     getEBCalculationById,
 };

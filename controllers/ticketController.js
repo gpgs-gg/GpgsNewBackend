@@ -79,25 +79,62 @@ const getAllTickets = asyncHandler(async (req, res) => {
   const skip = (page - 1) * limit;
 
   const query = {};
+  const getFilterValue = (value) => {
+    if (value && typeof value === "object") {
+      return value.value ?? value.label ?? "";
+    }
+
+    return value;
+  };
 
   if (req.query.search) {
     query.$or = [
       { ticketId: { $regex: req.query.search, $options: "i" } },
       { title: { $regex: req.query.search, $options: "i" } },
       { description: { $regex: req.query.search, $options: "i" } },
-      { "propertyId.propertyCode": { $regex: req.query.search, $options: "i" } },
-      { "propertyId.propertyLocation": { $regex: req.query.search, $options: "i" } },
+      {
+        "propertyId.propertyCode": { $regex: req.query.search, $options: "i" },
+      },
+      {
+        "propertyId.propertyLocation": {
+          $regex: req.query.search,
+          $options: "i",
+        },
+      },
     ];
   }
 
-  if (req.query.status) query.status = req.query.status;
-  if (req.query.priority) query.priority = req.query.priority;
-  if (req.query.category) query.category = req.query.category;
-  if (req.query.department) query.department = req.query.department;
-  if (req.query.assignee) query.assignee = req.query.assignee;
-  if (req.query.customerImpacted) query.customerImpacted = req.query.customerImpacted;
-  if (req.query.escalated) query.escalated = req.query.escalated;
-  if (req.query.manager) query.manager = req.query.manager;
+  if (req.query.status) {
+    query.status = getFilterValue(req.query.status);
+  }
+
+  if (req.query.priority) {
+    query.priority = getFilterValue(req.query.priority);
+  }
+
+  if (req.query.category) {
+    query.category = getFilterValue(req.query.category);
+  }
+
+  if (req.query.department) {
+    query.department = getFilterValue(req.query.department);
+  }
+
+  if (req.query.assignee) {
+    query.assignee = getFilterValue(req.query.assignee);
+  }
+
+  if (req.query.customerImpacted) {
+    query.customerImpacted = getFilterValue(req.query.customerImpacted);
+  }
+
+  if (req.query.escalated) {
+    query.escalated = getFilterValue(req.query.escalated);
+  }
+
+  if (req.query.manager) {
+    query.manager = getFilterValue(req.query.manager);
+  }
 
   if (req.query.lateStatus === "LateAcknowledged") {
     query.lateAcknowledged = "Yes";
@@ -128,15 +165,19 @@ const getAllTickets = asyncHandler(async (req, res) => {
   }
 
   if (req.query.propertyCode) {
+    const propertyCode = getFilterValue(req.query.propertyCode);
+
     query["propertyId.propertyCode"] = {
-      $regex: req.query.propertyCode,
+      $regex: propertyCode,
       $options: "i",
     };
   }
 
   if (req.query.propertyLocation) {
+    const propertyLocation = getFilterValue(req.query.propertyLocation);
+
     query["propertyId.propertyLocation"] = {
-      $regex: req.query.propertyLocation,
+      $regex: propertyLocation,
       $options: "i",
     };
   }
@@ -172,7 +213,7 @@ const getAllTickets = asyncHandler(async (req, res) => {
       },
     },
     { $match: query },
-    { $sort: { createdAt: -1, _id:-1 } },
+    { $sort: { createdAt: -1, _id: -1 } },
     { $skip: skip },
     { $limit: limit },
   ];
@@ -230,6 +271,10 @@ const getAllTickets = asyncHandler(async (req, res) => {
     data: tickets,
   });
 });
+
+
+
+
 
 const getTicketById = asyncHandler(async (req, res) => {
   const ticket = await Ticket.findById(req.params.id)
@@ -470,7 +515,7 @@ const calculateAcknowledged = (ticket, newStatus) => {
 
     if (hour < 10) {
       deadline.setHours(10, 30, 0, 0);
-    } else if (hour >= 20) {
+    } else if (hour >= 19) {
       deadline.setDate(deadline.getDate() + 1);
       deadline.setHours(10, 30, 0, 0);
     } else {
@@ -493,7 +538,7 @@ const calculateResolved = (ticket, newStatus) => {
     ticket.status !== "Resolved" &&
     newStatus === "Resolved"
   ) {
-    const acknowledgedDate = convertStringToDateTime(ticket.acknowledgedDate);
+    const acknowledgedDate = convertStringToDateTime(ticket.dateCreated);
     const priority = ticket.priority;
 
     if (acknowledgedDate && priority) {
@@ -502,7 +547,7 @@ const calculateResolved = (ticket, newStatus) => {
       const diffHours =
         (now - new Date(acknowledgedDate)) /
         (1000 * 60 * 60);
-
+   
       let slaHours = 0;
 
       switch (priority.toLowerCase()) {

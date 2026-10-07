@@ -1670,6 +1670,60 @@ const upsertEmployeeSalary = asyncHandler(async (req, res) => {
   });
 });
 
+const getEmployeeExistingSalaries = asyncHandler(async (req, res) => {
+  const { employeeId } = req.query;
+
+  // --------------------------------------------------------
+  // VALIDATION
+  // --------------------------------------------------------
+
+  if (!employeeId) {
+    throw new ApiError(400, "Employee ID is required.");
+  }
+
+  // --------------------------------------------------------
+  // FIND EMPLOYEE
+  // --------------------------------------------------------
+
+  const employee = await Employee.findOne({
+    employeeId: employeeId.trim(),
+  })
+    .select(
+      "_id employeeId employeeName department designation level role status salary",
+    )
+    .lean();
+
+  if (!employee) {
+    throw new ApiError(404, "Employee not found.");
+  }
+
+  // --------------------------------------------------------
+  // FIND ALL EXISTING SALARIES
+  // --------------------------------------------------------
+
+  const salaries = await Salary.find({
+    employee: employee._id,
+  })
+    .sort({
+      year: -1,
+      month: -1,
+    })
+    .lean();
+
+  // --------------------------------------------------------
+  // RESPONSE
+  // --------------------------------------------------------
+
+  return res.status(200).json({
+    success: true,
+    data: {
+      employeeId: employee.employeeId,
+      employeeName: employee.employeeName,
+      salaries,
+      totalRecords: salaries.length,
+    },
+  });
+});
 // ============================================================
 // EXPORTS
 // ============================================================
@@ -1678,4 +1732,5 @@ module.exports = {
   getSalaries,
   getEmployeeSalary,
   upsertEmployeeSalary,
+  getEmployeeExistingSalaries,
 };

@@ -323,6 +323,7 @@ const getSingleElectricityBillData = asyncHandler(async (req, res) => {
     });
 });
 
+
 const updateElectricityBillData = asyncHandler(async (req, res) => {
     const { id } = req.params;
 

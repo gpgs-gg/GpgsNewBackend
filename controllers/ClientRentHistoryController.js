@@ -201,7 +201,7 @@ exports.getClientRentHistoryByBookingId = async (req, res) => {
     const histories = await ClientRentHistory.find({
       clientId: { $in: clientIds },
     })
-      .populate("clientId", "fullName callingNo clientDoj stayType")
+      .populate("clientId", "fullName callingNo clientDoj stayType fnf")
       .populate("propertyId", "propertyCode")
       .populate("bedId", "bedNo roomNo")
       .sort({
@@ -227,6 +227,8 @@ exports.getClientRentHistoryByBookingId = async (req, res) => {
     });
   }
 };
+
+
 
 exports.createClientRentHistory = async (client) => {
   try {
@@ -385,6 +387,7 @@ exports.updateClientRentHistory = async (req, res) => {
       totalReceived = 0,
       monthlyRent = 0,
       paymentComments,
+      updatedByName,
       remarks = "",
     } = req.body;
 
@@ -477,7 +480,7 @@ exports.updateClientRentHistory = async (req, res) => {
 
     if (paymentComments?.trim()) {
       history.paymentComments.push({
-        comment: paymentComments.trim(),
+        comment:`${updatedByName} : ${paymentComments.trim()}`,
         date: new Date(),
       });
     }
