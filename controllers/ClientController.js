@@ -3085,11 +3085,6 @@ for (const rentData of rentHistoryData) {
 
 exports.generateMonthlyRent = async (req, res) => {
   try{
-  // const month = new Date().getMonth() + 1;
-  // const year = new Date().getFullYear();
-  // const month = 10;
-  // const year = 2026;
-  // const todayFilterDate = "2026-8-03";
   const today = new Date();
   let month = today.getMonth()+1;
   let year = today.getFullYear();
@@ -3098,61 +3093,6 @@ const todayFilterDate = `${today.getFullYear()}-${String(
   today.getMonth() + 1
 ).padStart(2, "0")}-01`;
 
-  // console.log(11111111111111111111, today ,month , year ,todayFilterDate)
-  // // 27th ko next month's rent history generate hogi
-  // if (today.getDate() >= 27) {
-  //   month++;
-
-  //   if (month > 12) {
-  //     month = 1;
-  //     year++;
-  //   }
-  // }
-  // // Client filtering ke liye bhi next month ki 1st date use hogi
-  // let todayFilterDate;
-  // if (today.getDate() >= 27) {
-  //   const filterDate = new Date(
-  //     today.getFullYear(),
-  //     today.getMonth() + 1,
-  //     1
-  //   );
-  //   todayFilterDate = filterDate.toISOString().split("T")[0];
-  // } else {
-  //   todayFilterDate = today.toISOString().split("T")[0];
-  // }
-
-// const today = new Date();
-
-// let month = today.getMonth() + 1;
-// let year = today.getFullYear();
-
-// // 22nd ko next month's rent history generate hogi
-// if (today.getDate() >= 22) {
-//   month++;
-
-//   if (month > 12) {
-//     month = 1;
-//     year++;
-//   }
-// }
-
-// // Client filtering ke liye bhi next month's 1st date use hogi
-// let todayFilterDate;
-
-// if (today.getDate() >= 22) {
-//   const filterDate = new Date(
-//     today.getFullYear(),
-//     today.getMonth() + 1,
-//     1
-//   );
-
-//   todayFilterDate = filterDate.toISOString().split("T")[0];
-// } else {
-//   todayFilterDate = today.toISOString().split("T")[0];
-// }
-
-  
-  // const todayFilterDate = new Date().toISOString().split("T")[0];
   const clients = await Client.find({
     isBookingCancelled: false,
     $or: [
@@ -3190,8 +3130,6 @@ const todayFilterDate = `${today.getFullYear()}-${String(
   })
     .populate("bedId")
     .lean();
-
-
 
   const clientIds = clients.map((client) => client._id);
   const rentHistoryData = [];
@@ -3377,20 +3315,73 @@ const todayFilterDate = `${today.getFullYear()}-${String(
       });
     }
 
-    
-    // ----------------------------------
-    // BATCH INSERT
-    // ----------------------------------
+const result = await batchInsert(
+  ClientRentHistory,
+  rentHistoryData,
+  500
+);
 
-    console.log("8. Batch insert START");
+// ----------------------------------
+// UPDATE CLIENT LATEST RENT HISTORY
+// ----------------------------------
 
-    const result = await batchInsert(
-      ClientRentHistory,
-      rentHistoryData,
-      500
-    );
+if (result.insertedCount > 0) {
+  const generatedClientIds = rentHistoryData.map(
+    (item) => item.clientId
+  );
 
-    console.log("9. Batch insert COMPLETE");
+  const generatedHistories = await ClientRentHistory.find({
+    clientId: { $in: generatedClientIds },
+    month,
+    year,
+  })
+    .select("_id clientId month year currentDue createdAt")
+    .sort({
+      createdAt: -1,
+      _id: -1,
+    })
+    .lean();
+
+  const latestHistoryMap = new Map();
+
+  for (const history of generatedHistories) {
+    const clientId = String(history.clientId);
+
+    if (!latestHistoryMap.has(clientId)) {
+      latestHistoryMap.set(clientId, history);
+    }
+  }
+
+  const clientBulkOperations = [];
+
+  for (const history of latestHistoryMap.values()) {
+    clientBulkOperations.push({
+      updateOne: {
+        filter: {
+          _id: history.clientId,
+        },
+        update: {
+          $set: {
+            "latestRentHistory.historyId": history._id,
+            "latestRentHistory.month": history.month,
+            "latestRentHistory.year": history.year,
+            "latestRentHistory.currentDue": Number(
+              history.currentDue || 0
+            ),
+          },
+        },
+      },
+    });
+  }
+
+  if (clientBulkOperations.length > 0) {
+    await Client.bulkWrite(clientBulkOperations, {
+      ordered: false,
+    });
+  }
+}
+
+console.log("10. Client latestRentHistory UPDATED");
 
     return res.status(200).json({
       success: true,
