@@ -137,6 +137,7 @@ const bankTransactionSchema = new mongoose.Schema(
   }
 );
 
+
 // Duplicate detection
 bankTransactionSchema.index({
   date: 1,
@@ -149,6 +150,14 @@ bankTransactionSchema.index({
 bankTransactionSchema.index({
   narration: "text",
 });
+
+// Fast pagination + sorting
+bankTransactionSchema.index({
+  createdAt: -1,
+  _id: -1,
+});
+
+
 
 // module.exports = mongoose.model(
 //   "BankTransaction",

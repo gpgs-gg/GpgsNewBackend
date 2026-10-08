@@ -16,5 +16,9 @@ router.get("/:account/:id", bankController.getTransactionById);
 router.put("/:account/:id", bankController.updateTransaction);
 router.get("/summary/stats", bankController.getSummary);
 router.get("/clients/property/:propertyId", bankController.getClientsByPropertyId);
+router.post(
+  "/generate-test-transactions",
+  bankController.generateTestTransactions
+);
 
 module.exports = router;

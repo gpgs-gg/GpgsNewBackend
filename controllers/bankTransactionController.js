@@ -159,6 +159,7 @@ const upload = multer({
 // Export multer upload middleware
 exports.upload = upload;
 // ===================== UPLOAD BANK STATEMENT =====================
+
 // exports.uploadBankStatement = async (req, res) => {
 //   try {
 //     if (!req.file) {
@@ -393,6 +394,81 @@ exports.upload = upload;
 //     });
 //   }
 // };
+
+// ===================== GENERATE TEST TRANSACTIONS =====================
+exports.generateTestTransactions = async (req, res) => {
+  try {
+    const count = 10000;
+
+    const dummyTransaction = {
+      date: new Date("2026-10-01"),
+      narration: "TEST RENT RECEIVED",
+      chqNo: "TEST-001",
+      withdrawal: 0,
+      deposit: 25000,
+      valueDate: new Date("2026-10-01"),
+      balance: 25000,
+      source: "test-data",
+      userId: req.user?._id || null,
+      isMapped: false,
+
+      metadata: {
+        fileName: "TEST_DATA",
+        uploadDate: new Date(),
+        originalRow: JSON.stringify({
+          testRecord: true,
+        }),
+      },
+    };
+
+    const BATCH_SIZE = 1000;
+    let insertedCount = 0;
+
+    for (let i = 0; i < count; i += BATCH_SIZE) {
+      const batchSize = Math.min(
+        BATCH_SIZE,
+        count - i
+      );
+
+      const batch = Array.from(
+        { length: batchSize },
+        () => ({
+          ...dummyTransaction,
+        })
+      );
+
+      // AC1 TABLE
+      await AC1Transaction.collection.insertMany(batch);
+
+      insertedCount += batch.length;
+
+      console.log(
+        `AC1: ${insertedCount}/${count} inserted`
+      );
+    }
+
+    return res.status(201).json({
+      success: true,
+      message: `${insertedCount} test transactions generated successfully`,
+      account: "AC1",
+      requested: count,
+      inserted: insertedCount,
+    });
+  } catch (error) {
+    console.error(
+      "Generate Test Transactions Error:",
+      error
+    );
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to generate test transactions",
+      error: error.message,
+    });
+  }
+};
+
+
 exports.uploadBankStatement = async (req, res) => {
   try {
     if (!req.file) {
@@ -781,51 +857,85 @@ exports.getAllTransactions = async (req, res) => {
     const page = Math.max(parseInt(req.query.page) || 1, 1);
     const limit = Math.max(parseInt(req.query.limit) || 10, 1);
     const skip = (page - 1) * limit;
+
     const query = {};
+
+    // ---------------------------------------------------------
+    // SEARCH
+    // ---------------------------------------------------------
 
     if (req.query.search?.trim()) {
       const searchValue = req.query.search.trim();
+
       const regex = new RegExp(searchValue, "i");
-      const searchConditions = [{ narration: regex }, { chqNo: regex }];
-      // Search by withdrawal amount
+
+      const searchConditions = [
+        { narration: regex },
+        { chqNo: regex },
+      ];
+
       if (!isNaN(Number(searchValue))) {
         const amount = Number(searchValue);
-        searchConditions.push({ withdrawal: amount }, { deposit: amount });
+
+        searchConditions.push(
+          { withdrawal: amount },
+          { deposit: amount }
+        );
       }
 
       query.$or = searchConditions;
     }
 
+    // ---------------------------------------------------------
+    // DATE FILTER
+    // ---------------------------------------------------------
+
     if (req.query.fromDate || req.query.toDate) {
       query.date = {};
-      if (req.query.fromDate) query.date.$gte = new Date(req.query.fromDate);
+
+      if (req.query.fromDate) {
+        query.date.$gte = new Date(req.query.fromDate);
+      }
+
       if (req.query.toDate) {
         const end = new Date(req.query.toDate);
         end.setHours(23, 59, 59, 999);
+
         query.date.$lte = end;
       }
     }
 
+    // ---------------------------------------------------------
+    // VALUE DATE FILTER
+    // ---------------------------------------------------------
+
     if (req.query.valueFromDate || req.query.valueToDate) {
       query.valueDate = {};
-      if (req.query.valueFromDate)
-        query.valueDate.$gte = new Date(req.query.valueFromDate);
+
+      if (req.query.valueFromDate) {
+        query.valueDate.$gte = new Date(
+          req.query.valueFromDate
+        );
+      }
+
       if (req.query.valueToDate) {
         const end = new Date(req.query.valueToDate);
         end.setHours(23, 59, 59, 999);
+
         query.valueDate.$lte = end;
       }
     }
 
-    if (req.query.source) query.source = req.query.source;
-    if (req.query.userId) query.userId = req.query.userId;
+    // ---------------------------------------------------------
+    // SIMPLE FILTERS
+    // ---------------------------------------------------------
 
+    if (req.query.source) {
+      query.source = req.query.source;
+    }
 
-    if (req.query.assignee) {
-      query.assignee = {
-        $regex: req.query.assignee,
-        $options: "i",
-      };
+    if (req.query.userId) {
+      query.userId = req.query.userId;
     }
 
     if (req.query.propertyId) {
@@ -835,11 +945,30 @@ exports.getAllTransactions = async (req, res) => {
     if (req.query.status) {
       query.status = req.query.status;
     }
+
+    // ---------------------------------------------------------
+    // ASSIGNEE
+    // ---------------------------------------------------------
+
+    if (req.query.assignee) {
+      query.assignee = {
+        $regex: req.query.assignee,
+        $options: "i",
+      };
+    }
+
+    // ---------------------------------------------------------
+    // EXPENSE CATEGORY
+    // ---------------------------------------------------------
+
     const expenseCategoryParam =
-      req.query.expenseCategory ?? req.query["expenseCategory[]"];
+      req.query.expenseCategory ??
+      req.query["expenseCategory[]"];
 
     if (expenseCategoryParam) {
-      const expenseCategories = Array.isArray(expenseCategoryParam)
+      const expenseCategories = Array.isArray(
+        expenseCategoryParam
+      )
         ? expenseCategoryParam
         : [expenseCategoryParam];
 
@@ -847,165 +976,392 @@ exports.getAllTransactions = async (req, res) => {
         .map((category) => String(category).trim())
         .filter(Boolean);
 
-      //  console.log("EXPENSE CATEGORIES:", validCategories);
-
       if (validCategories.length > 0) {
         query.expenseCategory = {
           $in: validCategories.map(
             (category) =>
               new RegExp(
-                `^${category.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`,
-                "i",
-              ),
+                `^${category.replace(
+                  /[.*+?^${}()|[\]\\]/g,
+                  "\\$&"
+                )}$`,
+                "i"
+              )
           ),
         };
       }
     }
 
+    // ---------------------------------------------------------
+    // CHQ NO
+    // ---------------------------------------------------------
+
     if (req.query.chqNo) {
-      query.chqNo = { $regex: req.query.chqNo, $options: "i" };
+      query.chqNo = {
+        $regex: req.query.chqNo,
+        $options: "i",
+      };
     }
+
+    // ---------------------------------------------------------
+    // NARRATION / SALARY
+    // ---------------------------------------------------------
 
     if (req.query.narration) {
       query.narration = {
         $regex: req.query.narration,
         $options: "i",
       };
-    } else if (req.query.transactionType === "salary") {
-      // Salary table → ONLY salary transactions
+    } else if (
+      req.query.transactionType === "salary"
+    ) {
       query.narration = {
         $regex: "salary",
         $options: "i",
       };
     } else {
-      // Normal table → Salary transactions exclude
       query.narration = {
         $not: /salary/i,
       };
     }
 
-    if (req.query.minAmount || req.query.maxAmount) {
-      const min = Number(req.query.minAmount || 0);
-      const max = Number(req.query.maxAmount || Number.MAX_SAFE_INTEGER);
+    // ---------------------------------------------------------
+    // AMOUNT FILTER
+    // ---------------------------------------------------------
+
+    if (
+      req.query.minAmount ||
+      req.query.maxAmount
+    ) {
+      const min = Number(
+        req.query.minAmount || 0
+      );
+
+      const max = Number(
+        req.query.maxAmount ||
+          Number.MAX_SAFE_INTEGER
+      );
 
       query.$and = [
         {
           $or: [
-            { withdrawal: { $gte: min, $lte: max } },
-            { deposit: { $gte: min, $lte: max } },
+            {
+              withdrawal: {
+                $gte: min,
+                $lte: max,
+              },
+            },
+            {
+              deposit: {
+                $gte: min,
+                $lte: max,
+              },
+            },
           ],
         },
       ];
     }
 
-    if (req.query.transactionType === "deposit") {
-      query.deposit = { $gt: 0 };
+    // ---------------------------------------------------------
+    // TRANSACTION TYPE
+    // ---------------------------------------------------------
+
+    if (
+      req.query.transactionType === "deposit"
+    ) {
+      query.deposit = {
+        $gt: 0,
+      };
     }
 
-    if (req.query.transactionType === "withdrawal") {
-      query.withdrawal = { $gt: 0 };
+    if (
+      req.query.transactionType === "withdrawal"
+    ) {
+      query.withdrawal = {
+        $gt: 0,
+      };
     }
+
+    // ---------------------------------------------------------
+    // ACCOUNTS
+    // ---------------------------------------------------------
 
     const accounts = [
-      { model: AC1Transaction, account: "AC1" },
-      { model: AC2Transaction, account: "AC2" },
-      { model: AC3Transaction, account: "AC3" },
-      { model: AC4Transaction, account: "AC4" },
-      { model: AC5Transaction, account: "AC5" },
+      {
+        model: AC1Transaction,
+        account: "AC1",
+      },
+      {
+        model: AC2Transaction,
+        account: "AC2",
+      },
+      {
+        model: AC3Transaction,
+        account: "AC3",
+      },
+      {
+        model: AC4Transaction,
+        account: "AC4",
+      },
+      {
+        model: AC5Transaction,
+        account: "AC5",
+      },
     ];
+
     const selectedAccounts = req.query.account
-      ? accounts.filter((account) => account.account === req.query.account)
+      ? accounts.filter(
+          (account) =>
+            account.account === req.query.account
+        )
       : accounts;
-    const expenseCodeOptions = await OptionsData.findOne({
-      categoryKey: "expensecode",
-    })
-      .select("items")
-      .lean();
 
-    const expenseCodeMap = new Map(
-      (expenseCodeOptions?.items || []).map((item) => [
-        String(item._id),
-        {
-          label: item.label,
-          value: item.value,
-          id: item._id,
-        },
-      ]),
-    );
-    let allTransactions = [];
+    // ---------------------------------------------------------
+    // EXPENSE CODE MAP
+    // ---------------------------------------------------------
 
-    for (const account of selectedAccounts) {
-      const data = await account.model
-        .find(query)
-        .populate("userId", "fullName")
-        .populate("propertyId", "propertyCode")
+    const expenseCodeOptions =
+      await OptionsData.findOne({
+        categoryKey: "expensecode",
+      })
+        .select("items")
         .lean();
 
-      allTransactions.push(
-        ...data.map((transaction) => ({
-          ...transaction,
-          expenseCode: transaction.expenseCode
-            ? expenseCodeMap.get(String(transaction.expenseCode)) || null
-            : null,
+    const expenseCodeMap = new Map(
+      (expenseCodeOptions?.items || []).map(
+        (item) => [
+          String(item._id),
+          {
+            label: item.label,
+            value: item.value,
+            id: item._id,
+          },
+        ]
+      )
+    );
+
+    // ---------------------------------------------------------
+    // QUERY EACH ACCOUNT WITH PAGINATION
+    // ---------------------------------------------------------
+
+    const accountResults = await Promise.all(
+      selectedAccounts.map(async (account) => {
+        const [data, countResult] =
+          await Promise.all([
+            account.model
+              .find(query)
+              .sort({
+                createdAt: -1,
+                _id: -1,
+              })
+              .skip(skip)
+              .limit(limit)
+              .populate(
+                "userId",
+                "fullName"
+              )
+              .populate(
+                "propertyId",
+                "propertyCode"
+              )
+              .lean(),
+
+            account.model.countDocuments(query),
+          ]);
+
+        return {
           account: account.account,
-        })),
+          data,
+          totalRecords: countResult,
+        };
+      })
+    );
+
+    // ---------------------------------------------------------
+    // COMBINE ONLY PAGINATED DATA
+    // ---------------------------------------------------------
+
+    let allTransactions = [];
+
+    let totalRecords = 0;
+
+    for (const result of accountResults) {
+      totalRecords += result.totalRecords;
+
+      allTransactions.push(
+        ...result.data.map(
+          (transaction) => ({
+            ...transaction,
+
+            expenseCode:
+              transaction.expenseCode
+                ? expenseCodeMap.get(
+                    String(
+                      transaction.expenseCode
+                    )
+                  ) || null
+                : null,
+
+            account: result.account,
+          })
+        )
       );
     }
 
+    // ---------------------------------------------------------
+    // SORT ONLY SMALL PAGINATED DATA
+    // ---------------------------------------------------------
+
     allTransactions.sort((a, b) => {
-      const createdDiff = new Date(b.createdAt) - new Date(a.createdAt);
+      const createdDiff =
+        new Date(b.createdAt) -
+        new Date(a.createdAt);
 
-      if (createdDiff !== 0) return createdDiff;
+      if (createdDiff !== 0) {
+        return createdDiff;
+      }
 
-      return String(b._id).localeCompare(String(a._id));
+      return String(b._id).localeCompare(
+        String(a._id)
+      );
     });
 
-    const totalRecords = allTransactions.length;
-    const totalPages = Math.ceil(totalRecords / limit);
+    // Since each account independently returned `limit`
+    // records, trim the combined result.
+    const transactions =
+      allTransactions.slice(
+        0,
+        limit
+      );
 
-    const transactions = allTransactions.slice(skip, skip + limit);
-    const totalDeposit = allTransactions.reduce(
-      (sum, transaction) => sum + Number(transaction.deposit || 0),
-      0,
-    );
+    // ---------------------------------------------------------
+    // TOTAL DEPOSIT / WITHDRAWAL
+    // ---------------------------------------------------------
 
-    const totalWithdrawal = allTransactions.reduce(
-      (sum, transaction) => sum + Number(transaction.withdrawal || 0),
-      0,
-    );
-    const availableAccounts = accounts
-      .filter((account) =>
-        allTransactions.some(
-          (transaction) => transaction.account === account.account,
-        ),
+    const totals = await Promise.all(
+      selectedAccounts.map(
+        async (account) => {
+          const result =
+            await account.model.aggregate([
+              {
+                $match: query,
+              },
+              {
+                $group: {
+                  _id: null,
+
+                  totalDeposit: {
+                    $sum: {
+                      $ifNull: [
+                        "$deposit",
+                        0,
+                      ],
+                    },
+                  },
+
+                  totalWithdrawal: {
+                    $sum: {
+                      $ifNull: [
+                        "$withdrawal",
+                        0,
+                      ],
+                    },
+                  },
+                },
+              },
+            ]);
+
+          return (
+            result[0] || {
+              totalDeposit: 0,
+              totalWithdrawal: 0,
+            }
+          );
+        }
       )
-      .map((account) => account.account);
+    );
+
+    let totalDeposit = 0;
+    let totalWithdrawal = 0;
+
+    for (const total of totals) {
+      totalDeposit += Number(
+        total.totalDeposit || 0
+      );
+
+      totalWithdrawal += Number(
+        total.totalWithdrawal || 0
+      );
+    }
+
+    // ---------------------------------------------------------
+    // PAGINATION
+    // ---------------------------------------------------------
+
+    const totalPages = Math.ceil(
+      totalRecords / limit
+    );
+
+    // ---------------------------------------------------------
+    // AVAILABLE ACCOUNTS
+    // ---------------------------------------------------------
+
+    const availableAccounts =
+      accountResults
+        .filter(
+          (result) =>
+            result.totalRecords > 0
+        )
+        .map(
+          (result) =>
+            result.account
+        );
+
+    // ---------------------------------------------------------
+    // RESPONSE
+    // ---------------------------------------------------------
 
     return res.status(200).json({
       success: true,
+
       page,
+
       limit,
+
       totalRecords,
+
       totalPages,
+
       availableAccounts,
-      hasNextPage: page < totalPages,
-      hasPrevPage: page > 1,
+
+      hasNextPage:
+        page < totalPages,
+
+      hasPrevPage:
+        page > 1,
+
       count: transactions.length,
+
       data: transactions,
+
       totalDeposit,
+
       totalWithdrawal,
     });
   } catch (error) {
-    console.error("Get Transactions Error:", error);
+    console.error(
+      "Get Transactions Error:",
+      error
+    );
 
     return res.status(500).json({
       success: false,
-      message: "Failed to fetch transactions",
+      message:
+        "Failed to fetch transactions",
       error: error.message,
     });
   }
-};
-
+};  
 // ===================== GET SINGLE TRANSACTION =====================
 exports.getTransactionById = async (req, res) => {
   try {
