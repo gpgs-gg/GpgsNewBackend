@@ -854,132 +854,94 @@ exports.uploadBankStatement = async (req, res) => {
 // ===================== GET ALL TRANSACTIONS =====================
 exports.getAllTransactions = async (req, res) => {
   try {
-    const page = Math.max(
-      parseInt(req.query.page) || 1,
-      1
-    );
-
-    const limit = Math.max(
-      parseInt(req.query.limit) || 10,
-      1
-    );
-
+    const page = Math.max(parseInt(req.query.page) || 1, 1);
+    const limit = Math.max(parseInt(req.query.limit) || 10, 1);
     const skip = (page - 1) * limit;
 
     // =========================================================
-    // BASE QUERY
+    // BUILD QUERY
     // =========================================================
 
     const query = {};
 
-    // =========================================================
-    // SEARCH
-    // =========================================================
+    // ---------------------------------------------------------
+    // Search
+    // ---------------------------------------------------------
 
     if (req.query.search?.trim()) {
       const searchValue = req.query.search.trim();
 
-      const escapedSearchValue =
-        searchValue.replace(
-          /[.*+?^${}()|[\]\\]/g,
-          "\\$&"
-        );
-
-      const regex = new RegExp(
-        escapedSearchValue,
-        "i"
+      const escapedSearchValue = searchValue.replace(
+        /[.*+?^${}()|[\]\\]/g,
+        "\\$&"
       );
 
+      const regex = new RegExp(escapedSearchValue, "i");
+
       const searchConditions = [
-        {
-          narration: regex,
-        },
-        {
-          chqNo: regex,
-        },
+        { narration: regex },
+        { chqNo: regex },
       ];
 
       if (!isNaN(Number(searchValue))) {
         const amount = Number(searchValue);
 
         searchConditions.push(
-          {
-            withdrawal: amount,
-          },
-          {
-            deposit: amount,
-          }
+          { withdrawal: amount },
+          { deposit: amount }
         );
       }
 
       query.$or = searchConditions;
     }
 
-    // =========================================================
-    // DATE FILTER
-    // =========================================================
+    // ---------------------------------------------------------
+    // Transaction Date
+    // ---------------------------------------------------------
 
-    if (
-      req.query.fromDate ||
-      req.query.toDate
-    ) {
+    if (req.query.fromDate || req.query.toDate) {
       query.date = {};
 
       if (req.query.fromDate) {
-        const start = new Date(
-          req.query.fromDate
-        );
-
+        const start = new Date(req.query.fromDate);
         start.setHours(0, 0, 0, 0);
 
         query.date.$gte = start;
       }
 
       if (req.query.toDate) {
-        const end = new Date(
-          req.query.toDate
-        );
-
+        const end = new Date(req.query.toDate);
         end.setHours(23, 59, 59, 999);
 
         query.date.$lte = end;
       }
     }
 
-    // =========================================================
-    // VALUE DATE FILTER
-    // =========================================================
+    // ---------------------------------------------------------
+    // Value Date
+    // ---------------------------------------------------------
 
-    if (
-      req.query.valueFromDate ||
-      req.query.valueToDate
-    ) {
+    if (req.query.valueFromDate || req.query.valueToDate) {
       query.valueDate = {};
 
       if (req.query.valueFromDate) {
-        const start = new Date(
-          req.query.valueFromDate
-        );
-
+        const start = new Date(req.query.valueFromDate);
         start.setHours(0, 0, 0, 0);
 
         query.valueDate.$gte = start;
       }
 
       if (req.query.valueToDate) {
-        const end = new Date(
-          req.query.valueToDate
-        );
-
+        const end = new Date(req.query.valueToDate);
         end.setHours(23, 59, 59, 999);
 
         query.valueDate.$lte = end;
       }
     }
 
-    // =========================================================
-    // SIMPLE FILTERS
-    // =========================================================
+    // ---------------------------------------------------------
+    // Basic filters
+    // ---------------------------------------------------------
 
     if (req.query.source) {
       query.source = req.query.source;
@@ -997,9 +959,9 @@ exports.getAllTransactions = async (req, res) => {
       query.status = req.query.status;
     }
 
-    // =========================================================
-    // ASSIGNEE
-    // =========================================================
+    // ---------------------------------------------------------
+    // Assignee
+    // ---------------------------------------------------------
 
     if (req.query.assignee?.trim()) {
       query.assignee = {
@@ -1008,27 +970,22 @@ exports.getAllTransactions = async (req, res) => {
       };
     }
 
-    // =========================================================
-    // EXPENSE CATEGORY
-    // =========================================================
+    // ---------------------------------------------------------
+    // Expense Category
+    // ---------------------------------------------------------
 
     const expenseCategoryParam =
       req.query.expenseCategory ??
       req.query["expenseCategory[]"];
 
     if (expenseCategoryParam) {
-      const expenseCategories = Array.isArray(
-        expenseCategoryParam
-      )
+      const expenseCategories = Array.isArray(expenseCategoryParam)
         ? expenseCategoryParam
         : [expenseCategoryParam];
 
-      const validCategories =
-        expenseCategories
-          .map((category) =>
-            String(category).trim()
-          )
-          .filter(Boolean);
+      const validCategories = expenseCategories
+        .map((category) => String(category).trim())
+        .filter(Boolean);
 
       if (validCategories.length > 0) {
         query.expenseCategory = {
@@ -1046,9 +1003,9 @@ exports.getAllTransactions = async (req, res) => {
       }
     }
 
-    // =========================================================
-    // CHQ NO
-    // =========================================================
+    // ---------------------------------------------------------
+    // Cheque Number
+    // ---------------------------------------------------------
 
     if (req.query.chqNo?.trim()) {
       query.chqNo = {
@@ -1057,18 +1014,16 @@ exports.getAllTransactions = async (req, res) => {
       };
     }
 
-    // =========================================================
-    // NARRATION / SALARY
-    // =========================================================
+    // ---------------------------------------------------------
+    // Narration / Salary
+    // ---------------------------------------------------------
 
     if (req.query.narration?.trim()) {
       query.narration = {
         $regex: req.query.narration.trim(),
         $options: "i",
       };
-    } else if (
-      req.query.transactionType === "salary"
-    ) {
+    } else if (req.query.transactionType === "salary") {
       query.narration = {
         $regex: "salary",
         $options: "i",
@@ -1079,9 +1034,9 @@ exports.getAllTransactions = async (req, res) => {
       };
     }
 
-    // =========================================================
-    // AMOUNT FILTER
-    // =========================================================
+    // ---------------------------------------------------------
+    // Amount Range
+    // ---------------------------------------------------------
 
     if (
       req.query.minAmount !== undefined ||
@@ -1119,21 +1074,17 @@ exports.getAllTransactions = async (req, res) => {
       });
     }
 
-    // =========================================================
-    // TRANSACTION TYPE
-    // =========================================================
+    // ---------------------------------------------------------
+    // Transaction Type
+    // ---------------------------------------------------------
 
-    if (
-      req.query.transactionType === "deposit"
-    ) {
+    if (req.query.transactionType === "deposit") {
       query.deposit = {
         $gt: 0,
       };
     }
 
-    if (
-      req.query.transactionType === "withdrawal"
-    ) {
+    if (req.query.transactionType === "withdrawal") {
       query.withdrawal = {
         $gt: 0,
       };
@@ -1168,14 +1119,12 @@ exports.getAllTransactions = async (req, res) => {
 
     const selectedAccounts = req.query.account
       ? accounts.filter(
-          (account) =>
-            account.account ===
-            req.query.account
+          (account) => account.account === req.query.account
         )
       : accounts;
 
     // =========================================================
-    // NO ACCOUNT
+    // NO ACCOUNT FOUND
     // =========================================================
 
     if (selectedAccounts.length === 0) {
@@ -1196,20 +1145,17 @@ exports.getAllTransactions = async (req, res) => {
     }
 
     // =========================================================
-    // EXPENSE CODE MAP
+    // EXPENSE CODE OPTIONS
     // =========================================================
 
-    const expenseCodeOptions =
-      await OptionsData.findOne({
-        categoryKey: "expensecode",
-      })
-        .select("items")
-        .lean();
+    const expenseCodeOptions = await OptionsData.findOne({
+      categoryKey: "expensecode",
+    })
+      .select("items")
+      .lean();
 
     const expenseCodeMap = new Map(
-      (
-        expenseCodeOptions?.items || []
-      ).map((item) => [
+      (expenseCodeOptions?.items || []).map((item) => [
         String(item._id),
         {
           label: item.label,
@@ -1220,36 +1166,22 @@ exports.getAllTransactions = async (req, res) => {
     );
 
     // =========================================================
-    // IMPORTANT
+    // DATA AGGREGATION
     //
-    // We DON'T fetch all records.
-    //
-    // For page 55, limit 10:
-    //
-    // skip = 540
-    // candidateLimit = 550
-    //
-    // Each account returns max 550 records.
+    // IMPORTANT:
+    // Each account is sorted + limited BEFORE UNION.
+    // This avoids sorting lakhs of records globally.
     // =========================================================
 
-    const candidateLimit =
-      skip + limit;
+    const candidateLimit = skip + limit;
 
-    // =========================================================
-    // BUILD FIRST ACCOUNT PIPELINE
-    // =========================================================
+    const firstAccount = selectedAccounts[0];
 
-    const firstAccount =
-      selectedAccounts[0];
-
-    const pipeline = [
+    const dataPipeline = [
       {
         $match: query,
       },
 
-      // IMPORTANT:
-      // Sort BEFORE limit.
-      // Requires createdAt index.
       {
         $sort: {
           createdAt: -1,
@@ -1268,23 +1200,16 @@ exports.getAllTransactions = async (req, res) => {
       },
     ];
 
-    // =========================================================
+    // ---------------------------------------------------------
     // UNION OTHER ACCOUNTS
-    // =========================================================
+    // ---------------------------------------------------------
 
-    for (
-      let i = 1;
-      i < selectedAccounts.length;
-      i++
-    ) {
-      const account =
-        selectedAccounts[i];
+    for (let i = 1; i < selectedAccounts.length; i++) {
+      const account = selectedAccounts[i];
 
-      pipeline.push({
+      dataPipeline.push({
         $unionWith: {
-          coll:
-            account.model.collection
-              .name,
+          coll: account.model.collection.name,
 
           pipeline: [
             {
@@ -1304,8 +1229,7 @@ exports.getAllTransactions = async (req, res) => {
 
             {
               $addFields: {
-                account:
-                  account.account,
+                account: account.account,
               },
             },
           ],
@@ -1313,302 +1237,239 @@ exports.getAllTransactions = async (req, res) => {
       });
     }
 
-    // =========================================================
+    // ---------------------------------------------------------
     // GLOBAL SORT
     //
-    // IMPORTANT:
-    // This sort is now on maximum:
-    //
-    // candidateLimit × accounts
-    //
-    // Instead of 1 lakh+ records.
-    // =========================================================
+    // At this point maximum records are:
+    // candidateLimit * numberOfAccounts
+    // ---------------------------------------------------------
 
-    pipeline.push({
+    dataPipeline.push({
       $sort: {
         createdAt: -1,
         _id: -1,
       },
     });
 
+    // ---------------------------------------------------------
+    // PAGINATION
+    // ---------------------------------------------------------
+
+    dataPipeline.push({
+      $skip: skip,
+    });
+
+    dataPipeline.push({
+      $limit: limit,
+    });
+
     // =========================================================
-    // FACET
+    // USER LOOKUP
     // =========================================================
 
-    pipeline.push({
-      $facet: {
-        // =====================================================
-        // DATA
-        // =====================================================
+    dataPipeline.push({
+      $lookup: {
+        from: "users",
+        localField: "userId",
+        foreignField: "_id",
+        as: "user",
+      },
+    });
 
-        data: [
+    dataPipeline.push({
+      $unwind: {
+        path: "$user",
+        preserveNullAndEmptyArrays: true,
+      },
+    });
+
+    // =========================================================
+    // PROPERTY LOOKUP
+    // =========================================================
+
+    dataPipeline.push({
+      $lookup: {
+        from: "properties",
+        localField: "propertyId",
+        foreignField: "_id",
+        as: "property",
+      },
+    });
+
+    dataPipeline.push({
+      $unwind: {
+        path: "$property",
+        preserveNullAndEmptyArrays: true,
+      },
+    });
+
+    // =========================================================
+    // PROJECT
+    // =========================================================
+
+    dataPipeline.push({
+      $project: {
+        _id: 1,
+        date: 1,
+        valueDate: 1,
+        narration: 1,
+        chqNo: 1,
+        withdrawal: 1,
+        deposit: 1,
+        balance: 1,
+        source: 1,
+        status: 1,
+        assignee: 1,
+        reviewer: 1,
+        auditor: 1,
+        expenseCode: 1,
+        expenseCategory: 1,
+        workLog: 1,
+        createdAt: 1,
+        userId: 1,
+        propertyId: 1,
+        account: 1,
+        user: 1,
+        property: 1,
+      },
+    });
+
+    // =========================================================
+    // EXACT TOTALS AGGREGATION
+    //
+    // NO SORT HERE
+    // NO LIMIT HERE
+    // NO SKIP HERE
+    //
+    // Therefore totals are calculated from ALL matching records.
+    // =========================================================
+
+    const totalPromises = selectedAccounts.map(
+      async ({ model, account }) => {
+        const result = await model.aggregate([
           {
-            $skip: skip,
+            $match: query,
           },
 
-          {
-            $limit: limit,
-          },
-
-          // ===================================================
-          // USER LOOKUP
-          // ===================================================
-
-          {
-            $lookup: {
-              from: "users",
-              localField: "userId",
-              foreignField: "_id",
-              as: "user",
-            },
-          },
-
-          {
-            $unwind: {
-              path: "$user",
-              preserveNullAndEmptyArrays: true,
-            },
-          },
-
-          // ===================================================
-          // PROPERTY LOOKUP
-          // ===================================================
-
-          {
-            $lookup: {
-              from: "properties",
-              localField: "propertyId",
-              foreignField: "_id",
-              as: "property",
-            },
-          },
-
-          {
-            $unwind: {
-              path: "$property",
-              preserveNullAndEmptyArrays: true,
-            },
-          },
-
-          // ===================================================
-          // PROJECT
-          // ===================================================
-
-          {
-            $project: {
-              _id: 1,
-
-              date: 1,
-              valueDate: 1,
-
-              narration: 1,
-              chqNo: 1,
-
-              withdrawal: 1,
-              deposit: 1,
-              balance: 1,
-
-              source: 1,
-              status: 1,
-
-              assignee: 1,
-              reviewer: 1,
-              auditor: 1,
-
-              expenseCode: 1,
-              expenseCategory: 1,
-
-              workLog: 1,
-
-              createdAt: 1,
-
-              userId: 1,
-              propertyId: 1,
-
-              account: 1,
-
-              user: 1,
-              property: 1,
-            },
-          },
-        ],
-
-        // =====================================================
-        // COUNT
-        // =====================================================
-
-        count: [
-          {
-            $count: "total",
-          },
-        ],
-
-        // =====================================================
-        // TOTALS
-        // =====================================================
-
-        totals: [
           {
             $group: {
               _id: null,
 
+              count: {
+                $sum: 1,
+              },
+
               totalDeposit: {
                 $sum: {
-                  $ifNull: [
-                    "$deposit",
-                    0,
-                  ],
+                  $ifNull: ["$deposit", 0],
                 },
               },
 
               totalWithdrawal: {
                 $sum: {
-                  $ifNull: [
-                    "$withdrawal",
-                    0,
-                  ],
+                  $ifNull: ["$withdrawal", 0],
                 },
               },
             },
           },
-        ],
+        ]);
 
-        // =====================================================
-        // AVAILABLE ACCOUNTS
-        // =====================================================
+        const stats = result[0] || {};
 
-        accountCounts: [
-          {
-            $group: {
-              _id: "$account",
-
-              count: {
-                $sum: 1,
-              },
-            },
-          },
-        ],
-      },
-    });
+        return {
+          account,
+          count: Number(stats.count || 0),
+          totalDeposit: Number(stats.totalDeposit || 0),
+          totalWithdrawal: Number(
+            stats.totalWithdrawal || 0
+          ),
+        };
+      }
+    );
 
     // =========================================================
-    // EXECUTE
+    // RUN DATA + TOTALS IN PARALLEL
     // =========================================================
 
-    const result =
-      await firstAccount.model.aggregate(
-        pipeline,
-        {
+    const [transactionsResult, accountTotals] =
+      await Promise.all([
+        firstAccount.model.aggregate(dataPipeline, {
           allowDiskUse: true,
-        }
-      );
+        }),
 
-    const aggregationResult =
-      result[0] || {};
-
-    // =========================================================
-    // TRANSACTIONS
-    // =========================================================
-
-    const rawTransactions =
-      aggregationResult.data || [];
-
-    const transactions =
-      rawTransactions.map(
-        (transaction) => {
-          const user =
-            transaction.user;
-
-          const property =
-            transaction.property;
-
-          return {
-            ...transaction,
-
-            userId:
-              transaction.userId
-                ? {
-                    _id:
-                      transaction.userId,
-                    fullName:
-                      user?.fullName ||
-                      "",
-                  }
-                : null,
-
-            propertyId:
-              transaction.propertyId
-                ? {
-                    _id:
-                      transaction.propertyId,
-                    propertyCode:
-                      property?.propertyCode ||
-                      "",
-                  }
-                : null,
-
-            expenseCode:
-              transaction.expenseCode
-                ? expenseCodeMap.get(
-                    String(
-                      transaction.expenseCode
-                    )
-                  ) || null
-                : null,
-
-            // Remove temporary lookup objects
-            user: undefined,
-            property: undefined,
-          };
-        }
-      );
+        Promise.all(totalPromises),
+      ]);
 
     // =========================================================
-    // TOTAL RECORDS
+    // FORMAT TRANSACTIONS
     // =========================================================
 
-    const totalRecords =
-      aggregationResult.count?.[0]
-        ?.total || 0;
+    const transactions = (transactionsResult || []).map(
+      (transaction) => {
+        const user = transaction.user;
+        const property = transaction.property;
+
+        return {
+          ...transaction,
+
+          userId: transaction.userId
+            ? {
+                _id: transaction.userId,
+                fullName: user?.fullName || "",
+              }
+            : null,
+
+          propertyId: transaction.propertyId
+            ? {
+                _id: transaction.propertyId,
+                propertyCode:
+                  property?.propertyCode || "",
+              }
+            : null,
+
+          expenseCode: transaction.expenseCode
+            ? expenseCodeMap.get(
+                String(transaction.expenseCode)
+              ) || null
+            : null,
+
+          user: undefined,
+          property: undefined,
+        };
+      }
+    );
 
     // =========================================================
-    // TOTAL PAGES
+    // EXACT TOTALS
+    // =========================================================
+
+    let totalRecords = 0;
+    let totalDeposit = 0;
+    let totalWithdrawal = 0;
+
+    const availableAccounts = [];
+
+    for (const accountTotal of accountTotals) {
+      totalRecords += accountTotal.count;
+
+      totalDeposit += accountTotal.totalDeposit;
+
+      totalWithdrawal +=
+        accountTotal.totalWithdrawal;
+
+      if (accountTotal.count > 0) {
+        availableAccounts.push(
+          accountTotal.account
+        );
+      }
+    }
+
+    // =========================================================
+    // PAGINATION INFO
     // =========================================================
 
     const totalPages =
-      Math.ceil(
-        totalRecords / limit
-      );
-
-    // =========================================================
-    // TOTAL DEPOSIT / WITHDRAWAL
-    // =========================================================
-
-    const totals =
-      aggregationResult.totals?.[0] ||
-      {};
-
-    const totalDeposit =
-      Number(
-        totals.totalDeposit || 0
-      );
-
-    const totalWithdrawal =
-      Number(
-        totals.totalWithdrawal || 0
-      );
-
-    // =========================================================
-    // AVAILABLE ACCOUNTS
-    // =========================================================
-
-    const availableAccounts =
-      (
-        aggregationResult.accountCounts ||
-        []
-      ).map(
-        (item) => item._id
-      );
+      Math.ceil(totalRecords / limit);
 
     // =========================================================
     // RESPONSE
@@ -1618,25 +1479,25 @@ exports.getAllTransactions = async (req, res) => {
       success: true,
 
       page,
+
       limit,
 
       totalRecords,
+
       totalPages,
 
       availableAccounts,
 
-      hasNextPage:
-        page < totalPages,
+      hasNextPage: page < totalPages,
 
-      hasPrevPage:
-        page > 1,
+      hasPrevPage: page > 1,
 
-      count:
-        transactions.length,
+      count: transactions.length,
 
       data: transactions,
 
       totalDeposit,
+
       totalWithdrawal,
     });
   } catch (error) {
@@ -1647,8 +1508,7 @@ exports.getAllTransactions = async (req, res) => {
 
     return res.status(500).json({
       success: false,
-      message:
-        "Failed to fetch transactions",
+      message: "Failed to fetch transactions",
       error: error.message,
     });
   }
