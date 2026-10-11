@@ -209,21 +209,42 @@ const refreshAccessToken = asyncHandler(async (req, res) => {
 const getCurrentUser = asyncHandler(async (req, res) => {
   const user = req.user;
   let teamCode = "";
+  let department = "";
   // Get latest teamCode from Employee collection
   if (user?.employeeId) {
     const employee = await Employee.findById(user.employeeId).select(
-      "teamCode",
+      "teamCode department",
     );
     teamCode = employee?.teamCode || "";
+    department = employee?.department || "";
   }
   return res.status(200).json({
     success: true,
     user: {
       ...user.toObject(),
       teamCode,
+      department,
     },
   });
 });
+// const getCurrentUser = asyncHandler(async (req, res) => {
+//   const user = req.user;
+//   let teamCode = "";
+//   // Get latest teamCode from Employee collection
+//   if (user?.employeeId) {
+//     const employee = await Employee.findById(user.employeeId).select(
+//       "teamCode",
+//     );
+//     teamCode = employee?.teamCode || "";
+//   }
+//   return res.status(200).json({
+//     success: true,
+//     user: {
+//       ...user.toObject(),
+//       teamCode,
+//     },
+//   });
+// });
 
 
 // UPDATE PASSWORD ONLY FOR ACTIVE USER

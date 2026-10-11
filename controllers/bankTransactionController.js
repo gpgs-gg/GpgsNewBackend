@@ -851,6 +851,7 @@ exports.uploadBankStatement = async (req, res) => {
   }
 };
 
+
 // ===================== GET ALL TRANSACTIONS =====================
 exports.getAllTransactions = async (req, res) => {
   try {
@@ -1307,32 +1308,57 @@ exports.getAllTransactions = async (req, res) => {
     // PROJECT
     // =========================================================
 
-    dataPipeline.push({
-      $project: {
-        _id: 1,
-        date: 1,
-        valueDate: 1,
-        narration: 1,
-        chqNo: 1,
-        withdrawal: 1,
-        deposit: 1,
-        balance: 1,
-        source: 1,
-        status: 1,
-        assignee: 1,
-        reviewer: 1,
-        auditor: 1,
-        expenseCode: 1,
-        expenseCategory: 1,
-        workLog: 1,
-        createdAt: 1,
-        userId: 1,
-        propertyId: 1,
-        account: 1,
-        user: 1,
-        property: 1,
-      },
-    });
+  dataPipeline.push({
+  $project: {
+    // Basic Transaction Details
+    _id: 1,
+    date: 1,
+    narration: 1,
+    chqNo: 1,
+    withdrawal: 1,
+    deposit: 1,
+    balance: 1,
+    valueDate: 1,
+
+    // Source & User
+    source: 1,
+    userId: 1,
+
+    // Assignment & Review
+    assignee: 1,
+    reviewer: 1,
+    auditor: 1,
+
+    // Status & Expense
+    status: 1,
+    expenseCategory: 1,
+    expenseCode: 1,
+
+    // Work Logs
+    workLogs: 1,
+
+    // Mapping Details
+    isMapped: 1,
+    mappedAt: 1,
+    clientId: 1,
+    propertyId: 1,
+    bedId: 1,
+
+    // Metadata
+    metadata: 1,
+
+    // Timestamps
+    createdAt: 1,
+    updatedAt: 1,
+
+    // Account Information
+    account: 1,
+
+    // Populated User & Property
+    user: 1,
+    property: 1,
+  },
+});
 
     // =========================================================
     // EXACT TOTALS AGGREGATION
@@ -1513,6 +1539,8 @@ exports.getAllTransactions = async (req, res) => {
     });
   }
 };
+
+
 // ===================== GET SINGLE TRANSACTION =====================
 exports.getTransactionById = async (req, res) => {
   try {

@@ -287,9 +287,6 @@ const updateTicket = asyncHandler(async (req, res) => {
         throw new ApiError(404, "Ticket not found");
     }
 
-    const newStatus = req.body.status;
-
-
     const user =
         req.body.updatedByName ||
         req.body.createdByName ||
@@ -394,6 +391,7 @@ const updateTicket = asyncHandler(async (req, res) => {
         workLogs.push({
             message: newWorkLog,
             createdBy: user,
+            role: role,
             createdAt: convertStringFormatDateTime(new Date()),
         });
     }
@@ -403,6 +401,7 @@ const updateTicket = asyncHandler(async (req, res) => {
         workLogs.push({
             message: changes.join("\n"),
             createdBy: user,
+            role: role,
             createdAt: convertStringFormatDateTime(new Date()),
         });
     }

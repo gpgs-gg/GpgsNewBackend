@@ -1526,7 +1526,7 @@ exports.updateClient = async (req, res) => {
       await Client.updateMany(
         {
           bookingId: client.bookingId,
-          stayType: "P. Booked", // <-- yahi change hai
+          stayType: "P. Booked", 
           isBookingCancelled: true,
           _id: { $ne: client._id },
         },
@@ -1760,7 +1760,6 @@ if (req.body.fnf !== undefined || handoverFiles.length > 0) {
       req.user?.name ||
       req.user?.Name ||
       "System";
-    console.log("user", user);
     // Convert the final Client document into a plain object.
     // Why: At this point all normal fields, uploaded documents,
     // F&F data, bed changes, etc. have already been applied.
@@ -1861,6 +1860,26 @@ if (req.body.fnf !== undefined || handoverFiles.length > 0) {
             { session },
           );
         }
+
+        // ========================================================
+// DEACTIVATE CLIENT USER WHEN F&F IS CLOSED
+// ========================================================
+
+if (client.fnf?.status === "F&F Closed") {
+  await User.findOneAndUpdate(
+    {
+      bookingId: client.bookingId,
+      role: "Client",
+    },
+    {
+      $set: {
+        isActive: false,
+        refreshToken: null,
+      },
+    },
+    { session },
+  );
+}
 
         // ========================================================
         // SYNC CLIENT NAME & EMAIL WITH USER
@@ -2183,6 +2202,11 @@ if (req.query.hasCvd === "true") {
             $exists: true,
             $nin: [null, ""],
           },
+          // Default: exclude F&F Closed.
+          // When the F&F Closed button is active, show only closed clients.
+          ...(req.query.fnfStatus?.trim() === "F&F Closed"
+            ? { "fnf.status": "F&F Closed" }
+            : { "fnf.status": { $ne: "F&F Closed" } }),
         },
       },
 
@@ -2648,6 +2672,9 @@ exports.getClientsWithLatestRentHistory = async (req, res) => {
           bedNo: "$bed.bedNo",
 
           stayType: 1,
+       
+    // Client ka normal status
+    status: "$fnf.status",
 
           clientDoj: 1,
           noticeStartDate: 1,

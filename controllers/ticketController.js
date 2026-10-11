@@ -4,6 +4,7 @@ const uploadFile = require("../services/uploadFile");
 const ApiError = require("../utils/ApiError");
 const { convertStringFormatDateTime, convertStringToDateTime } = require("../utils/dateFormatter");
 const { format } = require("@fast-csv/format");
+
 const createTicket = asyncHandler(async (req, res) => {
   // Generate Ticket ID
   const lastTicket = await Ticket.findOne().sort({ createdAt: -1 });
@@ -60,19 +61,6 @@ const createTicket = asyncHandler(async (req, res) => {
   });
 });
 
-// const getAllTickets = asyncHandler(async (req, res) => {
-//   const tickets = await Ticket.find().sort({
-//     createdAt: -1,
-//   });
-
-//   res.status(200).json({
-//     success: true,
-//     count: tickets.length,
-//     data: tickets,
-//   });
-// });
-
-
 const getAllTickets = asyncHandler(async (req, res) => {
   const page = Math.max(Number(req.query.page) || 1, 1);
   const limit = Math.max(Number(req.query.limit) || 10, 1);
@@ -103,7 +91,19 @@ const getAllTickets = asyncHandler(async (req, res) => {
       },
     ];
   }
+  if (req.query.createdBy) {
+    const createdBy = getFilterValue(req.query.createdBy);
 
+    query.$and = [
+      ...(query.$and || []),
+      {
+        $or: [
+          { createdBy: { $regex: createdBy, $options: "i" } },
+          { createdByName: { $regex: createdBy, $options: "i" } },
+        ],
+      },
+    ];
+  }
   if (req.query.status) {
     query.status = getFilterValue(req.query.status);
   }
@@ -379,6 +379,9 @@ const getTicketById = asyncHandler(async (req, res) => {
 //     nextId,
 //   });
 // });
+
+
+
 const getTicketNavigation = asyncHandler(async (req, res) => {
   const currentTicket = await Ticket.findById(req.params.id)
     .select("_id createdAt")
@@ -547,7 +550,7 @@ const calculateResolved = (ticket, newStatus) => {
       const diffHours =
         (now - new Date(acknowledgedDate)) /
         (1000 * 60 * 60);
-   
+
       let slaHours = 0;
 
       switch (priority.toLowerCase()) {
@@ -561,7 +564,7 @@ const calculateResolved = (ticket, newStatus) => {
           slaHours = 24;
           break;
         case "critical":
-          slaHours = 8;
+          slaHours = 4;
           break;
       }
 
@@ -577,6 +580,7 @@ const calculateResolved = (ticket, newStatus) => {
 
 
 const updateTicket = asyncHandler(async (req, res) => {
+  
   const ticket = await Ticket.findById(req.params.id);
 
   if (!ticket) {
@@ -587,11 +591,9 @@ const updateTicket = asyncHandler(async (req, res) => {
 
   const acknowledgeData = calculateAcknowledged(ticket, newStatus);
   const resolveData = calculateResolved(ticket, newStatus);
-  const user =
-    req.body.updatedByName ||
-    req.body.createdByName ||
-    "System";
-  const role = req.body.createdBy
+  const user = req.body.createdByName || req.body.updatedByName || "System";
+  const role = req.body.createdBy || req.body.role
+
   // ================= Attachments =================
 
   let attachments = [];
@@ -687,6 +689,7 @@ const updateTicket = asyncHandler(async (req, res) => {
       `Deleted ${deletedAttachments.length} attachment(s): ${deletedNames}`
     );
   }
+
   const fields = [
     { key: "status", label: "Status" },
     { key: "priority", label: "Priority" },
@@ -703,6 +706,7 @@ const updateTicket = asyncHandler(async (req, res) => {
     { key: "description", label: "Description" },
     { key: "actualTimeSpent", label: "Actual Time" },
   ];
+
 
   fields.forEach(({ key, label }) => {
     const oldValue = ticket[key] ?? "";
@@ -756,6 +760,7 @@ const updateTicket = asyncHandler(async (req, res) => {
     workLogs.push({
       message: newWorkLog,
       createdBy: user,
+      role: role,
       createdAt: convertStringFormatDateTime(new Date()),
     });
   }
@@ -765,6 +770,7 @@ const updateTicket = asyncHandler(async (req, res) => {
     workLogs.push({
       message: changes.join("\n"),
       createdBy: user,
+      role: role,
       createdAt: convertStringFormatDateTime(new Date()),
     });
   }

@@ -63,6 +63,7 @@ const TicketSchema = new mongoose.Schema(
       {
         message: String,
         createdBy: String,
+        role: String,
         createdAt: {
           type: String,
           default: String,
