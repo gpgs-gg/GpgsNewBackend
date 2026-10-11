@@ -29,16 +29,14 @@ const RentNotReceivedCommentSchema = new mongoose.Schema(
           required: true,
           trim: true,
         },
-
+         
         date: {
           type: Date,
           default: Date.now,
         },
 
         addedBy: {
-          type: mongoose.Schema.Types.ObjectId,
-          ref: "User",
-          default: null,
+          type: String,
         },
       },
     ],

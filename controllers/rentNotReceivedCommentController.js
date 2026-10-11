@@ -3,8 +3,8 @@ const Client = require("../models/client.model");
 
 exports.addRentNotReceivedComment = async (req, res) => {
   try {
-    const { clientId, comment } = req.body;
-
+    const { clientId, comment , user} = req.body;
+  
     if (!clientId) {
       return res.status(400).json({
         success: false,
@@ -60,7 +60,7 @@ exports.addRentNotReceivedComment = async (req, res) => {
       rentNotReceived.comments.push({
         comment: comment.trim(),
         date: new Date(),
-        addedBy: req.user?._id || null,
+        addedBy: user || null,
       });
 
       // Agar client ka bed/property change hua ho
