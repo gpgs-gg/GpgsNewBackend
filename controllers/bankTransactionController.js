@@ -2340,16 +2340,32 @@ exports.updateClientRentHistoryReceived = async (req, res) => {
   }
 };
 
+
+
 exports.getTransactionByNarration = async (req, res) => {
   try {
-    const { narration } = req.params;
-    console.log("narration", narration);
-    if (!narration?.trim()) {
+    const rawInput = String(req.params.narration || "").trim();
+
+    if (!rawInput) {
       return res.status(400).json({
         success: false,
         message: "Narration is required",
       });
     }
+
+    // Split narration and reference number
+    const separator = "|||REF|||";
+    const separatorIndex = rawInput.lastIndexOf(separator);
+
+    const narrationText =
+      separatorIndex !== -1
+        ? rawInput.slice(0, separatorIndex).trim()
+        : rawInput;
+
+    const referenceNumber =
+      separatorIndex !== -1
+        ? rawInput.slice(separatorIndex + separator.length).trim()
+        : "";
 
     const accounts = [
       { model: AC1Transaction, account: "AC1" },
@@ -2359,34 +2375,58 @@ exports.getTransactionByNarration = async (req, res) => {
       { model: AC5Transaction, account: "AC5" },
     ];
 
-    let transaction = null;
-    let account = null;
+    let transactions = [];
 
     for (const item of accounts) {
-      const found = await item.model
-        .findOne({
-          narration: narration.trim(),
-        })
-        .lean();
+      let found = [];
 
-      if (found) {
-        transaction = found;
-        account = item.account;
-        break;
+      // Narration aur reference number DONO match hone chahiye
+      if (referenceNumber && narrationText) {
+        found = await item.model
+          .find({
+            narration: narrationText,
+            chqNo: referenceNumber,
+          })
+          .sort({ deposit: -1 })
+          .lean();
+      } else if (narrationText) {
+        // Reference number nahi hai toh narration se search
+        found = await item.model
+          .find({ narration: narrationText })
+          .sort({ deposit: -1 })
+          .lean();
       }
+
+      transactions.push(
+        ...found.map((doc) => ({
+          ...doc,
+          account: item.account,
+        }))
+      );
     }
 
-    if (!transaction) {
+    if (transactions.length === 0) {
       return res.status(404).json({
         success: false,
         message: "Transaction not found",
       });
     }
 
+    // Matching records mein highest positive deposit select karo
+    transactions.sort(
+      (a, b) => Number(b.deposit || 0) - Number(a.deposit || 0)
+    );
+
+    const transaction =
+      transactions.find((item) => Number(item.deposit) > 0) ||
+      transactions[0];
+
+    const { account, ...data } = transaction;
+
     return res.status(200).json({
       success: true,
       account,
-      data: transaction,
+      data,
     });
   } catch (error) {
     console.error("Get Transaction By Narration Error:", error);
@@ -2398,3 +2438,5 @@ exports.getTransactionByNarration = async (req, res) => {
     });
   }
 };
+
+
