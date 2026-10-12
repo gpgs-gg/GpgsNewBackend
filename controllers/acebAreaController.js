@@ -5,32 +5,36 @@ const ApiError = require("../utils/ApiError");
 // ================= Create Property =================
 
 const createProperty = asyncHandler(async (req, res) => {
-   const { propertyId, location, areaTypes = [] } = req.body;
+    const { propertyId, location, areaTypes = [] } = req.body;
 
     if (!propertyId) {
         throw new ApiError(400, "Property is required");
     }
-if (!Array.isArray(areaTypes) || areaTypes.length === 0) {
+
+    if (!Array.isArray(areaTypes) || areaTypes.length === 0) {
         throw new ApiError(400, "At least one area type is required");
     }
-    // const propertyExists = await Property.findById(propertyId);
 
-    // if (!propertyExists) {
-    //     throw new ApiError(404, "Selected property not found");
-    // }
-
-    const existingProperty = await Property.findOne({
-        propertyId,
-    });
+    const existingProperty = await Property.findOne({ propertyId });
 
     if (existingProperty) {
         throw new ApiError(409, "Property already exists");
     }
-const areas = [];
-    // Create areas according to type + count
+
+    let totalRoomCount = 0;
+    let roomIsActive = true;
+
+    let hall = null;
+    let kitchen = null;
+
+    // Validate and combine area types
     areaTypes.forEach((areaType) => {
-        const type = areaType.type;
-        const isActive = areaType.isActive !== undefined ? areaType.isActive : true;
+        const { type } = areaType;
+
+        const isActive =
+            areaType.isActive !== undefined
+                ? areaType.isActive
+                : true;
 
         if (!["ROOM", "HALL", "KITCHEN"].includes(type)) {
             throw new ApiError(400, "Invalid area type");
@@ -39,44 +43,92 @@ const areas = [];
         if (type === "ROOM") {
             const count = Number(areaType.count);
 
-            if (!count || count < 1 || count > 100) {
-                throw new ApiError(400, "Room count must be between 1 and 100");
+            if (
+                !Number.isInteger(count) ||
+                count < 1 ||
+                count > 100
+            ) {
+                throw new ApiError(
+                    400,
+                    "Room count must be between 1 and 100"
+                );
             }
 
-            for (let i = 1; i <= count; i++) {
-                areas.push({
-                    name: `RoomNo_${i}_ACEB`,
-                    type: "ROOM",
-                    isActive,
-                });
+            totalRoomCount = count;
+            roomIsActive = isActive;
+
+            if (totalRoomCount > 100) {
+                throw new ApiError(
+                    400,
+                    "Total room count cannot exceed 100"
+                );
             }
-        } else if (type === "HALL") {
-            areas.push({
-                name: "RoomNo_Hall_ACEB",
-                type: "HALL",
-                isActive,
-            });
-        } else if (type === "KITCHEN") {
-            areas.push({
-                name: "RoomNo_Kitchen_ACEB",
-                type: "KITCHEN",
-                isActive,
-            });
+        }
+
+        if (type === "HALL") {
+            if (hall !== null) {
+                throw new ApiError(
+                    400,
+                    "Duplicate HALL area is not allowed"
+                );
+            }
+
+            hall = { isActive };
+        }
+
+        if (type === "KITCHEN") {
+            if (kitchen !== null) {
+                throw new ApiError(
+                    400,
+                    "Duplicate KITCHEN area is not allowed"
+                );
+            }
+
+            kitchen = { isActive };
         }
     });
+
+    const areas = [];
+
+    // Create uniquely numbered rooms
+    for (let i = 1; i <= totalRoomCount; i++) {
+        areas.push({
+            name: `RoomNo_${i}_ACEB`,
+            type: "ROOM",
+            isActive: roomIsActive,
+        });
+    }
+
+    // Create one hall if requested
+    if (hall) {
+        areas.push({
+            name: "RoomNo_Hall_ACEB",
+            type: "HALL",
+            isActive: hall.isActive,
+        });
+    }
+
+    // Create one kitchen if requested
+    if (kitchen) {
+        areas.push({
+            name: "RoomNo_Kitchen_ACEB",
+            type: "KITCHEN",
+            isActive: kitchen.isActive,
+        });
+    }
+
     const property = await Property.create({
         propertyId,
         location,
         areas,
     });
 
-    res.status(201).json({
+    return res.status(201).json({
         success: true,
         message: "Property created successfully",
         data: property,
     });
 });
-
 // ================= Get All Properties =================
 
 const getProperties = asyncHandler(async (req, res) => {
@@ -204,288 +256,253 @@ const getPropertyById = asyncHandler(async (req, res) => {
 //     });
 // });
 
+
+
 const updateProperty = asyncHandler(async (req, res) => {
-const {
+    const { id } = req.params;
+    const {
         propertyId,
         location,
         areas = [],
         areaTypes = [],
     } = req.body;
 
-    const property = await Property.findById(
-        req.params.id
-    );
+    // ================= Find Property =================
+    const property = await Property.findById(id);
 
     if (!property) {
-        throw new ApiError(
-            404,
-            "Property not found"
-        );
+        throw new ApiError(404, "Property not found");
     }
 
-    // ================= Property Code =================
-
-    if (propertyId !== undefined) {
-   if (!propertyId) {
-            throw new ApiError(400, "Please select a property.");
-        }
-
-       const duplicate = await Property.findOne({
+    // ================= Validate Property ID =================
+    if (propertyId) {
+        const existingProperty = await Property.findOne({
             propertyId,
-            _id: { $ne: req.params.id },
+            _id: { $ne: id },
         });
 
-        if (duplicate) {
-            throw new ApiError(
-                409,
-               "This property already has areas created."
-            );
+        if (existingProperty) {
+            throw new ApiError(409, "Property already exists");
         }
-property.propertyId = propertyId;
-     
+
+        property.propertyId = propertyId;
     }
 
-   
-
-    // ================= Location =================
-
+    // ================= Update Location =================
     if (location !== undefined) {
         property.location = location;
     }
 
-    // ================= Areas =================
-
-  // ================= Validation =================
-
+    // ================= Validate Arrays =================
     if (!Array.isArray(areas)) {
-        throw new ApiError(
-            400,
-            "Invalid area data. Please provide valid areas."
-        );
+        throw new ApiError(400, "Areas must be an array");
     }
 
     if (!Array.isArray(areaTypes)) {
-        throw new ApiError(
-            400,
-            "Invalid area type data."
-        );
+        throw new ApiError(400, "Area types must be an array");
     }
 
-    // ================= Final Areas =================
-
+    // ================= Prepare Existing / Manual Areas =================
     const finalAreas = [];
-
-    // ================= Existing Areas =================
+    const areaNames = new Set();
 
     for (const area of areas) {
-        if (!area.type) {
+        const { areaId, name, type, isActive } = area;
+
+        if (!["ROOM", "HALL", "KITCHEN"].includes(type)) {
+            throw new ApiError(400, "Invalid area type");
+        }
+
+        if (!name || !name.trim()) {
+            throw new ApiError(400, "Area name is required");
+        }
+
+        const normalizedName = name.trim();
+        const uniqueKey = `${type}_${normalizedName}`;
+
+        if (areaNames.has(uniqueKey)) {
             throw new ApiError(
                 400,
-                "Please select a valid area type."
+                `Duplicate area is not allowed: ${normalizedName}`
             );
         }
 
-        if (!["ROOM", "HALL", "KITCHEN"].includes(area.type)) {
-            throw new ApiError(
-                400,
-                "Please select a valid area type."
-            );
+        areaNames.add(uniqueKey);
+
+        // Preserve the original area's isActive value when areaId exists
+        const existingArea = areaId
+            ? property.areas.find(
+                (item) =>
+                    item._id &&
+                    areaId &&
+                    item._id.toString() === areaId.toString()
+            )
+            : null;
+
+        finalAreas.push({
+            ...(existingArea ? { _id: existingArea._id } : {}),
+            name: normalizedName,
+            type,
+            isActive:
+                isActive !== undefined
+                    ? isActive
+                    : existingArea
+                        ? existingArea.isActive
+                        : true,
+        });
+    }
+
+    // ================= Read Requested Area Types =================
+    let requestedRoomCount = null;
+    let requestedRoomIsActive = true;
+    let requestedHall = null;
+    let requestedKitchen = null;
+
+    for (const areaType of areaTypes) {
+        const { type } = areaType;
+
+        if (!["ROOM", "HALL", "KITCHEN"].includes(type)) {
+            throw new ApiError(400, "Invalid area type");
         }
 
-        if (!area.name || !area.name.trim()) {
-            throw new ApiError(
-                400,
-                "Please enter an area name."
-            );
-        }
+        const isActive =
+            areaType.isActive !== undefined ? areaType.isActive : true;
 
-        const name = area.name.trim();
+        if (type === "ROOM") {
+            // Ignore empty/null room counts
+            if (
+                areaType.count === null ||
+                areaType.count === undefined ||
+                areaType.count === ""
+            ) {
+                continue;
+            }
 
-        const duplicate = finalAreas.some(
-            (existingArea) =>
-                existingArea.name === name &&
-                existingArea.type === area.type
-        );
+            const count = Number(areaType.count);
 
-        if (duplicate) {
-            throw new ApiError(
-                409,
-                `Area "${name}" already exists.`
-            );
-        }
-
-        // ================= Existing Area =================
-
-        if (area.areaId) {
-            const oldArea = property.areas.find(
-                (old) =>
-                    String(old.areaId) === String(area.areaId)
-            );
-
-            if (!oldArea) {
+            if (!Number.isInteger(count) || count < 1 || count > 100) {
                 throw new ApiError(
-                    404,
-                    `Area "${name}" not found.`
+                    400,
+                    "Room count must be between 1 and 100"
                 );
             }
 
-            finalAreas.push({
-                areaId: oldArea.areaId,
-                name,
-                type: area.type,
-                isActive:
-                    area.isActive !== undefined
-                        ? area.isActive
-                        : oldArea.isActive,
-            });
+            // Last valid ROOM count becomes the total desired room count
+            requestedRoomCount = count;
+            requestedRoomIsActive = isActive;
         }
 
-        // ================= New Manual Area =================
+        if (type === "HALL") {
+            if (requestedHall !== null) {
+                throw new ApiError(
+                    400,
+                    "Duplicate HALL area is not allowed"
+                );
+            }
 
-        else {
-            finalAreas.push({
-                name,
-                type: area.type,
-                isActive:
-                    area.isActive !== undefined
-                        ? area.isActive
-                        : true,
-            });
+            requestedHall = { isActive };
+        }
+
+        if (type === "KITCHEN") {
+            if (requestedKitchen !== null) {
+                throw new ApiError(
+                    400,
+                    "Duplicate KITCHEN area is not allowed"
+                );
+            }
+
+            requestedKitchen = { isActive };
         }
     }
 
-    // ================= New Area Types =================
+    // ================= Add Rooms Up To Requested Total =================
+    if (requestedRoomCount !== null) {
+        const existingRooms = finalAreas.filter(
+            (area) => area.type === "ROOM"
+        );
 
-    for (const areaType of areaTypes) {
-        const type = areaType.type;
+        const currentRoomCount = existingRooms.length;
 
-        const isActive =
-            areaType.isActive !== undefined
-                ? areaType.isActive
-                : true;
-
-        if (!["ROOM", "HALL", "KITCHEN"].includes(type)) {
-            throw new ApiError(
-                400,
-                "Please select a valid area type."
-            );
-        }
-
-        // ================= ROOM =================
-
-        if (type === "ROOM") {
-            const count = Number(areaType.count);
-
-            if (
-                !Number.isInteger(count) ||
-                count < 1 ||
-                count > 100
-            ) {
-                throw new ApiError(
-                    400,
-                    "Please select the number of rooms between 1 and 100."
-                );
-            }
-
-            // Find highest existing Room number
-            let maxRoomNumber = 0;
-
-            finalAreas.forEach((area) => {
-                if (area.type !== "ROOM") return;
-
-                const match = area.name.match(
-                    /^RoomNo_(\d+)_ACEB$/
-                );
-
-                if (match) {
-                    const roomNumber = Number(match[1]);
-
-                    if (roomNumber > maxRoomNumber) {
-                        maxRoomNumber = roomNumber;
-                    }
-                }
+        if (requestedRoomCount > currentRoomCount) {
+            const existingRoomNumbers = existingRooms.map((area) => {
+                const match = area.name.match(/^RoomNo_(\d+)_ACEB$/);
+                return match ? Number(match[1]) : 0;
             });
 
-            // Create next rooms
-            for (let i = 1; i <= count; i++) {
-                const roomNumber = maxRoomNumber + i;
-                const name = `RoomNo_${roomNumber}_ACEB`;
+            const existingRoomNames = new Set(
+                existingRooms.map((area) => area.name)
+            );
 
-                const alreadyExists = finalAreas.some(
-                    (area) =>
-                        area.name === name &&
-                        area.type === "ROOM"
-                );
+            let roomNumber = Math.max(0, ...existingRoomNumbers);
 
-                if (alreadyExists) {
+            while (
+                finalAreas.filter((area) => area.type === "ROOM").length <
+                requestedRoomCount
+            ) {
+                roomNumber++;
+
+                const roomName = `RoomNo_${roomNumber}_ACEB`;
+
+                if (existingRoomNames.has(roomName)) {
                     continue;
                 }
 
                 finalAreas.push({
-                    name,
+                    name: roomName,
                     type: "ROOM",
-                    isActive,
+                    isActive: requestedRoomIsActive,
                 });
+
+                existingRoomNames.add(roomName);
             }
         }
+    }
 
-        // ================= HALL =================
+    // ================= Add HALL If Requested =================
+    if (requestedHall !== null) {
+        const hallExists = finalAreas.some(
+            (area) => area.type === "HALL"
+        );
 
-        else if (type === "HALL") {
-            const name = "RoomNo_Hall_ACEB";
-
-            const alreadyExists = finalAreas.some(
-                (area) =>
-                    area.name === name &&
-                    area.type === "HALL"
-            );
-
-            if (alreadyExists) {
-                continue;
-            }
-
+        if (!hallExists) {
             finalAreas.push({
-                name,
+                name: "RoomNo_Hall_ACEB",
                 type: "HALL",
-                isActive,
-            });
-        }
-
-        // ================= KITCHEN =================
-
-        else if (type === "KITCHEN") {
-            const name = "RoomNo_Kitchen_ACEB";
-
-            const alreadyExists = finalAreas.some(
-                (area) =>
-                    area.name === name &&
-                    area.type === "KITCHEN"
-            );
-
-            if (alreadyExists) {
-                continue;
-            }
-
-            finalAreas.push({
-                name,
-                type: "KITCHEN",
-                isActive,
+                isActive: requestedHall.isActive,
             });
         }
     }
 
-    // ================= Save =================
+    // ================= Add KITCHEN If Requested =================
+    if (requestedKitchen !== null) {
+        const kitchenExists = finalAreas.some(
+            (area) => area.type === "KITCHEN"
+        );
 
+        if (!kitchenExists) {
+            finalAreas.push({
+                name: "RoomNo_Kitchen_ACEB",
+                type: "KITCHEN",
+                isActive: requestedKitchen.isActive,
+            });
+        }
+    }
+
+    // ================= Save Property =================
     property.areas = finalAreas;
 
     await property.save();
 
-    res.status(200).json({
+    return res.status(200).json({
         success: true,
         message: "Property updated successfully",
         data: property,
     });
 });
+
+
+
+
 // ================= Delete Property =================
 
 const deleteProperty = asyncHandler(async (req, res) => {

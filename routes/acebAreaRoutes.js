@@ -7,17 +7,17 @@ const {
   updateProperty,
   deleteProperty
 } = require("../controllers/acebAreaController");
-
+const { verifyJWT } = require("../middleware/verifyJWT");
 const router = express.Router();
 
-router.post("/", createProperty);
+router.post("/",verifyJWT, createProperty);
 
-router.get("/", getProperties);
+router.get("/", verifyJWT,  getProperties);
 
-router.get("/:id", getPropertyById);
+router.get("/:id", verifyJWT,  getPropertyById);
 
-router.put("/:id", updateProperty);
+router.put("/:id",verifyJWT, updateProperty);
 
-router.delete("/:id", deleteProperty);
+router.delete("/:id",verifyJWT, deleteProperty);
 
 module.exports = router;

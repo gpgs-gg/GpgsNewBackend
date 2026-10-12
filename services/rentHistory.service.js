@@ -263,7 +263,6 @@ const createClientRentHistory = async (client) => {
 };
 
 const generateMonthlyRent = async () => {
- 
   // const month = new Date().getMonth() + 1;
   // const year = new Date().getFullYear();
   // const month = 10;
@@ -286,25 +285,14 @@ const generateMonthlyRent = async () => {
   let todayFilterDate;
 
   if (today.getDate() >= 20) {
-    const filterDate = new Date(
-      today.getFullYear(),
-      today.getMonth() + 1,
-      1
-    );
+    const filterDate = new Date(today.getFullYear(), today.getMonth() + 1, 1);
     todayFilterDate = `${filterDate.getFullYear()}-${String(
-      filterDate.getMonth() + 1
-    ).padStart(2, "0")}-${String(
-      filterDate.getDate()
-    ).padStart(2, "0")}`;
-
-
+      filterDate.getMonth() + 1,
+    ).padStart(2, "0")}-${String(filterDate.getDate()).padStart(2, "0")}`;
   } else {
     todayFilterDate = `${today.getFullYear()}-${String(
-      today.getMonth() + 1
-    ).padStart(2, "0")}-${String(
-      today.getDate()
-    ).padStart(2, "0")}`;
-
+      today.getMonth() + 1,
+    ).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
   }
 
   //   const today = new Date();
@@ -378,8 +366,6 @@ const generateMonthlyRent = async () => {
     .populate("bedId")
     .lean();
 
-
-
   const clientIds = clients.map((client) => client._id);
   const eligibleClientCount = clientIds.length;
   const rentHistoryData = [];
@@ -392,71 +378,85 @@ const generateMonthlyRent = async () => {
     .select("clientId bedId")
     .lean();
   const existingHistorySet = new Set(
-    existingHistory.map(
-      (x) => `${x.clientId}_${x.bedId}`
-    )
+    existingHistory.map((x) => `${x.clientId}_${x.bedId}`),
   );
   // Previous Due
-  const previousHistory =
-    await ClientRentHistory.aggregate([
-      {
-        $match: {
-          clientId: {
-            $in: clientIds,
-          },
+  const previousHistory = await ClientRentHistory.aggregate([
+    {
+      $match: {
+        clientId: {
+          $in: clientIds,
         },
       },
-      {
-        $sort: {
-          year: -1,
-          month: -1,
-          createdAt: -1,
-          _id: -1,
+    },
+    {
+      $sort: {
+        year: -1,
+        month: -1,
+        createdAt: -1,
+        _id: -1,
+      },
+    },
+    {
+      $group: {
+        _id: "$clientId",
+        currentDue: {
+          $first: "$currentDue",
+        },
+        latestMonth: {
+          $first: "$month",
+        },
+        latestYear: {
+          $first: "$year",
         },
       },
-      {
-        $group: {
-          _id: "$clientId",
-          currentDue: {
-            $first: "$currentDue",
-          },
-        },
-      },
-    ]);
+    },
+  ]);
 
   const dueMap = new Map();
-  previousHistory.forEach((item) => {
-    dueMap.set(
-      String(item._id),
-      item.currentDue
-    );
-  });
-  for (const client of clients) {
+  const latestHistoryMap = new Map();
 
+  previousHistory.forEach((item) => {
+    const clientId = String(item._id);
+
+    dueMap.set(clientId, item.currentDue || 0);
+
+    latestHistoryMap.set(clientId, {
+      month: item.latestMonth,
+      year: item.latestYear,
+    });
+  });
+
+  for (const client of clients) {
     if (!client.bedId) continue;
+    // Latest Rent History validation
+    const latestHistory = latestHistoryMap.get(String(client._id));
+    if (latestHistory) {
+      const latestValue = latestHistory.year * 12 + latestHistory.month;
+      const targetValue = year * 12 + month;
+      // Latest history ke same ya usse purane month ko skip karo
+      if (targetValue <= latestValue) {
+        continue;
+      }
+      // Beech ka month missing hai toh current month generate mat karo
+      if (targetValue !== latestValue + 1) {
+        continue;
+      }
+    }
     const key = `${client._id}_${client.bedId._id}`;
     if (existingHistorySet.has(key)) {
       alreadyGeneratedCount++;
       continue;
     }
-    const previousDue =
-      dueMap.get(String(client._id)) || 0;
+    const previousDue = dueMap.get(String(client._id)) || 0;
 
-    const monthlyRent = Number(
-      client.monthlyRent || 0
-    );
-    const bookingType = client.bookingType
+    const monthlyRent = Number(client.monthlyRent || 0);
+    const bookingType = client.bookingType;
 
-    const depositAmount = Number(
-      client.depositAmount || 0
-    );
-    const processingFees = Number(
-      client.processingFees || 0
-    );
+    const depositAmount = Number(client.depositAmount || 0);
+    const processingFees = Number(client.processingFees || 0);
 
-    const parkingCharges = Number(
-      client.parkingCharges || 0
-    );
+    const parkingCharges = Number(client.parkingCharges || 0);
     const noticeLastDate = client.noticeLastDate
       ? new Date(client.noticeLastDate)
       : null;
@@ -468,7 +468,7 @@ const generateMonthlyRent = async () => {
     const monthEndDate = new Date(
       year,
       month - 1,
-      lastDay === 31 ? 30 : lastDay
+      lastDay === 31 ? 30 : lastDay,
     );
     let endDate;
     if (noticeLastDate && clientVacatingDate) {
@@ -476,17 +476,10 @@ const generateMonthlyRent = async () => {
         noticeLastDate > clientVacatingDate
           ? noticeLastDate
           : clientVacatingDate;
-      endDate =
-        lastDate > monthEndDate
-          ? monthEndDate
-          : lastDate;
+      endDate = lastDate > monthEndDate ? monthEndDate : lastDate;
     } else if (noticeLastDate || clientVacatingDate) {
-      const lastDate =
-        noticeLastDate || clientVacatingDate;
-      endDate =
-        lastDate > monthEndDate
-          ? monthEndDate
-          : lastDate;
+      const lastDate = noticeLastDate || clientVacatingDate;
+      endDate = lastDate > monthEndDate ? monthEndDate : lastDate;
     } else {
       endDate = monthEndDate;
     }
@@ -499,36 +492,29 @@ const generateMonthlyRent = async () => {
     } else {
       startDate = new Date(year, month - 1, 1);
     }
-    const daysCount = getDaysCount(
-      startDate,
-      endDate,
-      month,
-      year
-    );
+    const daysCount = getDaysCount(startDate, endDate, month, year);
 
     const actualMonthDays = new Date(year, month, 0).getDate();
 
-    const rentDivider =
-      actualMonthDays === 31 ? 30 : actualMonthDays;
+    const rentDivider = actualMonthDays === 31 ? 30 : actualMonthDays;
 
-    const calculation =
-      calculateRentHistory({
-        monthlyRent,
-        depositAmount: 0,  // for every month
-        daysCount,
-        rentDivider,
-        previousDue,
-        ebAmt: 0,
-        flatEB: 0,
-        adjEB: 0,
-        adjAmt: 0,
-        processingFees: 0,  // for every month
-        parkingCharges,
-        processingFeesReceived: 0,
-        depositAmountReceived: 0,
-        rentReceived: 0,
-        bookingType
-      });
+    const calculation = calculateRentHistory({
+      monthlyRent,
+      depositAmount: 0, // for every month
+      daysCount,
+      rentDivider,
+      previousDue,
+      ebAmt: 0,
+      flatEB: 0,
+      adjEB: 0,
+      adjAmt: 0,
+      processingFees: 0, // for every month
+      parkingCharges,
+      processingFeesReceived: 0,
+      depositAmountReceived: 0,
+      rentReceived: 0,
+      bookingType,
+    });
     rentHistoryData.push({
       clientId: client._id,
 
@@ -582,78 +568,68 @@ const generateMonthlyRent = async () => {
   const batchResult = await batchInsert(
     ClientRentHistory,
     rentHistoryData,
-    500
+    500,
   );
- const generatedCount = batchResult.insertedCount;
+  const generatedCount = batchResult.insertedCount;
 
-if (generatedCount > 0) {
-  const generatedClientIds = rentHistoryData.map(
-    (item) => item.clientId
-  );
+  if (generatedCount > 0) {
+    const generatedClientIds = rentHistoryData.map((item) => item.clientId);
 
-  const generatedHistories = await ClientRentHistory.find({
-    clientId: { $in: generatedClientIds },
-    month,
-    year,
-  })
-    .select("_id clientId month year currentDue createdAt")
-    .sort({
-      createdAt: -1,
-      _id: -1,
+    const generatedHistories = await ClientRentHistory.find({
+      clientId: { $in: generatedClientIds },
+      month,
+      year,
     })
-    .lean();
+      .select("_id clientId month year currentDue createdAt")
+      .sort({
+        createdAt: -1,
+        _id: -1,
+      })
+      .lean();
 
-  const latestHistoryMap = new Map();
+    const latestHistoryMap = new Map();
 
-  for (const history of generatedHistories) {
-    const clientId = String(history.clientId);
+    for (const history of generatedHistories) {
+      const clientId = String(history.clientId);
 
-    if (!latestHistoryMap.has(clientId)) {
-      latestHistoryMap.set(clientId, history);
+      if (!latestHistoryMap.has(clientId)) {
+        latestHistoryMap.set(clientId, history);
+      }
     }
-  }
 
-  const clientBulkOperations = [];
+    const clientBulkOperations = [];
 
-  for (const history of latestHistoryMap.values()) {
-    clientBulkOperations.push({
-      updateOne: {
-        filter: {
-          _id: history.clientId,
-        },
-        update: {
-          $set: {
-            "latestRentHistory.historyId": history._id,
-            "latestRentHistory.month": history.month,
-            "latestRentHistory.year": history.year,
-            "latestRentHistory.currentDue": Number(
-              history.currentDue || 0
-            ),
+    for (const history of latestHistoryMap.values()) {
+      clientBulkOperations.push({
+        updateOne: {
+          filter: {
+            _id: history.clientId,
+          },
+          update: {
+            $set: {
+              "latestRentHistory.historyId": history._id,
+              "latestRentHistory.month": history.month,
+              "latestRentHistory.year": history.year,
+              "latestRentHistory.currentDue": Number(history.currentDue || 0),
+            },
           },
         },
-      },
-    });
-  }
+      });
+    }
 
-  if (clientBulkOperations.length > 0) {
-    await Client.bulkWrite(clientBulkOperations, {
-      ordered: false,
-    });
+    if (clientBulkOperations.length > 0) {
+      await Client.bulkWrite(clientBulkOperations, {
+        ordered: false,
+      });
+    }
   }
-}
   const failedCount = batchResult.failedCount;
 
   const failedClientIds = batchResult.failedClients || [];
 
-  const completedCount =
-    alreadyGeneratedCount + generatedCount;
+  const completedCount = alreadyGeneratedCount + generatedCount;
 
-  const remainingCount =
-    Math.max(
-      eligibleClientCount - completedCount,
-      0
-    );
-
+  const remainingCount = Math.max(eligibleClientCount - completedCount, 0);
 
   // ✅ YAHAN DATABASE ME SAVE HOGA
   await RentGenerationLog.findOneAndUpdate(
@@ -670,10 +646,7 @@ if (generatedCount > 0) {
         failedCount,
         remainingCount,
         failedClientIds,
-        status:
-          failedCount > 0
-            ? "Completed With Errors"
-            : "Completed",
+        status: failedCount > 0 ? "Completed With Errors" : "Completed",
 
         completedAt: new Date(),
       },
@@ -682,9 +655,8 @@ if (generatedCount > 0) {
       upsert: true,
       new: true,
       setDefaultsOnInsert: true,
-    }
+    },
   );
-
 
   // ✅ Iske baad tumhara existing return
   return {
@@ -702,7 +674,6 @@ if (generatedCount > 0) {
     year,
     monthName: monthNames[month - 1],
   };
-
 };
 
 const recalculateRentHistory = async (

@@ -360,10 +360,7 @@ exports.getPropertyEbClients = async (req, res) => {
       cycleStartDate = formatDate(cycleStart);
       cycleEndDate = formatDate(cycleEnd);
 
-      console.log("EB CYCLE FROM PROPERTY:", {
-        cycleStartDate,
-        cycleEndDate,
-      });
+   
     }
 
     // ==========================================

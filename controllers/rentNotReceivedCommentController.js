@@ -89,7 +89,7 @@ exports.addRentNotReceivedComment = async (req, res) => {
           {
             comment: comment.trim(),
             date: new Date(),
-            addedBy: req.user?._id || null,
+            addedBy: user || null,
           },
         ],
       });
