@@ -10,11 +10,13 @@ const {
   getLatestACConsumptionData
 } = require("../controllers/acebReadingController");
 
+const { verifyJWT } = require("../middleware/verifyJWT");
 
 
 // Create monthly reading
 router.post(
   "/",
+  verifyJWT,
   createElectricityReading
 );
 
@@ -22,32 +24,38 @@ router.post(
 // Get specific property + month
 router.get(
   "/",
+  verifyJWT,
   getElectricityReading
 );
 
 router.get(
   "/previous",
+  verifyJWT,
   getPreviousElectricityReading
 );
 // Get all months of property
 router.get(
   "/roomId/:roomId",
+  verifyJWT,
   getPropertyElectricityReadings
 );
 
 router.get(
   "/:id",
+  verifyJWT,
   getElectricityReadingById
 );
 
 // Update monthly reading
 router.put(
   "/:id",
+  verifyJWT,
   updateElectricityReading
 );
 
 router.get(
   "/ac-consumption/:propertyId",
+  verifyJWT,
   getLatestACConsumptionData
 );
 

@@ -163,12 +163,12 @@ const getAuthenticatedEmployee = async (userId) => {
   // EMPLOYEE STATUS
   // ======================================================
 
-  if (
-    employee.status &&
-    String(employee.status).trim().toLowerCase() !== "active"
-  ) {
-    throw new Error("Employee is inactive");
-  }
+  // if (
+  //   employee.status &&
+  //   String(employee.status).trim().toLowerCase() !== "active"
+  // ) {
+  //   throw new Error("Employee is inactive");
+  // }
 
   // ======================================================
   // LOGIN ENABLED

@@ -8,6 +8,7 @@ const {
 } = require("../controllers/bookingEnquiryController");
 
 const rateLimit = require("express-rate-limit");
+const {verifyJWT} = require("../middleware/verifyJWT");
 
 const router = express.Router();
 
@@ -23,15 +24,16 @@ const bookingEnquiryLimiter = rateLimit({
 });
 
 // Public booking form
-router.post("/", bookingEnquiryLimiter, createBookingEnquiry);
+router.post("/",  bookingEnquiryLimiter, createBookingEnquiry);
 
 // Admin APIs - Login required
-router.get("/", getBookingEnquiries);
+router.get("/",verifyJWT, getBookingEnquiries);
 
-router.get("/:id", getBookingEnquiryById);
+router.get("/:id", verifyJWT, getBookingEnquiryById);
 
 router.patch(
   "/:id/status",
+  verifyJWT,
   updateBookingEnquiryStatus
 );
 

@@ -210,13 +210,15 @@ const getCurrentUser = asyncHandler(async (req, res) => {
   const user = req.user;
   let teamCode = "";
   let department = "";
+  let designation = "";
   // Get latest teamCode from Employee collection
   if (user?.employeeId) {
     const employee = await Employee.findById(user.employeeId).select(
-      "teamCode department",
+      "teamCode department designation",
     );
     teamCode = employee?.teamCode || "";
     department = employee?.department || "";
+    designation = employee?.designation || "";
   }
   return res.status(200).json({
     success: true,
@@ -224,6 +226,7 @@ const getCurrentUser = asyncHandler(async (req, res) => {
       ...user.toObject(),
       teamCode,
       department,
+      designation
     },
   });
 });

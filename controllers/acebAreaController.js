@@ -90,15 +90,34 @@ const createProperty = asyncHandler(async (req, res) => {
 
     const areas = [];
 
-    // Create uniquely numbered rooms
-    for (let i = 1; i <= totalRoomCount; i++) {
-        areas.push({
-            name: `RoomNo_${i}_ACEB`,
-            type: "ROOM",
-            isActive: roomIsActive,
-        });
+// Create only the selected room number
+const roomAreaTypes = areaTypes.filter(
+    (areaType) => areaType.type === "ROOM"
+);
+
+for (const areaType of roomAreaTypes) {
+    const roomNo = Number(areaType.count);
+
+    if (
+        !Number.isInteger(roomNo) ||
+        roomNo < 1 ||
+        roomNo > 100
+    ) {
+        throw new ApiError(
+            400,
+            "Room number must be between 1 and 100"
+        );
     }
 
+    areas.push({
+        name: `RoomNo_${roomNo}_ACEB`,
+        type: "ROOM",
+        isActive:
+            areaType.isActive !== undefined
+                ? areaType.isActive
+                : true,
+    });
+}
     // Create one hall if requested
     if (hall) {
         areas.push({

@@ -9,16 +9,17 @@ const {
   deleteBed,
   deleteMultipleBeds
 } = require("../controllers/bedController");
+const {verifyJWT} = require("../middleware/verifyJWT");
 
-router.post("/", createBed);
+router.post("/",verifyJWT, createBed);
 
-router.get("/", getBeds);
+router.get("/",verifyJWT, getBeds);
 
-router.get("/:id", getSingleBed); 
+router.get("/:id",verifyJWT, getSingleBed); 
 
-router.put("/:id", updateBed);
+router.put("/:id",verifyJWT, updateBed);
 
-router.delete("/:id", deleteBed);
-router.delete("/", deleteMultipleBeds); // Bulk delete
+router.delete("/:id",verifyJWT, deleteBed);
+router.delete("/",verifyJWT, deleteMultipleBeds); // Bulk delete
 
 module.exports = router;
