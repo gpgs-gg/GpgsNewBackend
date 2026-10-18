@@ -12,6 +12,7 @@ const {
   toggleEmployeeLoginController,
   getLoginEnabledEmployeesController,getManagerEmployees
 } = require("../controllers/EmployeesController");
+const {verifyJWT} = require("../middleware/verifyJWT");
 
 const router = express.Router();
 
@@ -32,22 +33,22 @@ const upload = multer({
 // LOGIN
 // ============================================================
 
-router.post("/login", LoginUser);
+router.post("/login", verifyJWT, LoginUser);
 
 // ============================================================
 // EMPLOYEE LIST
 // IMPORTANT: THIS MUST COME BEFORE /:id
 // ============================================================
 
-router.get("/", getEmployeeDetails);
+router.get("/",verifyJWT, getEmployeeDetails);
 
 // ============================================================
 // CREATE EMPLOYEE
 // ============================================================
 
-router.post("/", createEmployee);
+router.post("/",verifyJWT, createEmployee);
 // Get employees whose login is enabled
-router.get("/login-enabled", getLoginEnabledEmployeesController);
+router.get("/login-enabled", verifyJWT, getLoginEnabledEmployeesController);
 // ============================================================
 // EMPLOYEE WORKLOGS - STATIC ROUTES FIRST
 // ============================================================
@@ -58,13 +59,13 @@ router.get("/login-enabled", getLoginEnabledEmployeesController);
 // ============================================================
 // SINGLE EMPLOYEE
 // ============================================================
-router.get("/managers", getManagerEmployees);
-router.patch("/toggle-login", toggleEmployeeLoginController);
-router.get("/:id", getEmployeeById);
+router.get("/managers",verifyJWT, getManagerEmployees);
+router.patch("/toggle-login",verifyJWT, toggleEmployeeLoginController);
+router.get("/:id",verifyJWT, getEmployeeById);
 
-router.put("/:id", updateEmployee);
+router.put("/:id",verifyJWT, updateEmployee);
 
-router.delete("/:id", deleteEmployee);
+router.delete("/:id",verifyJWT, deleteEmployee);
 
 
 // ============================================================
@@ -87,6 +88,7 @@ router.post(
       maxCount: 1,
     },
   ]),
+  verifyJWT,
   EmployeeDocumentUpload,
 );
 

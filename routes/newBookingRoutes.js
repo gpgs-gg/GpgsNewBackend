@@ -6,7 +6,7 @@ const {
   getBookingById,
   updateBooking,
   deleteBooking,
-  cancelBooking
+  cancelBooking,
 } = require("../controllers/NewBookingController");
 const { verifyJWT } = require("../middleware/verifyJWT");
 router.post("/", verifyJWT, createBooking);
@@ -15,4 +15,5 @@ router.get("/:id",verifyJWT, getBookingById);
 router.put("/:id", verifyJWT, updateBooking);
 router.delete("/:id", verifyJWT, deleteBooking);
 router.put("/cancel/:id",verifyJWT, cancelBooking);
+
 module.exports = router;

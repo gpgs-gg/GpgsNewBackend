@@ -18,29 +18,29 @@ const { verifyJWT } = require("../middleware/verifyJWT");
 // CREATE
 router.post(
   "/",
-  upload.array("attachment", 20),
+  upload.array("attachment", 20),verifyJWT,
   createTicket
 );
 
 // READ ALL
-router.get("/",  getAllTickets);
-router.get("/navigation/:id",  getTicketNavigation);
+router.get("/",verifyJWT,getAllTickets);
+router.get("/navigation/:id",verifyJWT,  getTicketNavigation);
 
 // READ SINGLE
-router.get("/:id", getTicketById);
+router.get("/:id",verifyJWT, getTicketById);
 
 // UPDATE
 router.put(
   "/:id",
-  upload.array("attachment", 20),
+  upload.array("attachment", 20),verifyJWT,
   updateTicket
 );
 
 // DELETE
-router.delete("/:id", deleteTicket);
+router.delete("/:id",verifyJWT, deleteTicket);
 
 // ADD WORKLOG
-router.post("/:id/worklog", addWorkLog);
-router.post("/export", exportTickets);
+router.post("/:id/worklog",verifyJWT, addWorkLog);
+router.post("/export",verifyJWT, exportTickets);
 
 module.exports = router;

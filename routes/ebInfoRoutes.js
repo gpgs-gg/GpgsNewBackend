@@ -7,11 +7,12 @@ const {
   creaetElectricityBillData,
   getSingleElectricityBillData,bulkTransferElectricityBill
 } = require("../controllers/ebInfoController");
+const {verifyJWT} = require("../middleware/verifyJWT");
 
-router.post( "/",upload.array("attachment", 5),creaetElectricityBillData);
-router.get("/", getElectricityBillData);
-router.put("/bulk-transfer",bulkTransferElectricityBill);
-router.get("/:id",getSingleElectricityBillData);
-router.put( "/:id",upload.array("attachment", 5),updateElectricityBillData );
+router.post( "/", verifyJWT ,upload.array("attachment", 5), creaetElectricityBillData);
+router.get("/", verifyJWT, getElectricityBillData);
+router.put("/bulk-transfer", verifyJWT,bulkTransferElectricityBill);
+router.get("/:id",verifyJWT,getSingleElectricityBillData);
+router.put( "/:id",verifyJWT, upload.array("attachment", 5),updateElectricityBillData );
 
 module.exports = router;

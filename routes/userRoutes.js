@@ -8,16 +8,17 @@ const {
   deleteUser,
   getUserDropdown,
 } = require("../controllers/UserContoller");
+const { verifyJWT } = require("../middleware/verifyJWT");
 
 
-router.get("/", getAllUsers);
+router.get("/",verifyJWT, getAllUsers);
 
-router.get("/dropdown", getUserDropdown);
+router.get("/dropdown",verifyJWT, getUserDropdown);
 
-router.get("/:id", getUserById);
+router.get("/:id",verifyJWT, getUserById);
 
-router.put("/:id", updateUser);
+router.put("/:id",verifyJWT, updateUser);
 
-router.delete("/:id", deleteUser);
+router.delete("/:id",verifyJWT, deleteUser);
 
 module.exports = router;

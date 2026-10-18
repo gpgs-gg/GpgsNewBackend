@@ -6,7 +6,6 @@ const {
   toggleClientLogin,
 } = require("../controllers/toggleClientLogin");
 
-
 router.patch(
   "/:id",
   verifyJWT,

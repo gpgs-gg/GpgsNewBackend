@@ -7,11 +7,17 @@ const {
   getSingleBed,
   updateBed,
   deleteBed,
-  deleteMultipleBeds
+  deleteMultipleBeds,
+  getBedsUpcomingRentHike
 } = require("../controllers/bedController");
 const {verifyJWT} = require("../middleware/verifyJWT");
 
 router.post("/",verifyJWT, createBed);
+router.get(
+  "/upcoming-rent-hike",
+  // verifyJWT,
+  getBedsUpcomingRentHike
+);
 
 router.get("/",verifyJWT, getBeds);
 

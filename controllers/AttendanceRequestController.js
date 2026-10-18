@@ -475,6 +475,154 @@ const getAttendanceRequestsByRequestedTo = asyncHandler(async (req, res) => {
     data,
   });
 });
+// ======================================================
+// GET ATTENDANCE REQUESTS SUBMITTED BY LOGGED-IN EMPLOYEE
+// ======================================================
+const getMyAttendanceRequests = asyncHandler(async (req, res) => {
+  const page = Math.max(Number(req.query.page) || 1, 1);
+  const limit = Math.min(Math.max(Number(req.query.limit) || 10, 1), 100);
+  const skip = (page - 1) * limit;
+
+  // Get the logged-in employee ID from the JWT middleware
+  const employeeId = req.user?.employeeId;
+
+  if (!employeeId || !mongoose.isValidObjectId(employeeId)) {
+    throw new ApiError(400, "Valid employee ID is required");
+  }
+
+  // Only return requests created by the logged-in employee
+  const query = {
+    requestedBy: employeeId,
+  };
+
+  // Optional status filter: PENDING, APPROVED, REJECTED
+  if (req.query.status) {
+    if (!["PENDING", "APPROVED", "REJECTED"].includes(req.query.status)) {
+      throw new ApiError(400, "Invalid attendance request status");
+    }
+
+    query.status = req.query.status;
+  }
+
+  const [totalRecords, requests] = await Promise.all([
+    AttendanceRequest.countDocuments(query),
+
+    AttendanceRequest.find(query)
+      .populate(
+        "requestedBy",
+        "employeeId employeeName email department designation",
+      )
+      .populate(
+        "requestedTo",
+        "employeeId employeeName email department designation",
+      )
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit)
+      .lean(),
+  ]);
+
+  // Fetch attendance records for the requested dates in one query
+  const requestPairs = requests
+    .map((request) => {
+      if (!request.requestedBy?._id || !request.attendanceDate) {
+        return null;
+      }
+
+      return {
+        employeeId: request.requestedBy._id,
+        attendanceDate: request.attendanceDate,
+      };
+    })
+    .filter(Boolean);
+
+  let attendanceMap = new Map();
+
+  if (requestPairs.length > 0) {
+    const orConditions = requestPairs.map(
+      ({ employeeId, attendanceDate }) => {
+        const date = new Date(attendanceDate);
+
+        // Match the attendance date using IST day boundaries
+        const startOfDay = new Date(
+          Date.UTC(
+            date.getUTCFullYear(),
+            date.getUTCMonth(),
+            date.getUTCDate(),
+          ) -
+            5.5 * 60 * 60 * 1000,
+        );
+
+        const endOfDay = new Date(
+          startOfDay.getTime() + 24 * 60 * 60 * 1000,
+        );
+
+        return {
+          employeeId,
+          attendanceDate: {
+            $gte: startOfDay,
+            $lt: endOfDay,
+          },
+        };
+      },
+    );
+
+    const attendanceDocs = await Attendance.find({
+      $or: orConditions,
+    })
+      .select("employeeId attendanceDate inTime outTime status")
+      .lean();
+
+    attendanceMap = new Map(
+      attendanceDocs.map((attendance) => [
+        `${attendance.employeeId}_${new Date(
+          attendance.attendanceDate,
+        )
+          .toISOString()
+          .slice(0, 10)}`,
+        attendance,
+      ]),
+    );
+  }
+
+  // Include attendance details with each submitted request
+  const data = requests.map((request) => {
+    const employeeId = request.requestedBy?._id;
+    const dateKey = new Date(request.attendanceDate)
+      .toISOString()
+      .slice(0, 10);
+
+    const attendance = attendanceMap.get(`${employeeId}_${dateKey}`);
+
+    return {
+      ...request,
+      inTime: attendance?.inTime || null,
+      outTime: attendance?.outTime || null,
+
+      // Prefer the regularized status saved on the request
+      attendanceStatus:
+        request.status === "APPROVED"
+          ? request.attendanceStatus ??
+            attendance?.status ??
+            "ABSENT"
+          : attendance?.status ?? null,
+    };
+  });
+
+  const totalPages = Math.ceil(totalRecords / limit);
+
+  res.status(200).json({
+    success: true,
+    page,
+    limit,
+    totalRecords,
+    totalPages,
+    hasNextPage: page < totalPages,
+    hasPrevPage: page > 1,
+    count: data.length,
+    data,
+  });
+});
 module.exports = {
   createAttendanceRequest,
   getAllAttendanceRequests,
@@ -482,4 +630,5 @@ module.exports = {
   updateAttendanceRequestStatus,
   deleteAttendanceRequest,
   getAttendanceRequestsByRequestedTo,
+  getMyAttendanceRequests
 };

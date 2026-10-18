@@ -86,51 +86,65 @@ exports.createBookingEnquiry = async (req, res) => {
 // GET ALL BOOKING ENQUIRIES
 // =====================================================
 
+
+
+
 exports.getBookingEnquiries = async (req, res) => {
   try {
-    const {
-      page = 1,
-      limit = 10,
-      search = "",
-    } = req.query;
 
-    const pageNumber = Math.max(Number(page), 1);
-    const limitNumber = Math.max(Number(limit), 1);
-    const skip = (pageNumber - 1) * limitNumber;
+
+    // Pagination — same pattern as getAllProperties
+    const page = Math.max(parseInt(req.query.page) || 1, 1);
+    const limit = Math.max(parseInt(req.query.limit) || 10, 1);
+    const skip = (page - 1) * limit;
+
+    const search = req.query.search || "";
 
     const query = {};
 
+    // Search
     if (search.trim()) {
-      const regex = new RegExp(search.trim(), "i");
+      const regex = new RegExp(
+        search.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&"),
+        "i",
+      );
 
       query.$or = [
         { fullName: regex },
-        { mobile: regex },
+        { whatsappNumber: regex },
+        { callingNumber: regex },
         { email: regex },
-        { property: regex },
-        { message: regex },
+        { companyCollegeName: regex },
+        { profile: regex },
+        { fatherName: regex },
+        { fatherContact: regex },
+        { motherName: regex },
+        { motherContact: regex },
+        { status: regex },
+        { remarks: regex },
       ];
     }
 
-    const [enquiries, total] = await Promise.all([
-      BookingEnquiry.find(query)
-        .sort({ createdAt: -1 })
-        .skip(skip)
-        .limit(limitNumber)
-        .lean(),
+    // Count only matching enquiries
+    const totalRecords = await BookingEnquiry.countDocuments(query);
 
-      BookingEnquiry.countDocuments(query),
-    ]);
+    // Fetch filtered and paginated enquiries
+    const enquiries = await BookingEnquiry.find(query)
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit)
+      .lean();
 
     return res.status(200).json({
       success: true,
+      page,
+      limit,
+      totalRecords,
+      totalPages: Math.ceil(totalRecords / limit),
+      hasNextPage: page < Math.ceil(totalRecords / limit),
+      hasPrevPage: page > 1,
+      count: enquiries.length,
       data: enquiries,
-      pagination: {
-        page: pageNumber,
-        limit: limitNumber,
-        total,
-        totalPages: Math.ceil(total / limitNumber),
-      },
     });
   } catch (error) {
     console.error("GET BOOKING ENQUIRIES ERROR:", error);
@@ -142,6 +156,9 @@ exports.getBookingEnquiries = async (req, res) => {
     });
   }
 };
+
+
+
 // =====================================================
 // GET SINGLE BOOKING ENQUIRY
 // =====================================================

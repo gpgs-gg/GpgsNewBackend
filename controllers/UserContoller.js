@@ -43,9 +43,9 @@ const getAllUsers = asyncHandler(async (req, res) => {
     query.role = req.query.role;
   }
 
-  if (req.query.isActive !== undefined) {
-    query.isActive = req.query.isActive === "true";
-  }
+if (req.query.isActive !== undefined && req.query.isActive !== "") {
+   query.isActive = req.query.isActive === "true";
+ }
 
   const totalRecords = await User.countDocuments(query);
 

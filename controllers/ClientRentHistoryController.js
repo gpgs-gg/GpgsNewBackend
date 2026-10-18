@@ -3,6 +3,8 @@ const Client = require("../models/client.model");
 const Property = require("../models/property.model");
 const Bed = require("../models/bed.model");
 const calculateRentHistory = require("../utils/calculateRentHistory");
+const { format } = require("@fast-csv/format");
+const PDFDocument = require("pdfkit");
 // const getDaysCount = require("../utils/getDaysCount");
 const { generateWorkLogs, createWorkLog } = require("../utils/worklog");
 
@@ -776,5 +778,302 @@ exports.deleteClientRentHistory = async (req, res) => {
       success: false,
       message: error.message,
     });
+  }
+};
+
+
+exports.exportClientRentData = async (req, res) => {
+  try {
+    const {
+      search = "",
+      filters = {},
+      clientId = "",
+      propertyId = "",
+      rentIds = [],
+      columns = [],
+    } = req.body;
+
+    // Build query using the selected filters
+    const query = {};
+
+    const selectedClientId = clientId || filters?.clientId;
+
+    if (selectedClientId) {
+      query.clientId = selectedClientId;
+    }
+
+    const selectedPropertyId = propertyId || filters?.propertyId;
+
+    if (selectedPropertyId) {
+      query.propertyId = selectedPropertyId;
+    }
+
+    // Apply search conditions
+    if (search.trim()) {
+      const regex = {
+        $regex: search.trim(),
+        $options: "i",
+      };
+
+      query.$or = [
+        { propertyCode: regex },
+        { paymentStatus: regex },
+        { monthName: regex },
+        { remarks: regex },
+        {
+          paymentComments: {
+            $elemMatch: { comment: regex.$regex },
+          },
+        },
+      ];
+    }
+
+    // Export selected records when IDs are provided
+    if (Array.isArray(rentIds) && rentIds.length > 0) {
+      const mongoose = require("mongoose");
+
+      const validIds = rentIds.filter((id) =>
+        mongoose.Types.ObjectId.isValid(id),
+      );
+
+      if (validIds.length === 0) {
+        return res.status(400).json({
+          success: false,
+          message: "No valid rent records selected.",
+        });
+      }
+
+      query._id = { $in: validIds };
+    }
+
+    // Allowed export columns
+    const defaultColumns = [
+      "propertyCode",
+      "paymentStatus",
+      "monthName",
+      "year",
+      "currentDue",
+      "totalReceived",
+      "totalReceivable",
+      "rentAmt",
+      "daysCount",
+      "ebAmt",
+      "adjEB",
+      "previousDue",
+      "parkingCharges",
+      "depositAmount",
+      "processingFees",
+      "adjAmt",
+      "flatEB",
+      "monthlyRent",
+      "startDate",
+      "endDate",
+      "remarks",
+    ];
+
+    const exportColumns =
+      Array.isArray(columns) && columns.length
+        ? columns.filter((column) => defaultColumns.includes(column))
+        : defaultColumns;
+
+    const headerMap = {
+      propertyCode: "Property Code",
+      paymentStatus: "Pay Status",
+      monthName: "Month",
+      year: "Year",
+      currentDue: "Current Due",
+      totalReceived: "Total Received",
+      totalReceivable: "Total Receivable",
+      rentAmt: "Rent Amount",
+      daysCount: "Days Count",
+      ebAmt: "EB Amount",
+      adjEB: "Adjusted EB",
+      previousDue: "Previous Due",
+      parkingCharges: "Parking Charges",
+      depositAmount: "Deposit",
+      processingFees: "Processing Fee",
+      adjAmt: "Adjusted Amount",
+      flatEB: "Flat EB",
+      monthlyRent: "Monthly Rent",
+      startDate: "Rent Start Date",
+      endDate: "Rent Last Date",
+      remarks: "Remarks",
+    };
+
+    // Query all matching records, not just the current frontend page
+    const records = await ClientRentHistory.find(query)
+      .select(`${exportColumns.join(" ")} propertyId`)
+      .populate({
+        path: "propertyId",
+        select: "propertyCode",
+      })
+      .sort({ year: -1, month: -1, createdAt: -1 })
+      .lean();
+
+    // Set PDF download headers
+    const filename = `rent-ledger-${new Date().toISOString().slice(0, 10)}.pdf`;
+
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+
+    // Landscape layout accommodates the many rent ledger columns
+    const doc = new PDFDocument({
+      size: "A3",
+      layout: "landscape",
+      margins: {
+        top: 35,
+        bottom: 35,
+        left: 25,
+        right: 25,
+      },
+      bufferPages: false,
+    });
+
+    doc.pipe(res);
+
+    const pageWidth =
+      doc.page.width - doc.page.margins.left - doc.page.margins.right;
+
+    const columnWidth = pageWidth / exportColumns.length;
+    const rowHeight = 32;
+
+    // Render report title and table headings
+    const drawHeader = () => {
+      doc.font("Helvetica-Bold").fontSize(16).text("Rent Ledger Report", {
+        align: "center",
+      });
+
+      doc.moveDown(0.5);
+
+      doc
+        .font("Helvetica")
+        .fontSize(8)
+        .text(`Generated: ${new Date().toLocaleDateString("en-IN")}`);
+
+      doc.moveDown();
+
+      const startX = doc.page.margins.left;
+      const startY = doc.y;
+
+      doc.save();
+      doc.rect(startX, startY, pageWidth, rowHeight).fill("#e5e7eb");
+      doc.restore();
+
+      doc.font("Helvetica-Bold").fontSize(6.5);
+
+      exportColumns.forEach((column, index) => {
+        doc.text(
+          headerMap[column] || column,
+          startX + index * columnWidth + 2,
+          startY + 5,
+          {
+            width: columnWidth - 4,
+            height: rowHeight - 8,
+            ellipsis: true,
+          },
+        );
+      });
+
+      doc.y = startY + rowHeight;
+    };
+
+    drawHeader();
+
+    let rowIndex = 0;
+
+    // Format values before writing each cell
+    const formatValue = (column, value) => {
+      if (value === null || value === undefined) {
+        return "-";
+      }
+
+      if (["startDate", "endDate"].includes(column)) {
+        const date = new Date(value);
+
+        return Number.isNaN(date.getTime())
+          ? "-"
+          : date.toLocaleDateString("en-IN", {
+              day: "2-digit",
+              month: "short",
+              year: "numeric",
+              timeZone: "Asia/Kolkata",
+            });
+      }
+
+      if (typeof value === "number") {
+        return value.toLocaleString("en-IN");
+      }
+
+      if (typeof value === "object") {
+        return JSON.stringify(value);
+      }
+
+      return String(value);
+    };
+
+for (const record of records) {
+  // Start a new page when the current page has insufficient space
+  if (doc.y + rowHeight > doc.page.height - doc.page.margins.bottom) {
+    doc.addPage();
+    drawHeader();
+  }
+
+  const startX = doc.page.margins.left;
+  const startY = doc.y;
+
+  // Alternate row backgrounds for readability
+  if (rowIndex % 2 === 0) {
+    doc.save();
+    doc.rect(startX, startY, pageWidth, rowHeight).fill("#f9fafb");
+    doc.restore();
+  }
+
+  doc.font("Helvetica").fontSize(6.5).fillColor("#111827");
+
+  exportColumns.forEach((column, index) => {
+  const rawValue =
+    column === "propertyCode"
+      ? record.propertyId?.propertyCode
+      : record[column];
+
+  const value = formatValue(column, rawValue);
+
+    doc.text(value, startX + index * columnWidth + 2, startY + 5, {
+      width: columnWidth - 4,
+      height: rowHeight - 8,
+      ellipsis: true,
+    });
+  });
+
+  doc
+    .moveTo(startX, startY + rowHeight)
+    .lineTo(startX + pageWidth, startY + rowHeight)
+    .lineWidth(0.3)
+    .strokeColor("#d1d5db")
+    .stroke();
+
+  doc.y = startY + rowHeight;
+  rowIndex++;
+}
+
+    // Show a message when no matching records exist
+    if (rowIndex === 0) {
+      doc.font("Helvetica").fontSize(12).text("No rent records found.", {
+        align: "center",
+      });
+    }
+
+    doc.end();
+  } catch (error) {
+    console.error("Export Client Rent Data Error:", error);
+
+    if (!res.headersSent) {
+      return res.status(500).json({
+        success: false,
+        message: "Failed to export rent ledger PDF.",
+      });
+    }
+
+    res.end();
   }
 };

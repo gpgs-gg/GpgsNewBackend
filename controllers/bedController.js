@@ -3,6 +3,255 @@ const Property = require("../models/property.model");
 const mongoose = require("mongoose");
 const { generateWorkLogs, createWorkLog } = require("../utils/worklog");
 
+
+
+
+exports.getBedsUpcomingRentHike = async (req, res) => {
+  try {
+    // ================= Pagination =================
+    const page = Math.max(parseInt(req.query.page) || 1, 1);
+    const limit = Math.max(parseInt(req.query.limit) || 10, 1);
+    const skip = (page - 1) * limit;
+
+    // ================= URHD: Next 3 Months =================
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const threeMonthsLater = new Date(today);
+    threeMonthsLater.setMonth(threeMonthsLater.getMonth() + 3);
+
+    // ================= Base Query =================
+    const query = {
+      upcomingRentHikeDate: {
+        $gte: today,
+        $lte: threeMonthsLater,
+      },
+    };
+
+    // ================= Search =================
+    if (req.query.search?.trim()) {
+      const search = req.query.search.trim();
+
+      const searchableFields = Object.keys(Bed.schema.paths).filter(
+        (key) => {
+          const type = Bed.schema.paths[key].instance;
+
+          return (
+            ["String", "Number"].includes(type) &&
+            !["_id", "__v"].includes(key)
+          );
+        },
+      );
+
+      const bedSearch = searchableFields.flatMap((field) => {
+        const type = Bed.schema.paths[field].instance;
+
+        if (type === "String") {
+          return [
+            {
+              [field]: {
+                $regex: search,
+                $options: "i",
+              },
+            },
+          ];
+        }
+
+        if (type === "Number" && !isNaN(search)) {
+          return [{ [field]: Number(search) }];
+        }
+
+        return [];
+      });
+
+      const properties = await Property.find({
+        $or: [
+          { propertyCode: { $regex: search, $options: "i" } },
+          { propertyLocation: { $regex: search, $options: "i" } },
+          { propertyName: { $regex: search, $options: "i" } },
+        ],
+      }).select("_id");
+
+      const propertyIds = properties.map((p) => p._id);
+
+      query.$or = [
+        ...bedSearch,
+        ...(propertyIds.length
+          ? [{ propertyId: { $in: propertyIds } }]
+          : []),
+      ];
+    }
+
+    // ================= Filters =================
+    if (req.query.propertyId) {
+      query.propertyId = req.query.propertyId;
+    }
+
+    if (req.query.gender) {
+      query.gender = req.query.gender;
+    }
+
+    if (req.query.sharingType) {
+      query.sharingType = req.query.sharingType;
+    }
+
+    if (req.query.bathAttached) {
+      query.bathAttached = req.query.bathAttached;
+    }
+
+    if (req.query.acRoom) {
+      query.acRoom = req.query.acRoom;
+    }
+
+    if (req.query.status) {
+      query.status = req.query.status;
+    }
+
+    if (req.query.roomNo) {
+      query.roomNo = req.query.roomNo;
+    }
+
+    if (req.query.bedNo) {
+      query.bedNo = req.query.bedNo;
+    }
+
+    if (req.query.propertyLocation) {
+      const properties = await Property.find({
+        propertyLocation: req.query.propertyLocation,
+      }).select("_id");
+
+      const propertyIds = properties.map((p) => p._id);
+
+      // Preserve existing propertyId filter also
+      query.propertyId = {
+        $in: properties
+          .filter(
+            (p) =>
+              !req.query.propertyId ||
+              p._id.toString() === req.query.propertyId,
+          )
+          .map((p) => p._id),
+      };
+    }
+
+    // Monthly Rent
+    if (req.query.monthlyRentMin || req.query.monthlyRentMax) {
+      query.monthlyRent = {};
+
+      if (req.query.monthlyRentMin) {
+        query.monthlyRent.$gte = Number(req.query.monthlyRentMin);
+      }
+
+      if (req.query.monthlyRentMax) {
+        query.monthlyRent.$lte = Number(req.query.monthlyRentMax);
+      }
+    }
+
+    // Security Deposit Multiplication Factor
+    if (req.query.sdmfMin || req.query.sdmfMax) {
+      query.securityDepositMultiplicationFactor = {};
+
+      if (req.query.sdmfMin) {
+        query.securityDepositMultiplicationFactor.$gte =
+          Number(req.query.sdmfMin);
+      }
+
+      if (req.query.sdmfMax) {
+        query.securityDepositMultiplicationFactor.$lte =
+          Number(req.query.sdmfMax);
+      }
+    }
+
+    // Deposit Amount
+    if (req.query.depositAmountMin || req.query.depositAmountMax) {
+      query.depositAmount = {};
+
+      if (req.query.depositAmountMin) {
+        query.depositAmount.$gte = Number(req.query.depositAmountMin);
+      }
+
+      if (req.query.depositAmountMax) {
+        query.depositAmount.$lte = Number(req.query.depositAmountMax);
+      }
+    }
+
+    // Upcoming Rent Hike Amount
+    if (
+      req.query.upcomingRentHikeAmountMin ||
+      req.query.upcomingRentHikeAmountMax
+    ) {
+      query.upcomingRentHikeAmount = {};
+
+      if (req.query.upcomingRentHikeAmountMin) {
+        query.upcomingRentHikeAmount.$gte = Number(
+          req.query.upcomingRentHikeAmountMin,
+        );
+      }
+
+      if (req.query.upcomingRentHikeAmountMax) {
+        query.upcomingRentHikeAmount.$lte = Number(
+          req.query.upcomingRentHikeAmountMax,
+        );
+      }
+    }
+
+    // Previous Rent Hike Date
+    if (
+      req.query.previousRentHikeDateFrom ||
+      req.query.previousRentHikeDateTo
+    ) {
+      query.previousRentHikeDate = {};
+
+      if (req.query.previousRentHikeDateFrom) {
+        query.previousRentHikeDate.$gte = new Date(
+          req.query.previousRentHikeDateFrom,
+        );
+      }
+
+      if (req.query.previousRentHikeDateTo) {
+        query.previousRentHikeDate.$lte = new Date(
+          req.query.previousRentHikeDateTo,
+        );
+      }
+    }
+
+    // ================= Count =================
+    const totalRecords = await Bed.countDocuments(query);
+    const totalPages = Math.ceil(totalRecords / limit);
+
+    // ================= Data =================
+    const beds = await Bed.find(query)
+      .populate("propertyId", "propertyCode propertyLocation bedCount")
+      .sort({ upcomingRentHikeDate: 1, _id: 1 })
+      .skip(skip)
+      .limit(limit)
+      .lean();
+
+    return res.status(200).json({
+      success: true,
+      page,
+      limit,
+      totalRecords,
+      totalPages,
+      hasNextPage: page < totalPages,
+      hasPrevPage: page > 1,
+      count: beds.length,
+      dateRange: {
+        from: today,
+        to: threeMonthsLater,
+      },
+      data: beds,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+
+
 // Create Bed
 exports.createBed = async (req, res) => {
   try {

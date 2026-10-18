@@ -7,18 +7,19 @@ const {
       getAllEBCalculations,
       getEBCalculationById
 } = require("../controllers/UpdateEbAmtController");
+const { verifyJWT } = require("../middleware/verifyJWT");
 
 router.post(
-    "/create-eb-calculation",
+    "/create-eb-calculation",verifyJWT,
     createEBCalculation
 );
 // Update EB Amount in Client Rent History
 router.put(
-    "/update-eb-rent-history",
+    "/update-eb-rent-history",verifyJWT,
     updateEBAmountInRentHistory
 );
 
-router.get("/eb-calculation-details", getAllEBCalculations);
-router.get("/eb-calculation-details/:id", getEBCalculationById);
+router.get("/eb-calculation-details",verifyJWT, getAllEBCalculations);
+router.get("/eb-calculation-details/:id",verifyJWT, getEBCalculationById);
 
 module.exports = router;

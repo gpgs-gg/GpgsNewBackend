@@ -682,8 +682,11 @@ const updateLead = asyncHandler(async (req, res) => {
   const changes = [];
 
   const fields = [
-    { key: "LeadStatus", label: "Lead Status" },
+    { key: "ClientName", label: "Client Name" },
+    { key: "CallingNo", label: "Calling No" },
+    { key: "WhatsAppNo", label: "WhatsApp No" },
     { key: "Assignee", label: "Assignee" },
+    { key: "LeadSource", label: "Lead Source" },
     { key: "FieldMember", label: "Field Member" },
     { key: "Location", label: "Location" },
     { key: "BookingStatus", label: "Booking Status" },

@@ -6,23 +6,25 @@ const {
  updateClientRentHistory,
  getClientRentHistory,
  getClientRentHistoryById,
- getClientCompleteRentHistory,
- getClientRentHistoryByBookingId, deleteClientRentHistory
+ getClientRentHistoryByBookingId, deleteClientRentHistory ,exportClientRentData
 } = require("../controllers/ClientRentHistoryController");
+const {verifyJWT} = require("../middleware/verifyJWT");
 
-router.post("/", createClientRentHistory);
 
-router.get("/", getClientRentHistory);
+router.post("/",verifyJWT, createClientRentHistory);
 
-router.get("/:id", getClientRentHistoryById); 
+router.get("/",verifyJWT, getClientRentHistory);
+
+router.get("/:id",verifyJWT, getClientRentHistoryById); 
 
 // router.get("/client/:clientId", getClientCompleteRentHistory);
 router.get(
-  "/renthistoryfrombooking/:bookingId",
+  "/renthistoryfrombooking/:bookingId", verifyJWT,
  getClientRentHistoryByBookingId
 );
-router.put("/:id", updateClientRentHistory);
+router.put("/:id",verifyJWT, updateClientRentHistory);  
 
-router.delete("/:id", deleteClientRentHistory);
+router.delete("/:id",verifyJWT, deleteClientRentHistory);
+router.post("/export", exportClientRentData);
 
 module.exports = router;

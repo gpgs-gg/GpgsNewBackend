@@ -4,9 +4,10 @@ const router = express.Router();
 const {
   getRentGenerationLogs,
 } = require("../controllers/rentGenerationLogController");
+const { verifyJWT } = require("../middleware/verifyJWT");
 
 router.get(
-  "/rent-generation-logs",
+  "/rent-generation-logs",verifyJWT,
   getRentGenerationLogs
 );
 

@@ -18,27 +18,29 @@ const { verifyJWT } = require("../middleware/verifyJWT");
 router.post(
   "/",
   upload.array("attachment", 20),
+  verifyJWT,
   createTicket
 );
 
 // READ ALL
-router.get("/",  getAllClientTickets);
-router.get("/client-details/:clientId",  getClientDetailsById);
-router.get("/navigation/:id",  getTicketNavigation);
+router.get("/", verifyJWT, getAllClientTickets);
+router.get("/client-details/:clientId", verifyJWT, getClientDetailsById);
+router.get("/navigation/:id",verifyJWT,  getTicketNavigation);
 
 // READ SINGLE
-router.get("/:id", getTicketById);
+router.get("/:id",verifyJWT, getTicketById);
 
 // UPDATE
 router.put(
   "/:id",
   upload.array("attachment", 20),
+  verifyJWT,
   updateTicket
 );
 
 
 // DELETE
-router.delete("/:id", deleteTicket);
+router.delete("/:id",verifyJWT, deleteTicket);
 
 // ADD WORKLOG
 

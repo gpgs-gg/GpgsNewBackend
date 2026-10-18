@@ -8,6 +8,7 @@ const {
   updateAttendanceRequestStatus,
   deleteAttendanceRequest,
   getAttendanceRequestsByRequestedTo,
+  getMyAttendanceRequests
 } = require("../controllers/AttendanceRequestController");
 
 const { verifyJWT } = require("../middleware/verifyJWT");
@@ -55,6 +56,8 @@ router.get("/assigned-to-me", verifyJWT, getAttendanceRequestsByRequestedTo);
 // ============================================================
 // GET SINGLE ATTENDANCE REQUEST
 // ============================================================
+// GET REQUESTS SUBMITTED BY LOGGED-IN EMPLOYEE
+router.get("/my-requests", verifyJWT, getMyAttendanceRequests);
 
 router.get("/:id", verifyJWT, getAttendanceRequestById);
 

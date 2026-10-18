@@ -10,13 +10,14 @@ const {
   getOptionsDataByCategory,
   getBatchOptions 
 } = require("../controllers/OptionsController");
+const {verifyJWT} = require("../middleware/verifyJWT");
 
-router.get("/", getAllOptionsData);
-router.get("/batch", getBatchOptions); 
-router.get("/:id", getOptionsDataById);
-router.post("/", createOptionsData);
-router.put("/:id", updateOptionsData);
-router.delete("/:id", deleteOptionsData);
-router.get("/category/:categoryKey", getOptionsDataByCategory);
+router.get("/",verifyJWT, getAllOptionsData);
+router.get("/batch",verifyJWT, getBatchOptions); 
+router.get("/:id",verifyJWT, getOptionsDataById);
+router.post("/",verifyJWT, createOptionsData);
+router.put("/:id",verifyJWT, updateOptionsData);
+router.delete("/:id",verifyJWT, deleteOptionsData);
+router.get("/category/:categoryKey",verifyJWT, getOptionsDataByCategory);
 
 module.exports = router;

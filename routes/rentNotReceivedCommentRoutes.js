@@ -5,9 +5,10 @@ const {
 } = require("../controllers/rentNotReceivedCommentController");
 
 const router = express.Router();
+const { verifyJWT } = require("../middleware/verifyJWT");
 
 router.post(
-  "/rent-not-received/comment",
+  "/rent-not-received/comment",verifyJWT,
   addRentNotReceivedComment
 );
 

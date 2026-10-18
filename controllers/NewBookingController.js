@@ -6,51 +6,160 @@ const Bed = require("../models/bed.model");
 const { createWorkLog, generateWorkLogs } = require("../utils/worklog");
 const Employee = require("../models/employee.model");
 
-// exports.createBulkBooking = async (req, res) => {
-//   try {
-//     const data = req.body.data;
 
-//     if (!Array.isArray(data) || data.length === 0) {
-//       return res.status(400).json({
-//         success: false,
-//         message: "data array is required and must not be empty",
-//       });
+
+
+// // Generate Dummy Bulk Bookings
+// exports.generateDummyBulkBookings = async (req, res) => {
+//   try {
+//     const totalRecords = Math.min(
+//       Math.max(parseInt(req.body.totalRecords) || 1000, 1),
+//       10000
+//     );
+
+//     const batchSize = 500;
+
+//     const PROPERTY_ID = "6aa39ed1dcc10950de7a7327";
+//     const BED_ID = "6aca26ce406305fa1b249988";
+
+//     const createdByName =
+//       req.body.createdByName || "Bulk Testing";
+
+//     let totalInserted = 0;
+//     let totalFailed = 0;
+//     const errors = [];
+
+//     for (
+//       let start = 0;
+//       start < totalRecords;
+//       start += batchSize
+//     ) {
+//       const currentBatchSize = Math.min(
+//         batchSize,
+//         totalRecords - start
+//       );
+
+//       const bookings = Array.from(
+//         { length: currentBatchSize },
+//         (_, index) => {
+//           const number = start + index + 1;
+//           const uniqueId = `${Date.now()}${number}`;
+
+//           return {
+//             fullName: `Test Client ${number}`,
+//             emailId: `testclient${uniqueId}@example.com`,
+
+//             callingNo: String(
+//               7000000000 + (number % 1000000000)
+//             ),
+//             whatsappNo: String(
+//               7000000000 + (number % 1000000000)
+//             ),
+
+//             teamCode: "",
+//             askFor: "BA",
+
+//             emergencyContact1FullName:
+//               `Emergency Contact ${number}`,
+//             emergencyContact1No: String(
+//               8000000000 + (number % 1000000000)
+//             ),
+
+//             emergencyContact2FullName:
+//               `Secondary Contact ${number}`,
+//             emergencyContact2No: String(
+//               9000000000 + (number % 1000000000)
+//             ),
+
+//             propertyId: PROPERTY_ID,
+//             bedId: BED_ID,
+
+//             monthlyRent: 14000,
+//             depositAmount: 28000,
+//             clientCalculatedRent: 14000,
+
+//             clientDoj: "2026-11-01",
+//             clientLastDate: null,
+
+//             parkingCharges: 0,
+//             processingFees: 500,
+
+//             totalAmount: 42500,
+//             bookingAmount: 14000,
+//             balanceAmount: 28500,
+
+//             temporaryClientDoj: null,
+//             temporaryClientLastDate: null,
+//             temporaryParkingCharges: 0,
+//             temporaryTotalAmount: 0,
+
+//             partialAmount: 0,
+//             URHA: 0,
+//             URHD: "-",
+
+//             loginEnabled: true,
+//             paymentAttachment: [],
+
+//             isCancelled: false,
+//             bookingType: null,
+//             cancelledDate: null,
+//             status: "Booked",
+
+//             workLogs: [
+//               {
+//                 message: `Booking created by ${createdByName}`,
+//                 createdBy: createdByName,
+//               },
+//             ],
+//           };
+//         }
+//       );
+
+//       try {
+//         const result = await Booking.insertMany(bookings, {
+//           ordered: false,
+//         });
+
+//         totalInserted += result.length;
+//       } catch (error) {
+//         // unordered insertMany can insert valid documents
+//         // even when some documents fail validation.
+//         const insertedCount =
+//           error.insertedDocs?.length || 0;
+
+//         totalInserted += insertedCount;
+
+//         const failedCount = Math.max(
+//           currentBatchSize - insertedCount,
+//           0
+//         );
+
+//         totalFailed += failedCount;
+
+//         errors.push({
+//           batch: Math.floor(start / batchSize) + 1,
+//           attempted: currentBatchSize,
+//           inserted: insertedCount,
+//           failed: failedCount,
+//           message: error.message,
+//         });
+//       }
 //     }
 
-//     const bookingsWithWorkLogs = data.map((bookingData) => {
-//       const user =
-//         bookingData.createdByName ||
-//         bookingData.updatedByName ||
-//         req.body.createdByName ||
-//         req.body.updatedByName ||
-//         "System";
-
-//       return {
-//         ...bookingData,
-
-//         workLogs: [
-//           ...(bookingData.workLogs || []),
-//           createWorkLog({
-//             message: `Booking created by ${user}`,
-//             createdBy: user,
-//           }),
-//         ],
-//       };
-//     });
-
-//     const bookings = await Booking.insertMany(bookingsWithWorkLogs, {
-//       ordered: true,
-//     });
-
-//     res.status(201).json({
+//     return res.status(201).json({
 //       success: true,
-//       message: `${bookings.length} booking(s) created successfully`,
-//       data: bookings,
+//       message: "Dummy bulk booking generation completed",
+//       summary: {
+//         requested: totalRecords,
+//         inserted: totalInserted,
+//         failed: totalFailed,
+//       },
+//       errors,
 //     });
 //   } catch (error) {
-//     console.error("Bulk Create Booking Error:", error);
+//     console.error("Generate Dummy Bookings Error:", error);
 
-//     res.status(500).json({
+//     return res.status(500).json({
 //       success: false,
 //       message: error.message,
 //     });
@@ -58,7 +167,6 @@ const Employee = require("../models/employee.model");
 // };
 
 
-// CREATE BOOKING
 
 exports.createBooking = async (req, res) => {
   try {
@@ -455,6 +563,8 @@ exports.getAllBookings = async (req, res) => {
     });
   }
 };
+
+
 // GET SINGLE BOOKING
 exports.getBookingById = async (req, res) => {
   try {

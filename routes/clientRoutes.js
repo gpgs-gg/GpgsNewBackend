@@ -18,23 +18,24 @@ const {
   generateMonthlyRent
 } = require("../controllers/ClientController");
 const upload = require("../middleware/uploadMiddleware");
+const {verifyJWT} = require("../middleware/verifyJWT");
 
 // Create Client
-router.post("/", createClient);
-router.post("/generate-single-client-monthly-rent/:clientId", generateSingleClientMonthlyRent);
+router.post("/",verifyJWT, createClient);
+router.post("/generate-single-client-monthly-rent/:clientId",verifyJWT, generateSingleClientMonthlyRent);
 router.post(
-  "/generate-monthly-rent",
+  "/generate-monthly-rent",verifyJWT,
   generateMonthlyRent
 );
 // Get All Clients
-router.get("/", getClients);
-router.get("/notice", getNoticeClients);
+router.get("/", verifyJWT,getClients);
+router.get("/notice", verifyJWT, getNoticeClients);
 router.get(
-  "/rent-not-received",
+  "/rent-not-received",verifyJWT,
   getClientsWithLatestRentHistory
 );
 // Get Single Client
-router.get("/:id", getClientById);
+router.get("/:id",verifyJWT, getClientById);
 
 // Update Client
 router.put("/:id", upload.fields([
@@ -44,14 +45,14 @@ router.put("/:id", upload.fields([
   { name: "clientRentalAgreement", maxCount: 10 },
   { name: "clientPoliceNOC", maxCount: 10 },
   { name: "handoverAttachment", maxCount: 10 },
-]), updateClient);
+]),verifyJWT, updateClient);
 
 // Delete Client
-router.delete("/:id", deleteClient);
+router.delete("/:id",verifyJWT, deleteClient);
 
 // Booking -> Client Conversion
 router.post(
-  "/create-from-booking",
+  "/create-from-booking",verifyJWT,
   createClientFromBooking
 );
 // router.post("/dummy-clients", createDummyClients);

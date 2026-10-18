@@ -3,6 +3,7 @@ const RentNotReceivedComment = require("../models/rentNotReceivedComment.model")
 const PropertySequence = require("../models/propertySequence.model");
 const Property = require("../models/property.model");
 const mongoose = require("mongoose");
+
 exports.getAllRNRClients = async (req, res) => {
   try {
     // ================= Pagination =================
@@ -11,7 +12,11 @@ exports.getAllRNRClients = async (req, res) => {
     const skip = (page - 1) * limit;
 
     // ================= Base Query =================
-    const query = {};
+
+    // ================= Base Query =================
+    const query = {
+      "latestRentHistory.currentDue": { $gt: 0 },
+    };
 
     // ================= Global Search =================
     if (req.query.search?.trim()) {

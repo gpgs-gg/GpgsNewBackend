@@ -869,28 +869,50 @@ exports.getAllTransactions = async (req, res) => {
     // Search
     // ---------------------------------------------------------
 
+    // ---------------------------------------------------------
+    // Search
+    // ---------------------------------------------------------
+
     if (req.query.search?.trim()) {
       const searchValue = req.query.search.trim();
 
       const escapedSearchValue = searchValue.replace(
         /[.*+?^${}()|[\]\\]/g,
-        "\\$&"
+        "\\$&",
       );
 
       const regex = new RegExp(escapedSearchValue, "i");
 
-      const searchConditions = [
-        { narration: regex },
-        { chqNo: regex },
-      ];
+      const searchConditions = [{ narration: regex }, { chqNo: regex }];
 
+      // Search numeric amounts
       if (!isNaN(Number(searchValue))) {
         const amount = Number(searchValue);
 
-        searchConditions.push(
-          { withdrawal: amount },
-          { deposit: amount }
-        );
+        searchConditions.push({ withdrawal: amount }, { deposit: amount });
+      }
+
+      // Search Expense Code using matching option IDs
+      const matchingExpenseCodes = await OptionsData.find({
+        categoryKey: "expensecode",
+        "items.value": regex,
+      })
+        .select("items")
+        .lean();
+
+      const matchingExpenseCodeIds = matchingExpenseCodes.flatMap((option) =>
+        (option.items || [])
+          .filter(
+            (item) =>
+              regex.test(item.value || "") || regex.test(item.label || ""),
+          )
+          .map((item) => item._id),
+      );
+
+      if (matchingExpenseCodeIds.length > 0) {
+        searchConditions.push({
+          expenseCode: { $in: matchingExpenseCodeIds },
+        });
       }
 
       query.$or = searchConditions;
@@ -943,17 +965,33 @@ exports.getAllTransactions = async (req, res) => {
     // ---------------------------------------------------------
     // Basic filters
     // ---------------------------------------------------------
+ 
+    // Expense Code filter
 
+    if (req.query.expenseCode) {
+      const id = String(req.query.expenseCode).trim();
+
+      if (!mongoose.Types.ObjectId.isValid(id)) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid expenseCode",
+        });
+      }
+
+      query.expenseCode = new mongoose.Types.ObjectId(id);
+    }
+    if (req.query.propertyId) {
+      const pid = req.query.propertyId;
+      query.propertyId = mongoose.Types.ObjectId.isValid(pid)
+        ? new mongoose.Types.ObjectId(pid)
+        : pid;
+    }
     if (req.query.source) {
       query.source = req.query.source;
     }
 
     if (req.query.userId) {
       query.userId = req.query.userId;
-    }
-
-    if (req.query.propertyId) {
-      query.propertyId = req.query.propertyId;
     }
 
     if (req.query.status) {
@@ -976,8 +1014,7 @@ exports.getAllTransactions = async (req, res) => {
     // ---------------------------------------------------------
 
     const expenseCategoryParam =
-      req.query.expenseCategory ??
-      req.query["expenseCategory[]"];
+      req.query.expenseCategory ?? req.query["expenseCategory[]"];
 
     if (expenseCategoryParam) {
       const expenseCategories = Array.isArray(expenseCategoryParam)
@@ -993,12 +1030,9 @@ exports.getAllTransactions = async (req, res) => {
           $in: validCategories.map(
             (category) =>
               new RegExp(
-                `^${category.replace(
-                  /[.*+?^${}()|[\]\\]/g,
-                  "\\$&"
-                )}$`,
-                "i"
-              )
+                `^${category.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`,
+                "i",
+              ),
           ),
         };
       }
@@ -1044,14 +1078,12 @@ exports.getAllTransactions = async (req, res) => {
       req.query.maxAmount !== undefined
     ) {
       const min =
-        req.query.minAmount !== undefined &&
-        req.query.minAmount !== ""
+        req.query.minAmount !== undefined && req.query.minAmount !== ""
           ? Number(req.query.minAmount)
           : 0;
 
       const max =
-        req.query.maxAmount !== undefined &&
-        req.query.maxAmount !== ""
+        req.query.maxAmount !== undefined && req.query.maxAmount !== ""
           ? Number(req.query.maxAmount)
           : Number.MAX_SAFE_INTEGER;
 
@@ -1119,9 +1151,7 @@ exports.getAllTransactions = async (req, res) => {
     ];
 
     const selectedAccounts = req.query.account
-      ? accounts.filter(
-          (account) => account.account === req.query.account
-        )
+      ? accounts.filter((account) => account.account === req.query.account)
       : accounts;
 
     // =========================================================
@@ -1163,7 +1193,7 @@ exports.getAllTransactions = async (req, res) => {
           value: item.value,
           id: item._id,
         },
-      ])
+      ]),
     );
 
     // =========================================================
@@ -1308,57 +1338,57 @@ exports.getAllTransactions = async (req, res) => {
     // PROJECT
     // =========================================================
 
-  dataPipeline.push({
-  $project: {
-    // Basic Transaction Details
-    _id: 1,
-    date: 1,
-    narration: 1,
-    chqNo: 1,
-    withdrawal: 1,
-    deposit: 1,
-    balance: 1,
-    valueDate: 1,
+    dataPipeline.push({
+      $project: {
+        // Basic Transaction Details
+        _id: 1,
+        date: 1,
+        narration: 1,
+        chqNo: 1,
+        withdrawal: 1,
+        deposit: 1,
+        balance: 1,
+        valueDate: 1,
 
-    // Source & User
-    source: 1,
-    userId: 1,
+        // Source & User
+        source: 1,
+        userId: 1,
 
-    // Assignment & Review
-    assignee: 1,
-    reviewer: 1,
-    auditor: 1,
+        // Assignment & Review
+        assignee: 1,
+        reviewer: 1,
+        auditor: 1,
 
-    // Status & Expense
-    status: 1,
-    expenseCategory: 1,
-    expenseCode: 1,
+        // Status & Expense
+        status: 1,
+        expenseCategory: 1,
+        expenseCode: 1,
 
-    // Work Logs
-    workLogs: 1,
+        // Work Logs
+        workLogs: 1,
 
-    // Mapping Details
-    isMapped: 1,
-    mappedAt: 1,
-    clientId: 1,
-    propertyId: 1,
-    bedId: 1,
+        // Mapping Details
+        isMapped: 1,
+        mappedAt: 1,
+        clientId: 1,
+        propertyId: 1,
+        bedId: 1,
 
-    // Metadata
-    metadata: 1,
+        // Metadata
+        metadata: 1,
 
-    // Timestamps
-    createdAt: 1,
-    updatedAt: 1,
+        // Timestamps
+        createdAt: 1,
+        updatedAt: 1,
 
-    // Account Information
-    account: 1,
+        // Account Information
+        account: 1,
 
-    // Populated User & Property
-    user: 1,
-    property: 1,
-  },
-});
+        // Populated User & Property
+        user: 1,
+        property: 1,
+      },
+    });
 
     // =========================================================
     // EXACT TOTALS AGGREGATION
@@ -1370,100 +1400,90 @@ exports.getAllTransactions = async (req, res) => {
     // Therefore totals are calculated from ALL matching records.
     // =========================================================
 
-    const totalPromises = selectedAccounts.map(
-      async ({ model, account }) => {
-        const result = await model.aggregate([
-          {
-            $match: query,
-          },
+    const totalPromises = selectedAccounts.map(async ({ model, account }) => {
+      const result = await model.aggregate([
+        {
+          $match: query,
+        },
 
-          {
-            $group: {
-              _id: null,
+        {
+          $group: {
+            _id: null,
 
-              count: {
-                $sum: 1,
+            count: {
+              $sum: 1,
+            },
+
+            totalDeposit: {
+              $sum: {
+                $ifNull: ["$deposit", 0],
               },
+            },
 
-              totalDeposit: {
-                $sum: {
-                  $ifNull: ["$deposit", 0],
-                },
-              },
-
-              totalWithdrawal: {
-                $sum: {
-                  $ifNull: ["$withdrawal", 0],
-                },
+            totalWithdrawal: {
+              $sum: {
+                $ifNull: ["$withdrawal", 0],
               },
             },
           },
-        ]);
+        },
+      ]);
 
-        const stats = result[0] || {};
+      const stats = result[0] || {};
 
-        return {
-          account,
-          count: Number(stats.count || 0),
-          totalDeposit: Number(stats.totalDeposit || 0),
-          totalWithdrawal: Number(
-            stats.totalWithdrawal || 0
-          ),
-        };
-      }
-    );
+      return {
+        account,
+        count: Number(stats.count || 0),
+        totalDeposit: Number(stats.totalDeposit || 0),
+        totalWithdrawal: Number(stats.totalWithdrawal || 0),
+      };
+    });
 
     // =========================================================
     // RUN DATA + TOTALS IN PARALLEL
     // =========================================================
 
-    const [transactionsResult, accountTotals] =
-      await Promise.all([
-        firstAccount.model.aggregate(dataPipeline, {
-          allowDiskUse: true,
-        }),
+    const [transactionsResult, accountTotals] = await Promise.all([
+      firstAccount.model.aggregate(dataPipeline, {
+        allowDiskUse: true,
+      }),
 
-        Promise.all(totalPromises),
-      ]);
+      Promise.all(totalPromises),
+    ]);
 
     // =========================================================
     // FORMAT TRANSACTIONS
     // =========================================================
 
-    const transactions = (transactionsResult || []).map(
-      (transaction) => {
-        const user = transaction.user;
-        const property = transaction.property;
+    const transactions = (transactionsResult || []).map((transaction) => {
+      const user = transaction.user;
+      const property = transaction.property;
 
-        return {
-          ...transaction,
+      return {
+        ...transaction,
 
-          userId: transaction.userId
-            ? {
-                _id: transaction.userId,
-                fullName: user?.fullName || "",
-              }
-            : null,
+        userId: transaction.userId
+          ? {
+              _id: transaction.userId,
+              fullName: user?.fullName || "",
+            }
+          : null,
 
-          propertyId: transaction.propertyId
-            ? {
-                _id: transaction.propertyId,
-                propertyCode:
-                  property?.propertyCode || "",
-              }
-            : null,
+        propertyId: transaction.propertyId
+          ? {
+              _id: transaction.propertyId,
+              propertyCode: property?.propertyCode || "",
+            }
+          : null,
 
-          expenseCode: transaction.expenseCode
-            ? expenseCodeMap.get(
-                String(transaction.expenseCode)
-              ) || null
-            : null,
+        expenseCode: transaction.expenseCode
+          ? expenseCodeMap.get(String(transaction.expenseCode)) || null
+          : null,
 
-          user: undefined,
-          property: undefined,
-        };
-      }
-    );
+        user: undefined,
+        property: undefined,
+      };
+    });
 
     // =========================================================
     // EXACT TOTALS
@@ -1480,13 +1500,10 @@ exports.getAllTransactions = async (req, res) => {
 
       totalDeposit += accountTotal.totalDeposit;
 
-      totalWithdrawal +=
-        accountTotal.totalWithdrawal;
+      totalWithdrawal += accountTotal.totalWithdrawal;
 
       if (accountTotal.count > 0) {
-        availableAccounts.push(
-          accountTotal.account
-        );
+        availableAccounts.push(accountTotal.account);
       }
     }
 
@@ -1494,8 +1511,7 @@ exports.getAllTransactions = async (req, res) => {
     // PAGINATION INFO
     // =========================================================
 
-    const totalPages =
-      Math.ceil(totalRecords / limit);
+    const totalPages = Math.ceil(totalRecords / limit);
 
     // =========================================================
     // RESPONSE
@@ -1527,10 +1543,7 @@ exports.getAllTransactions = async (req, res) => {
       totalWithdrawal,
     });
   } catch (error) {
-    console.error(
-      "Get Transactions Error:",
-      error
-    );
+    console.error("Get Transactions Error:", error);
 
     return res.status(500).json({
       success: false,
@@ -1539,7 +1552,6 @@ exports.getAllTransactions = async (req, res) => {
     });
   }
 };
-
 
 // ===================== GET SINGLE TRANSACTION =====================
 exports.getTransactionById = async (req, res) => {

@@ -9,25 +9,26 @@ const {
   toggleModuleStatus,
   getAllMenuModules,
 } = require("../controllers/sidebarModuleController");
+const { verifyJWT } = require("../middleware/verifyJWT");
 
 const router = express.Router();
 
 // Create Module
-router.post("/", createModule);
+router.post("/",verifyJWT, createModule);
 
 // Get All Modules
-router.get("/", getAllModules);
-router.get("/menu", getAllMenuModules);
+router.get("/",verifyJWT, getAllModules);
+router.get("/menu",verifyJWT, getAllMenuModules);
 // Get Single Module
-router.get("/:id", getSingleModule);
+router.get("/:id",verifyJWT, getSingleModule);
 
 // Update Module
-router.put("/:id", updateModule);
+router.put("/:id",verifyJWT, updateModule);
 
 // Delete Module
-router.delete("/:id", deleteModule);
+router.delete("/:id",verifyJWT, deleteModule);
 
 // Toggle Active / Inactive
-router.patch("/:id/toggle-status", toggleModuleStatus);
+router.patch("/:id/toggle-status",verifyJWT, toggleModuleStatus);
 
 module.exports = router;

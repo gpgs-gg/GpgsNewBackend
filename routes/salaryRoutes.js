@@ -1,6 +1,7 @@
 const express = require("express");
 
 const router = express.Router();
+const { verifyJWT } = require("../middleware/verifyJWT");
 
 const {
   getSalaries,
@@ -9,13 +10,13 @@ const {
   upsertEmployeeSalary,
 } = require("../controllers/SalaryController");
 
-router.get("/", getSalaries);
+router.get("/",verifyJWT, getSalaries);
 
-router.get("/employee", getEmployeeSalary);
+router.get("/employee",verifyJWT, getEmployeeSalary);
 
 // Get all existing salary records of an employee
-router.get("/employee/existing-salaries", getEmployeeExistingSalaries);
+router.get("/employee/existing-salaries",verifyJWT, getEmployeeExistingSalaries);
 
-router.patch("/employee/:employeeId", upsertEmployeeSalary);
+router.patch("/employee/:employeeId",verifyJWT, upsertEmployeeSalary);
 
 module.exports = router;

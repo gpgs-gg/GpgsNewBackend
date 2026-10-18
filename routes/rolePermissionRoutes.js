@@ -13,12 +13,12 @@ const {
 router.get("/my", verifyJWT, getMyPermissions);
 
 // Admin permission-management page
-router.get("/employee/:employeeId", getEmployeePermissions);
+router.get("/employee/:employeeId",verifyJWT, getEmployeePermissions);
 
 // Create or update employee permissions
-router.put("/employee/:employeeId", upsertEmployeePermissions);
+router.put("/employee/:employeeId",verifyJWT, upsertEmployeePermissions);
 
 // Reset employee permissions
-router.delete("/employee/:employeeId", deleteEmployeePermissions);
+router.delete("/employee/:employeeId",verifyJWT, deleteEmployeePermissions);
 
 module.exports = router;

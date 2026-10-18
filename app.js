@@ -41,17 +41,24 @@ const attendanceRequestRoutes = require("./routes/attendanceRequestRoutes");
 const ApiError = require("./utils/ApiError");
 const cors = require("cors");
 const cookieParser = require("cookie-parser");
+const {
+  apiLimiter,loginLimiter} = require("./middleware/rateLimiter");
+
+const helmet = require("helmet");
+
 
 const app = express();
-
-// app.use(cors());
+app.use(helmet());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
-app.use(cookieParser());
+// Sabhi API routes par general rate limit
+app.use("/api", apiLimiter);
+
+// Login API par additional strict rate limit
+app.use("/api/auth/login", loginLimiter);
+
 
 const allowedOrigins = [
   "http://localhost:5173",

@@ -14,32 +14,33 @@ const {
   bulkTransferLeads,
 } = require("../controllers/LeadsContoller");
 
+const {verifyJWT} = require("../middleware/verifyJWT");
 
 // ================= LEAD ROUTES =================
 // Create Lead
-router.post("/",createLead);
+router.post("/",verifyJWT, createLead);
 
 // Bulk Create Lead
-router.post("/bulk",bulkCreateLead);
+router.post("/bulk",verifyJWT, bulkCreateLead);
 
 // Get All Leads
-router.get("/",getAllLeads);
+router.get("/",verifyJWT, getAllLeads);
 
 // Dropdown Data
-router.get("/dropdown",getLeadDropdown);
-router.put("/bulk-transfer", bulkTransferLeads);
+router.get("/dropdown",verifyJWT, getLeadDropdown);
+router.put("/bulk-transfer",verifyJWT,  bulkTransferLeads);
 // Navigation (Previous / Next)
-router.get("/navigation/:id",getLeadNavigation);
+router.get("/navigation/:id",verifyJWT, getLeadNavigation);
 
 // Get Single Lead
-router.get("/:id",getLeadById);
+router.get("/:id",verifyJWT, getLeadById);
 
 // Update Lead
-router.put("/:id",updateLead);
+router.put("/:id",verifyJWT, updateLead);
 
 // Delete Lead
-router.delete("/:id",deleteLead);
+router.delete("/:id",verifyJWT, deleteLead);
 
 // Add Work Log
-router.post("/:id/worklog",addWorkLog);
+router.post("/:id/worklog",verifyJWT,addWorkLog);
 module.exports = router;
