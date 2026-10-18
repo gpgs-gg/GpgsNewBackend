@@ -271,7 +271,7 @@ const generateMonthlyRent = async () => {
   const today = new Date();
   let month = today.getMonth() + 1;
   let year = today.getFullYear();
-  // 27th ko next month's rent history generate hogi
+  // 20th ko next month's rent history generate hogi
   if (today.getDate() >= 20) {
     month++;
 
