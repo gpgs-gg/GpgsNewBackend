@@ -104,8 +104,17 @@ const getAllTickets = asyncHandler(async (req, res) => {
       },
     ];
   }
-  if (req.query.status) {
-    query.status = getFilterValue(req.query.status);
+const rawStatus = req.query.status ?? req.query["status[]"];
+
+  if (rawStatus) {
+    const statuses = (Array.isArray(rawStatus) ? rawStatus : [rawStatus])
+      .flatMap((status) => String(status).split(","))
+      .map((status) => status.trim())
+      .filter(Boolean);
+
+    if (statuses.length > 0) {
+      query.status = { $in: statuses };
+    }
   }
 
   if (req.query.priority) {

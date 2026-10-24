@@ -5,6 +5,7 @@ const {
   getBookingEnquiries,
   getBookingEnquiryById,
   updateBookingEnquiryStatus,
+  deleteBookingEnquiry
 } = require("../controllers/bookingEnquiryController");
 
 const rateLimit = require("express-rate-limit");
@@ -36,5 +37,7 @@ router.patch(
   verifyJWT,
   updateBookingEnquiryStatus
 );
+// Delete booking enquiry — login required
+router.delete("/:id", verifyJWT, deleteBookingEnquiry);
 
 module.exports = router;

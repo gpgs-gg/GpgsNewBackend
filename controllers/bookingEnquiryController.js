@@ -248,3 +248,34 @@ exports.updateBookingEnquiryStatus = async (req, res) => {
     });
   }
 };
+
+
+// ==========================================
+// DELETE BOOKING ENQUIRY
+// ==========================================
+exports.deleteBookingEnquiry = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const enquiry = await BookingEnquiry.findByIdAndDelete(id);
+
+    if (!enquiry) {
+      return res.status(404).json({
+        success: false,
+        message: "Booking enquiry not found",
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Booking enquiry deleted successfully",
+    });
+  } catch (error) {
+    console.error("DELETE BOOKING ENQUIRY ERROR:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to delete booking enquiry",
+    });
+  }
+};

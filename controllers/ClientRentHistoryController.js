@@ -791,8 +791,8 @@ exports.exportClientRentData = async (req, res) => {
       propertyId = "",
       rentIds = [],
       columns = [],
+      clientName = "",
     } = req.body;
-
     // Build query using the selected filters
     const query = {};
 
@@ -939,7 +939,11 @@ exports.exportClientRentData = async (req, res) => {
 
     // Render report title and table headings
     const drawHeader = () => {
-      doc.font("Helvetica-Bold").fontSize(16).text("Rent Ledger Report", {
+      const reportTitle = clientName.trim()
+        ? `Rent Ledger Report - (${clientName.trim()})`
+        : "Rent Ledger Report";
+
+      doc.font("Helvetica-Bold").fontSize(16).text(reportTitle, {
         align: "center",
       });
 
