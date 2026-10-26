@@ -10,7 +10,7 @@ const uploadFile = async (file, folder) => {
     folder,
     isPdf
   );
-  console.timeEnd("PDF Upload");
+  // console.timeEnd("PDF Upload");
   return uploaded?.secure_url || null;
 };
 

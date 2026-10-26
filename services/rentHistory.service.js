@@ -430,6 +430,15 @@ const generateMonthlyRent = async () => {
   for (const client of clients) {
     if (!client.bedId) continue;
     // Latest Rent History validation
+
+       const key = `${client._id}_${client.bedId._id}`;
+
+
+    if (existingHistorySet.has(key)) {
+      alreadyGeneratedCount++;
+      continue;
+    }
+
     const latestHistory = latestHistoryMap.get(String(client._id));
     if (latestHistory) {
       const latestValue = latestHistory.year * 12 + latestHistory.month;
@@ -443,11 +452,10 @@ const generateMonthlyRent = async () => {
         continue;
       }
     }
-    const key = `${client._id}_${client.bedId._id}`;
-    if (existingHistorySet.has(key)) {
-      alreadyGeneratedCount++;
-      continue;
-    }
+
+
+ 
+
     const previousDue = dueMap.get(String(client._id)) || 0;
 
     const monthlyRent = Number(client.monthlyRent || 0);
@@ -675,6 +683,9 @@ const generateMonthlyRent = async () => {
     monthName: monthNames[month - 1],
   };
 };
+
+
+
 
 const recalculateRentHistory = async (
   clientId,

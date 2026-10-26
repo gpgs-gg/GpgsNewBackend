@@ -1042,6 +1042,8 @@ const insertBulkTickets = async (req, res) => {
   }
 };
 
+
+
 const exportTickets = asyncHandler(async (req, res) => {
   try {
     const {
@@ -1147,6 +1149,7 @@ const exportTickets = asyncHandler(async (req, res) => {
       "dateCreated",
       "propertyCode",
       "title",
+      "description",
       "status",
       "customerImpacted",
       "escalated",
@@ -1164,9 +1167,7 @@ const exportTickets = asyncHandler(async (req, res) => {
     ];
 
     const exportColumns =
-      Array.isArray(columns) && columns.length > 0
-        ? columns
-        : defaultColumns;
+      Array.isArray(columns) && columns.length > 0 ? columns : defaultColumns;
 
     // =========================
     // CSV HEADERS
@@ -1178,6 +1179,7 @@ const exportTickets = asyncHandler(async (req, res) => {
       propertyCode: "Property Code",
       title: "Title",
       status: "Status",
+      description: "Description",
       customerImpacted: "Customer Impacted",
       escalated: "Escalated",
       targetDate: "Target Date",
@@ -1193,9 +1195,7 @@ const exportTickets = asyncHandler(async (req, res) => {
       propertyLocation: "Location",
     };
 
-    const headers = exportColumns.map(
-      (column) => headerMap[column] || column
-    );
+    const headers = exportColumns.map((column) => headerMap[column] || column);
 
     // =========================
     // RESPONSE HEADERS
@@ -1203,9 +1203,9 @@ const exportTickets = asyncHandler(async (req, res) => {
 
     res.setHeader(
       "Content-Disposition",
-      `attachment; filename="tickets-${new Date()
-        .toISOString()
-        .split("T")[0]}.csv"`
+      `attachment; filename="tickets-${
+        new Date().toISOString().split("T")[0]
+      }.csv"`,
     );
 
     res.setHeader("Content-Type", "text/csv; charset=utf-8");
@@ -1225,7 +1225,11 @@ const exportTickets = asyncHandler(async (req, res) => {
     // =========================
 
     const cursor = Ticket.find(query)
-      .select(exportColumns.join(" "))
+      .select([...new Set([...exportColumns, "propertyId"])].join(" "))
+      .populate({
+        path: "propertyId",
+        select: "propertyCode propertyLocation",
+      })
       .lean()
       .cursor();
 
@@ -1233,34 +1237,116 @@ const exportTickets = asyncHandler(async (req, res) => {
     // STREAM DATA
     // =========================
 
+    try {
+      for await (const ticket of cursor) {
+        const row = {};
+
+        exportColumns.forEach((column) => {
+          let value;
+
+          // Get property details from the populated property document
+          if (column === "propertyCode") {
+            value = ticket.propertyId?.propertyCode;
+          } else if (column === "propertyLocation" || column === "Location") {
+            value = ticket.propertyId?.propertyLocation;
+          } else {
+            value = ticket[column];
+          }
+
+          if (value === null || value === undefined) {
+            value = "";
+          }
+
+          if (value instanceof Date) {
+            value = value.toISOString();
+          } else if (typeof value === "object") {
+            value = JSON.stringify(value);
+          }
+
+          row[headerMap[column] || column] = value;
+        });
+
+        csvStream.write(row);
+      }
+
+      // End the stream only once, after every ticket is written
+      csvStream.end();
+    } catch (error) {
+      cursor.close().catch(() => {});
+
+      console.error("Ticket CSV streaming error:", error);
+
+      if (!res.headersSent) {
+        res.status(500).end("Failed to export tickets");
+      } else {
+        res.destroy(error);
+      }
+    }
+
+    // =========================
+    // STREAM DATA
+    // =========================
+
     for await (const ticket of cursor) {
       const row = {};
+      // =========================
+      // MONGODB CURSOR
+      // =========================
 
-      exportColumns.forEach((column) => {
-        let value = ticket[column];
+      const cursor = Ticket.find(query)
+        .select([...exportColumns, "propertyId"].join(" "))
+        .populate({
+          path: "propertyId",
+          select: "propertyCode propertyLocation",
+        })
+        .lean()
+        .cursor();
 
-        if (value === null || value === undefined) {
-          value = "";
-        }
+      // =========================
+      // STREAM DATA
+      // =========================
 
-        // Date handling
-        if (value instanceof Date) {
-          value = value.toISOString();
-        }
+      for await (const ticket of cursor) {
+        const row = {};
 
-        // Array / Object handling
-        if (typeof value === "object") {
-          value = JSON.stringify(value);
-        }
+        exportColumns.forEach((column) => {
+          let value;
 
-        row[headerMap[column] || column] = value;
-      });
+          // Property details come from the populated property document
+          if (column === "propertyCode") {
+            value = ticket.propertyId?.propertyCode;
+          } else if (column === "propertyLocation") {
+            value = ticket.propertyId?.propertyLocation;
+          } else {
+            value = ticket[column];
+          }
+
+          if (value === null || value === undefined) {
+            value = "";
+          }
+
+          // Date handling
+          if (value instanceof Date) {
+            value = value.toISOString();
+          }
+
+          // Array / Object handling
+          if (typeof value === "object") {
+            value = JSON.stringify(value);
+          }
+
+          row[headerMap[column] || column] = value;
+        });
+
+        csvStream.write(row);
+      }
+
+      csvStream.end();
 
       csvStream.write(row);
     }
 
     csvStream.end();
-
   } catch (error) {
     console.error("Export Tickets Error:", error);
 
@@ -1275,6 +1361,396 @@ const exportTickets = asyncHandler(async (req, res) => {
     res.end();
   }
 });
+
+
+
+exportTicketsPDF = async (req, res) => {
+  try {
+    const {
+      search = "",
+      filters = {},
+      ticketIds = [],
+      columns = [],
+      createdBy = "",
+    } = req.body;
+
+    const query = {};
+
+    // =========================
+    // SEARCH
+    // Keep these fields consistent with your CSV export
+    // =========================
+    if (search.trim()) {
+      const regex = {
+        $regex: search.trim(),
+        $options: "i",
+      };
+
+      query.$or = [
+        { ticketId: regex },
+        { title: regex },
+        { propertyCode: regex },
+        { description: regex },
+        { category: regex },
+        { priority: regex },
+        { status: regex },
+        { department: regex },
+        { manager: regex },
+        { assignee: regex },
+      ];
+    }
+
+    // =========================
+    // FILTERS
+    // Use the same filter mapping as exportTickets
+    // =========================
+    if (filters.propertyCode) {
+      query.propertyCode = filters.propertyCode;
+    }
+
+    if (filters.Location) {
+      query.propertyLocation = filters.Location;
+    }
+
+    if (filters.priority) {
+      query.priority = filters.priority;
+    }
+
+    if (filters.status) {
+      query.status = filters.status;
+    }
+
+    if (filters.department) {
+      query.department = filters.department;
+    }
+
+    if (filters.category) {
+      query.category = filters.category;
+    }
+
+    if (filters.assignee) {
+      query.assignee = filters.assignee;
+    }
+
+    if (filters.manager) {
+      query.manager = filters.manager;
+    }
+
+    if (filters.customerImpacted) {
+      query.customerImpacted = filters.customerImpacted;
+    }
+
+    if (filters.escalated !== undefined && filters.escalated !== "") {
+      query.escalated = filters.escalated;
+    }
+
+    // Apply late-status filter according to your existing CSV logic.
+    if (filters.lateStatus) {
+      if (filters.lateStatus === "Late Acknowledged") {
+        query.lateAcknowledged = true;
+      } else if (filters.lateStatus === "Late Resolved") {
+        query.lateResolved = true;
+      }
+    }
+
+    // =========================
+    // CREATOR TAB
+    // =========================
+    if (createdBy && createdBy !== "all") {
+      query.createdBy = createdBy === "Clients" ? "Client" : createdBy;
+    }
+
+    // =========================
+    // SELECTED TICKETS
+    // =========================
+    if (Array.isArray(ticketIds) && ticketIds.length > 0) {
+      query.ticketId = { $in: ticketIds };
+    }
+
+    // =========================
+    // ALLOWED COLUMNS
+    // =========================
+    const defaultColumns = [
+      "ticketId",
+      "dateCreated",
+      "propertyCode",
+      "title",
+      "description",
+      "status",
+      "customerImpacted",
+      "escalated",
+      "targetDate",
+      "category",
+      "priority",
+      "bedNo",
+      "roomNo",
+      "department",
+      "manager",
+      "assignee",
+      "createdById",
+      "createdByName",
+      "createdBy",
+      "updatedById",
+      "updatedByName",
+      "updatedDateTime",
+      "internalComments",
+      "estimatedTimeToResolve",
+      "actualTimeSpent",
+      "propertyLocation",
+      "lateAcknowledged",
+      "lateResolved",
+    ];
+
+    const exportColumns =
+      Array.isArray(columns) && columns.length
+        ? columns.filter((column) => defaultColumns.includes(column))
+        : defaultColumns;
+
+    if (exportColumns.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "No valid columns selected for export.",
+      });
+    }
+
+    const headerMap = {
+      ticketId: "Ticket ID",
+      dateCreated: "Date Created",
+      propertyCode: "Property Code",
+      title: "Title",
+      description: "Description",
+      status: "Status",
+      customerImpacted: "Customer Impacted",
+      escalated: "Escalated",
+      targetDate: "Target Date",
+      category: "Category",
+      priority: "Priority",
+      bedNo: "Bed No",
+      roomNo: "Room No",
+      department: "Department",
+      manager: "Manager",
+      assignee: "Assignee",
+      createdById: "Created By ID",
+      createdByName: "Created By Name",
+      createdBy: "Created By Role",
+      updatedById: "Updated By ID",
+      updatedByName: "Updated By Name",
+      updatedDateTime: "Updated Date",
+      internalComments: "Internal Comments",
+      estimatedTimeToResolve: "Estimated Time",
+      actualTimeSpent: "Actual Time",
+      propertyLocation: "Property Location",
+      lateAcknowledged: "Late Acknowledged",
+      lateResolved: "Late Resolved",
+    };
+
+    // =========================
+    // FETCH ALL MATCHING TICKETS
+    // =========================
+    const records = await Ticket.find(query)
+      .populate({
+        path: "propertyId",
+        select: "propertyCode propertyLocation",
+      })
+      .sort({ createdAt: -1 })
+      .lean();
+
+    const filename = `tickets-${new Date().toISOString().slice(0, 10)}.pdf`;
+
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+
+    // =========================
+    // PDF SETUP
+    // =========================
+    const doc = new PDFDocument({
+      size: "A3",
+      layout: "landscape",
+      margins: {
+        top: 35,
+        bottom: 35,
+        left: 25,
+        right: 25,
+      },
+      bufferPages: false,
+    });
+
+    doc.pipe(res);
+
+    const pageWidth =
+      doc.page.width - doc.page.margins.left - doc.page.margins.right;
+
+    const columnWidth = pageWidth / exportColumns.length;
+    const rowHeight = 34;
+
+    const drawHeader = () => {
+      doc.font("Helvetica-Bold").fontSize(16).fillColor("#111827");
+
+      doc.text("Tickets Report", {
+        align: "center",
+      });
+
+      doc.moveDown(0.5);
+
+      doc.font("Helvetica").fontSize(8).fillColor("#374151");
+
+      doc.text(
+        `Generated: ${new Date().toLocaleDateString("en-IN", {
+          timeZone: "Asia/Kolkata",
+        })}`,
+      );
+
+      doc.moveDown();
+
+      const startX = doc.page.margins.left;
+      const startY = doc.y;
+
+      doc.save();
+      doc.rect(startX, startY, pageWidth, rowHeight).fill("#e5e7eb");
+      doc.restore();
+
+      doc.font("Helvetica-Bold").fontSize(6.5).fillColor("#111827");
+
+      exportColumns.forEach((column, index) => {
+        doc.text(
+          headerMap[column] || column,
+          startX + index * columnWidth + 2,
+          startY + 5,
+          {
+            width: columnWidth - 4,
+            height: rowHeight - 8,
+            ellipsis: true,
+          },
+        );
+      });
+
+      doc.y = startY + rowHeight;
+    };
+
+    const formatValue = (column, value) => {
+      if (value === null || value === undefined || value === "") {
+        return "-";
+      }
+
+      if (["dateCreated", "targetDate", "updatedDateTime"].includes(column)) {
+        const date = new Date(value);
+
+        return Number.isNaN(date.getTime())
+          ? "-"
+          : date.toLocaleDateString("en-IN", {
+              day: "2-digit",
+              month: "short",
+              year: "numeric",
+              timeZone: "Asia/Kolkata",
+            });
+      }
+
+      if (typeof value === "boolean") {
+        return value ? "Yes" : "No";
+      }
+
+      if (typeof value === "number") {
+        return value.toLocaleString("en-IN");
+      }
+
+      if (Array.isArray(value)) {
+        return value
+          .map((item) =>
+            typeof item === "object" ? JSON.stringify(item) : String(item),
+          )
+          .join(", ");
+      }
+
+      if (typeof value === "object") {
+        return (
+          value.name || value.fullName || value._id || JSON.stringify(value)
+        );
+      }
+
+      return String(value);
+    };
+
+    // =========================
+    // DRAW PDF TABLE
+    // =========================
+    drawHeader();
+
+    let rowIndex = 0;
+
+    for (const record of records) {
+      if (doc.y + rowHeight > doc.page.height - doc.page.margins.bottom) {
+        doc.addPage();
+        drawHeader();
+      }
+
+      const startX = doc.page.margins.left;
+      const startY = doc.y;
+
+      if (rowIndex % 2 === 0) {
+        doc.save();
+        doc.rect(startX, startY, pageWidth, rowHeight).fill("#f9fafb");
+        doc.restore();
+      }
+
+      doc.font("Helvetica").fontSize(6.5).fillColor("#111827");
+
+      exportColumns.forEach((column, index) => {
+        let rawValue = record[column];
+
+        // Property details may be stored on the populated property.
+        if (column === "propertyCode") {
+          rawValue = record.propertyId?.propertyCode ?? record.propertyCode;
+        }
+
+        if (column === "propertyLocation") {
+          rawValue =
+            record.propertyId?.propertyLocation ?? record.propertyLocation;
+        }
+
+        const value = formatValue(column, rawValue);
+
+        doc.text(value, startX + index * columnWidth + 2, startY + 5, {
+          width: columnWidth - 4,
+          height: rowHeight - 8,
+          ellipsis: true,
+        });
+      });
+
+      doc
+        .moveTo(startX, startY + rowHeight)
+        .lineTo(startX + pageWidth, startY + rowHeight)
+        .lineWidth(0.3)
+        .strokeColor("#d1d5db")
+        .stroke();
+
+      doc.y = startY + rowHeight;
+      rowIndex++;
+    }
+
+    if (rowIndex === 0) {
+      doc.font("Helvetica").fontSize(12).fillColor("#111827");
+
+      doc.text("No tickets found.", {
+        align: "center",
+      });
+    }
+
+    doc.end();
+  } catch (error) {
+    console.error("Export Tickets PDF Error:", error);
+
+    if (!res.headersSent) {
+      return res.status(500).json({
+        success: false,
+        message: "Failed to export tickets PDF.",
+      });
+    }
+
+    res.end();
+  }
+};
+
+
 
 module.exports = {
   createTicket,

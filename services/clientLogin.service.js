@@ -55,6 +55,8 @@ const Client = require("../models/client.model");
 const User = require("../models/user.model");
 const Booking = require("../models/newBooking.model");
 
+
+
 const enableClientLogin = async (bookingId) => {
   const booking = await Booking.findById(bookingId);
 
@@ -138,6 +140,8 @@ if (existingEmailUser) {
   isActive: true,
 });
 };
+
+
 
 module.exports = {
   enableClientLogin,

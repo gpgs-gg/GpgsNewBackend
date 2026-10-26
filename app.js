@@ -38,6 +38,8 @@ const rentGenerationLogRoutes = require("./routes/rentGenerationLogRoutes");
 const propertySequenceRoutes = require("./routes/propertySequenceRoutes");
 const RnrRoutes = require("./routes/RnrRoutes");
 const attendanceRequestRoutes = require("./routes/attendanceRequestRoutes");
+const propertyExpenseRoutes = require("./routes/propertyExpenseRoutes");
+
 const ApiError = require("./utils/ApiError");
 const cors = require("cors");
 const cookieParser = require("cookie-parser");
@@ -63,7 +65,8 @@ const allowedOrigins = [
   "http://localhost:5173",
   "http://192.168.0.102:5173",
   "http://192.168.0.109:5173",
-  "https://new.gpgs24.in",
+  "https://gpgs24.in",
+  "https://www.gpgs24.in",
 ];
 
 app.use(
@@ -130,6 +133,7 @@ app.use("/api", rentGenerationLogRoutes);
 app.use("/api", propertySequenceRoutes);
 app.use("/api", RnrRoutes);
 app.use("/api/attendance-requests", attendanceRequestRoutes);
+app.use("/api/property-expenses", propertyExpenseRoutes);
 app.use((req, res, next) => {
   next(new ApiError(404, `Route Not Found - ${req.originalUrl}`));
 });
