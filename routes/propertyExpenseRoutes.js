@@ -8,17 +8,17 @@ const controller = require(
 // IMPORTANT:
 // Import your existing JWT/authentication middleware here.
 // Example only:
-// const { verifyJWT } = require("../middleware/auth.middleware");
+const { verifyJWT } = require("../middleware/verifyJWT");
 //
 // Apply verifyJWT to ALL routes before deploying.
 // Also apply your GPGS canAdd/canEdit/canDelete permission
 // middleware to POST/PUT/DELETE.
 
 router.get("/summary", controller.getExpenseSummary);
-router.get("/", controller.getExpenses);
-router.post("/", controller.createExpense);
-router.put("/:id", controller.updateExpense);
+router.get("/",verifyJWT, controller.getExpenses);
+router.post("/", verifyJWT, controller.createExpense);
+router.put("/:id",verifyJWT ,controller.updateExpense);
 router.delete("/:id", controller.deleteExpense);
-router.get("/propertyExpense/:propertyId", controller.getExpensesByPropertyId);
+router.get("/propertyExpense/:propertyId",verifyJWT,controller.getExpensesByPropertyId);
 
 module.exports = router;

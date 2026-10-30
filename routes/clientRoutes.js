@@ -15,7 +15,8 @@ const {
   getNoticeClients,
   getClientsWithLatestRentHistory,
   generateSingleClientMonthlyRent,
-  generateMonthlyRent
+  generateMonthlyRent,
+  enableClientLoginController
 } = require("../controllers/ClientController");
 const upload = require("../middleware/uploadMiddleware");
 const {verifyJWT} = require("../middleware/verifyJWT");
@@ -56,6 +57,13 @@ router.post(
   createClientFromBooking
 );
 // router.post("/dummy-clients", createDummyClients);
+
+
+router.patch(
+  "/booking/:bookingId/enable-login",
+  verifyJWT,
+  enableClientLoginController,
+);
 
 module.exports = router;
 

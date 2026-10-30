@@ -1,19 +1,5 @@
 const mongoose = require("mongoose");
 
-const PROPERTY_EXPENSE_CATEGORIES = [
-  "Property Rent",
-  "Housekeeping",
-  "Internet",
-  "Electricity",
-  "Cooking Gas",
-  "Water",
-  "Police NOC",
-  "Repairs / Maintenance",
-  "Furniture",
-  "Appliances",
-  "Other",
-];
-
 const propertyExpenseSchema = new mongoose.Schema(
   {
     propertyId: {
@@ -36,7 +22,6 @@ const propertyExpenseSchema = new mongoose.Schema(
 
     category: {
       type: String,
-      enum: PROPERTY_EXPENSE_CATEGORIES,
       required: true,
       trim: true,
     },
@@ -59,7 +44,22 @@ const propertyExpenseSchema = new mongoose.Schema(
       maxlength: 2000,
       default: "",
     },
-
+    comment: {
+      type: String,
+      trim: true,
+      maxlength: 2000,
+      default: "",
+    },
+    workLogs: [
+      {
+        message: String,
+        createdBy: String,
+        createdAt: {
+          type: String,
+          default: String,
+        },
+      },
+    ],
     // receiptUrl: {
     //   type: String,
     //   trim: true,
@@ -67,8 +67,7 @@ const propertyExpenseSchema = new mongoose.Schema(
     // },
 
     createdBy: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "User",
+      type: String,
       default: null,
     },
 
@@ -78,7 +77,7 @@ const propertyExpenseSchema = new mongoose.Schema(
       default: null,
     },
   },
-  { timestamps: true }
+  { timestamps: true },
 );
 
 propertyExpenseSchema.index({

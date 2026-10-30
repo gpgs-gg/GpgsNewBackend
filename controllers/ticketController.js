@@ -4,7 +4,7 @@ const uploadFile = require("../services/uploadFile");
 const ApiError = require("../utils/ApiError");
 const { convertStringFormatDateTime, convertStringToDateTime } = require("../utils/dateFormatter");
 const { format } = require("@fast-csv/format");
-
+const PDFDocument = require("pdfkit");
 const createTicket = asyncHandler(async (req, res) => {
   // Generate Ticket ID
   const lastTicket = await Ticket.findOne().sort({ createdAt: -1 });
@@ -392,6 +392,7 @@ const getTicketById = asyncHandler(async (req, res) => {
 
 
 const getTicketNavigation = asyncHandler(async (req, res) => {
+  
   const currentTicket = await Ticket.findById(req.params.id)
     .select("_id createdAt")
     .lean();
@@ -476,6 +477,8 @@ const getTicketNavigation = asyncHandler(async (req, res) => {
     nextId: nextTicket?._id || null,
   });
 });
+
+
 
 const calculateAcknowledged = (ticket, newStatus) => {
   let acknowledgedDate = ticket.acknowledgedDate;
@@ -1362,9 +1365,19 @@ const exportTickets = asyncHandler(async (req, res) => {
   }
 });
 
+const sanitizePDFText = (value) => {
+  if (value === null || value === undefined) {
+    return "-";
+  }
 
+  return String(value)
+    .normalize("NFC")
+    .replace(/\r\n?/g, "\n")
+    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, "")
+    .replace(/\uFFFD/g, "");
+};
 
-exportTicketsPDF = async (req, res) => {
+const exportTicketsPDF = async (req, res) => {
   try {
     const {
       search = "",
@@ -1580,10 +1593,62 @@ exportTicketsPDF = async (req, res) => {
     const pageWidth =
       doc.page.width - doc.page.margins.left - doc.page.margins.right;
 
-    const columnWidth = pageWidth / exportColumns.length;
-    const rowHeight = 34;
+    const titleWidth = 180;
+    const descriptionWidth = 300;
+
+    const remainingWidth =
+      pageWidth -
+      (exportColumns.includes("title") ? titleWidth : 0) -
+      (exportColumns.includes("description") ? descriptionWidth : 0);
+
+    const remainingColumnCount = exportColumns.filter(
+      (column) => column !== "title" && column !== "description",
+    ).length;
+
+    const defaultColumnWidth =
+      remainingColumnCount > 0 ? remainingWidth / remainingColumnCount : 0;
+
+    const columnWidths = exportColumns.map((column) => {
+      if (column === "title") return titleWidth;
+      if (column === "description") return descriptionWidth;
+
+      return defaultColumnWidth;
+    });
+
+    const getRowHeight = (record) => {
+      doc.font("Helvetica").fontSize(6.5);
+
+      const textPadding = 10;
+
+      const maxTextHeight = Math.max(
+        ...exportColumns.map((column, index) => {
+          let rawValue = record[column];
+
+          if (column === "propertyCode") {
+            rawValue = record.propertyId?.propertyCode ?? record.propertyCode;
+          }
+
+          if (column === "propertyLocation") {
+            rawValue =
+              record.propertyId?.propertyLocation ?? record.propertyLocation;
+          }
+
+          const value = formatValue(column, rawValue);
+          const width = columnWidths[index] - 4;
+
+          return doc.heightOfString(value, {
+            width,
+            lineBreak: true,
+          });
+        }),
+      );
+
+return Math.max(34, Math.ceil(maxTextHeight + textPadding + 4));
+    };
 
     const drawHeader = () => {
+      const headerHeight = 50;
+
       doc.font("Helvetica-Bold").fontSize(16).fillColor("#111827");
 
       doc.text("Tickets Report", {
@@ -1606,25 +1671,24 @@ exportTicketsPDF = async (req, res) => {
       const startY = doc.y;
 
       doc.save();
-      doc.rect(startX, startY, pageWidth, rowHeight).fill("#e5e7eb");
+      doc.rect(startX, startY, pageWidth, headerHeight).fill("#e5e7eb");
       doc.restore();
 
       doc.font("Helvetica-Bold").fontSize(6.5).fillColor("#111827");
 
       exportColumns.forEach((column, index) => {
-        doc.text(
-          headerMap[column] || column,
-          startX + index * columnWidth + 2,
-          startY + 5,
-          {
-            width: columnWidth - 4,
-            height: rowHeight - 8,
-            ellipsis: true,
-          },
-        );
+        const columnX =
+          startX +
+          columnWidths.slice(0, index).reduce((sum, width) => sum + width, 0);
+
+        doc.text(headerMap[column] || column, columnX + 2, startY + 5, {
+          width: columnWidths[index] - 4,
+          height: headerHeight - 10,
+          lineBreak: true,
+        });
       });
 
-      doc.y = startY + rowHeight;
+      doc.y = startY + headerHeight;
     };
 
     const formatValue = (column, value) => {
@@ -1656,7 +1720,9 @@ exportTicketsPDF = async (req, res) => {
       if (Array.isArray(value)) {
         return value
           .map((item) =>
-            typeof item === "object" ? JSON.stringify(item) : String(item),
+            typeof item === "object" && item !== null
+              ? JSON.stringify(item)
+              : String(item),
           )
           .join(", ");
       }
@@ -1667,7 +1733,7 @@ exportTicketsPDF = async (req, res) => {
         );
       }
 
-      return String(value);
+  return sanitizePDFText(value);
     };
 
     // =========================
@@ -1678,6 +1744,8 @@ exportTicketsPDF = async (req, res) => {
     let rowIndex = 0;
 
     for (const record of records) {
+      const rowHeight = getRowHeight(record);
+
       if (doc.y + rowHeight > doc.page.height - doc.page.margins.bottom) {
         doc.addPage();
         drawHeader();
@@ -1707,12 +1775,15 @@ exportTicketsPDF = async (req, res) => {
             record.propertyId?.propertyLocation ?? record.propertyLocation;
         }
 
-        const value = formatValue(column, rawValue);
+        let value = formatValue(column, rawValue);
 
-        doc.text(value, startX + index * columnWidth + 2, startY + 5, {
-          width: columnWidth - 4,
-          height: rowHeight - 8,
-          ellipsis: true,
+        const columnX =
+          startX +
+          columnWidths.slice(0, index).reduce((sum, width) => sum + width, 0);
+
+        doc.text(value, columnX + 2, startY + 5, {
+          width: columnWidths[index] - 4,
+          lineBreak: true,
         });
       });
 
@@ -1751,7 +1822,6 @@ exportTicketsPDF = async (req, res) => {
 };
 
 
-
 module.exports = {
   createTicket,
   getAllTickets,
@@ -1762,5 +1832,6 @@ module.exports = {
   getTicketDropdown,
   insertBulkTickets,
   getTicketNavigation,
-  exportTickets
+  exportTickets,
+  exportTicketsPDF
 };

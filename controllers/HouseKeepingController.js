@@ -5,69 +5,93 @@ const OptionsData = require("../models/options.model");
 const asyncHandler = require("../middleware/asyncHandler");
 
 const fetchHousekeepingData = asyncHandler(async (req, res) => {
-  // 1. Get Housekeeping Activities & Notification Master in parallel
-  const [master, notificationMaster] = await Promise.all([
+  // 1. Fetch master data in parallel
+  const [master, notificationMaster, properties, records] = await Promise.all([
     OptionsData.findOne({
       categoryKey: "housekeppingactivities",
-    }),
+    }).lean(),
+
     OptionsData.findOne({
       categoryKey: "housekeepingnotification",
-    }),
+    }).lean(),
+
+    Property.find({ status: "Active" }, { propertyCode: 1 })
+      .sort({ propertyCode: 1 })
+      .lean(),
+
+    HousekeepingRecord.find()
+      .select("propertyId activityId history")
+      .populate("history.updatedBy", "name")
+      .lean(),
   ]);
-  // CREATE A LOOKUP MAP FOR NOTIFICATION MASTER DATA
-  const notificationMap = {};
 
-  if (notificationMaster) {
-    notificationMaster.items
-      .filter((item) => item.isActive)
-      .forEach((item) => {
-        notificationMap[item.label.trim().toLowerCase()] =
-          Number(item.value) || 0;
-      });
-  }
-
+  // 2. Validate master data
   if (!master) {
     return res.status(404).json({
       success: false,
       message: "Housekeeping master data not found.",
     });
   }
-  
+
+  // 3. Build notification lookup
+  const notificationMap = new Map();
+
+  notificationMaster?.items
+    ?.filter((item) => item.isActive)
+    .forEach((item) => {
+      notificationMap.set(
+        item.label.trim().toLowerCase(),
+        Number(item.value) || 0,
+      );
+    });
+
+  // 4. Prepare activities
   const activities = master.items
     .filter((item) => item.isActive)
     .sort((a, b) => a.displayOrder - b.displayOrder)
     .map((item) => ({
-      activityId: item._id,
+      activityId: item._id.toString(),
       activityName: item.label,
       frequency: Number(item.value),
-      notifyBefore: notificationMap[item.label.trim().toLowerCase()] ?? 0,
+      notifyBefore: notificationMap.get(item.label.trim().toLowerCase()) ?? 0,
     }));
-  // 2. Get all active properties
-  const properties = await Property.find(
-    {status : "Active"},
-    {
-      propertyCode: 1,
-    },
-  ).sort({
-    propertyCode: 1,
-  });
-  // 3. Records
-  const records = await HousekeepingRecord.find()
-    .populate("propertyId", "propertyCode")
-    .populate("history.updatedBy", "name");
 
-  // 4. Build headers
+  // 5. Index records once: propertyId + activityId
+  const recordMap = new Map();
+
+  for (const record of records) {
+    if (!record.propertyId || !record.activityId) continue;
+
+    const propertyId = record.propertyId.toString();
+    const activityId = record.activityId.toString();
+
+    const key = `${propertyId}_${activityId}`;
+
+    // Preserve the previous find() behavior if duplicate records exist.
+    if (!recordMap.has(key)) {
+      recordMap.set(key, record);
+    }
+  }
+
+  // 6. Prepare property IDs once
+  const propertyList = properties.map((property) => ({
+    id: property._id.toString(),
+    code: property.propertyCode,
+  }));
+
+  // 7. Build headers
   const headers = [
     "SrNo",
     "Activities",
     "Freq",
     "Notify",
-    ...properties.map((p) => ({
-      title: p.propertyCode,
-      propertyId: p._id,
+    ...properties.map((property) => ({
+      title: property.propertyCode,
+      propertyId: property._id,
     })),
   ];
-  // 5. Build rows
+
+  // 8. Build rows
   const data = activities.map((activity, index) => {
     const row = {
       SrNo: index + 1,
@@ -77,27 +101,22 @@ const fetchHousekeepingData = asyncHandler(async (req, res) => {
       Notify: activity.notifyBefore,
     };
 
-    properties.forEach((property) => {
-      const record = records.find(
-        (r) =>
-          r.propertyId._id.toString() === property._id.toString() &&
-          r.activityId.toString() === activity.activityId.toString(),
-      );
-      // const record = records.find(
-      //   (r) =>
-      //     r.propertyId._id.toString() === property._id.toString() &&
-      //     r.activityId._id.toString() === activity._id.toString(),
-      // );
+    for (const property of propertyList) {
+      const key = `${property.id}_${activity.activityId}`;
+      const record = recordMap.get(key);
 
-      if (!record || record.history.length === 0) {
-        row[property.propertyCode] = "NA";
-        return;
+      if (!record || !record.history?.length) {
+        row[property.code] = "NA";
+        continue;
       }
 
+      // Sort once for this record and retain existing history format.
       const history = [...record.history]
-        .sort((a, b) => new Date(b.completedAt) - new Date(a.completedAt))
-        .map((h) => {
-          const date = new Date(h.completedDate)
+        .sort(
+          (a, b) => new Date(b.completedAt || 0) - new Date(a.completedAt || 0),
+        )
+        .map((item) => {
+          const date = new Date(item.completedDate)
             .toLocaleDateString("en-GB", {
               day: "2-digit",
               month: "short",
@@ -105,28 +124,35 @@ const fetchHousekeepingData = asyncHandler(async (req, res) => {
             })
             .replace(/ /g, " ");
 
-          const completedAt = new Date(h.completedAt).toLocaleString("en-IN", {
-            hour12: false,
-          });
+          const completedAt = new Date(item.completedAt).toLocaleString(
+            "en-IN",
+            { hour12: false },
+          );
 
-          const updatedBy = h.updatedByName || h.updatedBy?.name || "Unknown";
+          const updatedBy =
+            item.updatedByName || item.updatedBy?.name || "Unknown";
 
           return `${date}_[${completedAt} - ${updatedBy}]`;
         });
 
-      row[property.propertyCode] = history.join("$") + "$";
-    });
+      row[property.code] = history.join("$") + "$";
+    }
 
     return row;
   });
 
-  res.status(200).json({
+  return res.status(200).json({
     success: true,
     headers,
     total: data.length,
     data,
   });
 });
+
+
+
+
+
 const updateHousekeepingData = asyncHandler(async (req, res) => {
   const { updates } = req.body;
 

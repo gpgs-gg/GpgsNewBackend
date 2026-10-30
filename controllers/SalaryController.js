@@ -472,7 +472,9 @@ const getSalaries = asyncHandler(async (req, res) => {
   // EMPLOYEE FILTER
   // ==========================================================
 
-  const employeeFilter = {};
+  const employeeFilter = {
+    loginEnabled: true,
+  };
 
   if (employeeId?.trim()) {
     employeeFilter.employeeId = employeeId.trim();
@@ -728,6 +730,7 @@ const monthlySalary =
           role: employee.role,
           status: employee.status,
           salary: calculated.monthlySalary,
+          loginEnabled: employee.loginEnabled,
         },
 
         employeeId: employee.employeeId,

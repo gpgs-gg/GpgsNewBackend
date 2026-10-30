@@ -1793,25 +1793,38 @@ exports.updateClient = async (req, res) => {
         }
 
         // ========================================================
-        // DEACTIVATE CLIENT USER WHEN F&F IS CLOSED
+        // DEACTIVATE USER ONLY WHEN NO OTHER ACTIVE STAY EXISTS
         // ========================================================
-
         if (client.fnf?.status === "F&F Closed") {
-          await User.findOneAndUpdate(
-            {
-              bookingId: client.bookingId,
-              role: "Client",
-            },
-            {
-              $set: {
-                isActive: false,
-                refreshToken: null,
-              },
-            },
-            { session },
-          );
-        }
+          const otherActiveStay = await Client.findOne({
+            bookingId: client.bookingId,
+            _id: { $ne: client._id },
+            isBookingCancelled: false,
+            loginEnabled: true,
+            stayType: "P. Booked",
+            $or: [
+              { "fnf.status": { $exists: false } },
+              { "fnf.status": { $ne: "F&F Closed" } },
+              { "fnf.status": null },
+            ],
+          }).session(session);
 
+          if (!otherActiveStay) {
+            await User.findOneAndUpdate(
+              {
+                bookingId: client.bookingId,
+                role: "Client",
+              },
+              {
+                $set: {
+                  isActive: false,
+                  refreshToken: null,
+                },
+              },
+              { session },
+            );
+          }
+        }
         // ========================================================
         // SYNC CLIENT NAME & EMAIL WITH USER
         // ONLY WHEN LOGIN IS ENABLED
@@ -2843,11 +2856,12 @@ exports.generateSingleClientMonthlyRent = async (req, res) => {
           latestYear: {
             $first: "$year",
           },
+          monthlyRent: {
+            $first: "$monthlyRent",
+          },
         },
       },
-
     ]);
-
 
     const dueMap = new Map();
     const latestHistoryMap = new Map();
@@ -2855,29 +2869,23 @@ exports.generateSingleClientMonthlyRent = async (req, res) => {
     previousHistory.forEach((item) => {
       const clientId = String(item._id);
 
-      dueMap.set(
-        clientId,
-        item.currentDue || 0
-      );
+      dueMap.set(clientId, item.currentDue || 0);
 
       latestHistoryMap.set(clientId, {
         month: item.latestMonth,
         year: item.latestYear,
+        monthlyRent: item.monthlyRent,
       });
     });
 
     for (const client of clients) {
       if (!client.bedId) continue;
 
-     // Latest Rent History validation
-      const latestHistory = latestHistoryMap.get(
-        String(client._id)
-      );
- 
+      // Latest Rent History validation
+      const latestHistory = latestHistoryMap.get(String(client._id));
 
       if (latestHistory) {
-        const latestValue =
-          latestHistory.year * 12 + latestHistory.month;
+        const latestValue = latestHistory.year * 12 + latestHistory.month;
 
         const targetValue = year * 12 + month;
 
@@ -2900,7 +2908,12 @@ exports.generateSingleClientMonthlyRent = async (req, res) => {
       }
       const previousDue = dueMap.get(String(client._id)) || 0;
 
-      const monthlyRent = Number(client.monthlyRent || 0);
+      // const monthlyRent = Number(client.monthlyRent || 0);
+      const monthlyRent = Number(
+        latestHistory?.monthlyRent ??
+        client.monthlyRent ??
+        0
+      );
 
       const depositAmount = Number(client.depositAmount || 0);
       const processingFees = Number(client.processingFees || 0);
@@ -3124,6 +3137,9 @@ exports.generateMonthlyRent = async (req, res) => {
           latestYear: {
             $first: "$year",
           },
+          monthlyRent: {
+            $first: "$monthlyRent",
+          },
         },
       },
     ]);
@@ -3146,13 +3162,10 @@ exports.generateMonthlyRent = async (req, res) => {
       if (!client.bedId) continue;
 
       // Latest Rent History validation
-      const latestHistory = latestHistoryMap.get(
-        String(client._id)
-      );
+      const latestHistory = latestHistoryMap.get(String(client._id));
 
       if (latestHistory) {
-        const latestValue =
-          latestHistory.year * 12 + latestHistory.month;
+        const latestValue = latestHistory.year * 12 + latestHistory.month;
 
         const targetValue = year * 12 + month;
 
@@ -3167,14 +3180,19 @@ exports.generateMonthlyRent = async (req, res) => {
         }
       }
 
-
       const key = `${client._id}_${client.bedId._id}`;
       if (existingHistorySet.has(key)) {
         continue;
       }
       const previousDue = dueMap.get(String(client._id)) || 0;
 
-      const monthlyRent = Number(client.monthlyRent || 0);
+      // const monthlyRent = Number(client.monthlyRent || 0);
+
+      const monthlyRent = Number(
+        latestHistory?.monthlyRent ??
+        client.monthlyRent ??
+        0
+      );
 
       const depositAmount = Number(client.depositAmount || 0);
       const processingFees = Number(client.processingFees || 0);
@@ -3351,241 +3369,29 @@ exports.generateMonthlyRent = async (req, res) => {
   }
 };
 
-// exports.getClientsWithLatestRentHistory = async (req, res) => {
-//   try {
+exports.enableClientLoginController = async (req, res) => {
+  try {
+    const { bookingId } = req.params;
 
-//     const clients = await Client.aggregate([
-//       {
-//         $match: {
-//           isBookingCancelled: false,
-//         },
-//       },
+    const booking = await Booking.findById(bookingId);
 
-//       {
-//         $lookup: {
-//           from: "properties",
-//           localField: "propertyId",
-//           foreignField: "_id",
-//           as: "property",
-//         },
-//       },
+    if (!booking) {
+      return res.status(404).json({
+        success: false,
+        message: "Booking not found",
+      });
+    }
 
-//       {
-//         $unwind: {
-//           path: "$property",
-//           preserveNullAndEmptyArrays: true,
-//         },
-//       },
+    await enableClientLogin(bookingId);
 
-//       {
-//         $lookup: {
-//           from: "beds",
-//           localField: "bedId",
-//           foreignField: "_id",
-//           as: "bed",
-//         },
-//       },
-
-//       {
-//         $unwind: {
-//           path: "$bed",
-//           preserveNullAndEmptyArrays: true,
-//         },
-//       },
-//       {
-//         $lookup: {
-//           from: "rentnotreceivedcomments",
-//           localField: "_id",
-//           foreignField: "clientId",
-//           as: "rentNotReceivedComment",
-//         },
-//       },
-
-//       {
-//         $lookup: {
-//           from: "clientrenthistories",
-//           let: {
-//             clientId: "$_id",
-//           },
-//           pipeline: [
-//             {
-//               $match: {
-//                 $expr: {
-//                   $eq: ["$clientId", "$$clientId"],
-//                 },
-//               },
-//             },
-
-//             {
-//               $sort: {
-//                 year: -1,
-//                 month: -1,
-//                 createdAt: -1,
-//                 _id: -1,
-//               },
-//             },
-
-//             {
-//               $limit: 1,
-//             },
-
-//             {
-//               $match: {
-//                 $expr: {
-//                   $gt: [
-//                     {
-//                       $ifNull: ["$currentDue", 0],
-//                     },
-//                     0,
-//                   ],
-//                 },
-//               },
-//             },
-//           ],
-//           as: "latestRentHistory",
-//         },
-//       },
-
-//       {
-//         $unwind: {
-//           path: "$latestRentHistory",
-//           preserveNullAndEmptyArrays: false,
-//         },
-//       },
-
-//       {
-//         $project: {
-//           _id: 1,
-
-//           fullName: 1,
-//           emailId: 1,
-//           callingNo: 1,
-//           whatsappNo: 1,
-
-//           propertyId: 1,
-
-//           propertyCode: "$property.propertyCode",
-
-//           bedId: "$bed._id",
-//           roomNo: "$bed.roomNo",
-//           bedNo: "$bed.bedNo",
-
-//           stayType: 1,
-
-//           clientDoj: 1,
-//           noticeStartDate: 1,
-//           noticeLastDate: 1,
-//           clientVacatingDate: 1,
-
-//           monthlyRent: 1,
-//           depositAmount: 1,
-//           rentNotReceivedComment: {
-//               $ifNull: [
-//                 {
-//                   $arrayElemAt: [
-//                     "$rentNotReceivedComment",
-//                     0,
-//                   ],
-//                 },
-//                 {
-//                   _id: null,
-//                   comments: [],
-//                 },
-//               ],
-//             },
-//           latestRentHistory: {
-//             _id: "$latestRentHistory._id",
-
-//             month: "$latestRentHistory.month",
-//             monthName: "$latestRentHistory.monthName",
-//             year: "$latestRentHistory.year",
-
-//             startDate: "$latestRentHistory.startDate",
-//             endDate: "$latestRentHistory.endDate",
-
-//             monthlyRent:
-//               "$latestRentHistory.monthlyRent",
-
-//             daysCount:
-//               "$latestRentHistory.daysCount",
-
-//             rentDivider:
-//               "$latestRentHistory.rentDivider",
-
-//             totalRent:
-//               "$latestRentHistory.totalRent",
-
-//             totalReceived:
-//               "$latestRentHistory.totalReceived",
-
-//             currentDue: {
-//               $ifNull: [
-//                 "$latestRentHistory.currentDue",
-//                 0,
-//               ],
-//             },
-
-//             paymentStatus:
-//               "$latestRentHistory.paymentStatus",
-
-//             ebAmt:
-//               "$latestRentHistory.ebAmt",
-
-//             flatEB:
-//               "$latestRentHistory.flatEB",
-
-//             adjEB:
-//               "$latestRentHistory.adjEB",
-
-//             adjAmt:
-//               "$latestRentHistory.adjAmt",
-
-//             processingFees:
-//               "$latestRentHistory.processingFees",
-
-//             parkingCharges:
-//               "$latestRentHistory.parkingCharges",
-
-//             depositAmount:
-//               "$latestRentHistory.depositAmount",
-
-//             depositAmountReceived:
-//               "$latestRentHistory.depositAmountReceived",
-//           },
-//         },
-//       },
-
-//       {
-//         $sort: {
-//           fullName: 1,
-//         },
-//       },
-//     ]);
-
-//     const totalCurrentDue = clients.reduce(
-//       (total, client) =>
-//         total +
-//         Number(
-//           client.latestRentHistory?.currentDue || 0
-//         ),
-//       0
-//     );
-
-//     return res.status(200).json({
-//       success: true,
-//       count: clients.length,
-//       totalCurrentDue,
-//       data: clients,
-//     });
-//   } catch (error) {
-//     console.error(
-//       "Get Clients With Latest Rent History Error:",
-//       error
-//     );
-
-//     return res.status(500).json({
-//       success: false,
-//       message: error.message,
-//     });
-//   }
-// };
+    return res.status(200).json({
+      success: true,
+      message: "Client login enabled successfully",
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};

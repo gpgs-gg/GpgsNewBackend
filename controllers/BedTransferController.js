@@ -3,7 +3,7 @@ const Bed = require("../models/bed.model");
 const ClientRentHistory = require("../models/clientRentHistory.model");
 const getDaysCount = require("../utils/getDaysCount");
 const calculateRentHistory = require("../utils/calculateRentHistory");
-
+const Property = require("../models/property.model");
 const monthNames = [
   "January",
   "February",
@@ -129,8 +129,8 @@ const transferBed = async (req, res) => {
         propertyId: client.propertyId,
         bedId: client.bedId,
         stayType: client.stayType,
-        monthlyRent: client.monthlyRent,
-        depositAmount: client.depositAmount,
+        monthlyRent: client?.bedId?.monthlyRent,
+        depositAmount: client?.bedId?.depositAmount,
         processingFees: client.processingFees,
         parkingCharges: client.parkingCharges,
         fromDate: client.clientDoj || now,
@@ -168,15 +168,36 @@ const transferBed = async (req, res) => {
     const oldPropertyId = client.propertyId;
     const oldBedId = client.bedId;
 
+    // Fetch old and new property/bed details   // pooja mam code 
+    const [oldProperty, oldBed, newProperty] = await Promise.all([
+      Property.findById(oldPropertyId).select("propertyCode propertyName"),
+      Bed.findById(oldBedId).select("bedCode roomNo bedNo"),
+      Property.findById(newPropertyId).select("propertyCode propertyName"),
+    ]);
+
+    if (!oldProperty || !oldBed || !newProperty) {
+      return res.status(404).json({
+        success: false,
+        message: "Property or bed details not found",
+      });
+    }
+    // Fetch old and new property/bed details   // pooja mam code 
+
+
     // Current Bed Change
     client.propertyId = newPropertyId;
     client.bedId = newBedId;
     // New bed ka rent/deposit Client me update
     client.monthlyRent = newMonthlyRent;
     client.depositAmount = newDepositAmount;
+    const employeeName =
+      req.user?.name || req.user?.fullName || req.user?.username || "System";
+    //console.log("employeename ", employeeName);
     client.worklogs.push({
-      message: `Client shifted from Property ${oldPropertyId} Bed ${oldBedId} to Property ${newPropertyId} Bed ${newBedId}`,
+      message: `Client shifted from Property ${oldProperty.propertyCode} - (Bed ${oldBed.bedCode || oldBed.bedNo || oldBed.roomNo}) to Property ${newProperty.propertyCode} -  (Bed ${newBed.bedCode || newBed.bedNo || newBed.roomNo})`,
       createdAt: now,
+      createdBy: employeeName || req.user?._id || null,
+      createdByName: employeeName,
     });
 
     await client.save();
@@ -215,9 +236,9 @@ const transferBed = async (req, res) => {
 
     const month = billingMonth + 1;
     const year = billingYear;
+
     // const month = doj.getMonth() + 1;
     // const year = doj.getFullYear();
-
     // const lastHistory = await ClientRentHistory.findOne({
     //   clientId: client._id,
     // }).sort({
@@ -237,7 +258,6 @@ const transferBed = async (req, res) => {
     //     previousDue = lastHistory.currentDue;
     //   }
     // }
-
     // extraReceived +=
     //   Number(lastHistory.previousDue || 0) + Number(lastHistory.depositAmount || 0)
 
@@ -385,7 +405,7 @@ const transferBed = async (req, res) => {
         } else {
           previousDue = lastHistory.currentDue;
 
-          extraReceived = carriedDeposit;
+          extraReceived = 0;
         }
       }
 
@@ -478,16 +498,16 @@ const transferBed = async (req, res) => {
         previousYear -= 1;
       }
 
-const previousMonthHistory = await ClientRentHistory.findOne({
-  clientId: client._id,
-  month: previousMonth,
-  year: previousYear,
-  paymentStatus: { $ne: "Shifted" },
-}).sort({ createdAt: -1 });
+      const previousMonthHistory = await ClientRentHistory.findOne({
+        clientId: client._id,
+        month: previousMonth,
+        year: previousYear,
+        paymentStatus: { $ne: "Shifted" },
+      }).sort({ createdAt: -1 });
 
-const futurePreviousDue = previousMonthHistory
-  ? Number(previousMonthHistory.currentDue || 0)
-  : Number(futureHistory.previousDue || 0);
+      const futurePreviousDue = previousMonthHistory
+        ? Number(previousMonthHistory.currentDue || 0)
+        : Number(futureHistory.previousDue || 0);
 
 
       const futureCalculation = calculateRentHistory({

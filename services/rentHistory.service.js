@@ -409,6 +409,9 @@ const generateMonthlyRent = async () => {
         latestYear: {
           $first: "$year",
         },
+        monthlyRent: {
+          $first: "$monthlyRent",
+        },
       },
     },
   ]);
@@ -424,6 +427,7 @@ const generateMonthlyRent = async () => {
     latestHistoryMap.set(clientId, {
       month: item.latestMonth,
       year: item.latestYear,
+      monthlyRent: item.monthlyRent,
     });
   });
 
@@ -431,7 +435,7 @@ const generateMonthlyRent = async () => {
     if (!client.bedId) continue;
     // Latest Rent History validation
 
-       const key = `${client._id}_${client.bedId._id}`;
+    const key = `${client._id}_${client.bedId._id}`;
 
 
     if (existingHistorySet.has(key)) {
@@ -454,15 +458,23 @@ const generateMonthlyRent = async () => {
     }
 
 
- 
+
 
     const previousDue = dueMap.get(String(client._id)) || 0;
 
-    const monthlyRent = Number(client.monthlyRent || 0);
-    const bookingType = client.bookingType;
+    // const monthlyRent = Number(client.monthlyRent || 0);
 
+    const monthlyRent = Number(
+      latestHistory?.monthlyRent ??
+      client.monthlyRent ??
+      0
+    );
+
+
+    const bookingType = client.bookingType;
     const depositAmount = Number(client.depositAmount || 0);
     const processingFees = Number(client.processingFees || 0);
+
 
     const parkingCharges = Number(client.parkingCharges || 0);
     const noticeLastDate = client.noticeLastDate
@@ -833,15 +845,32 @@ const recalculateRentHistory = async (
     month,
     year
   );
+
+  // const depositAmount = isTempToPermanent
+  //   ? Number(client.depositAmount || 0)
+  //   : history.depositAmount;  // ............................poorana code h ye ..........................
+
+  const monthlyRent = Number(
+    history.monthlyRent ?? client.monthlyRent ?? 0
+  );
+
+  // Existing history ka deposit preserve hoga.
+  // Temp-to-Permanent mein deposit tabhi charge hoga
+  // jab is history mein pehle se deposit set na ho.
   const depositAmount = isTempToPermanent
-    ? Number(client.depositAmount || 0)
-    : history.depositAmount;
+    ? Number(
+      history.depositAmount || client.depositAmount || 0
+    )
+    : Number(history.depositAmount || 0);
+
   const processingFees = isTempToPermanent
     ? 500
     : history.processingFees;
+
+
   // Calculation
   const calculation = calculateRentHistory({
-    monthlyRent: Number(client.monthlyRent || 0),
+    monthlyRent,
     depositAmount,
     // depositAmount: client.bedId.depositAmount,
     daysCount,
@@ -862,7 +891,7 @@ const recalculateRentHistory = async (
   // history.endDate = lastDate;
   history.startDate = startDate;
   history.endDate = endDate;   // 👈 lastDate ki jagah
-  history.monthlyRent = client.monthlyRent
+  // history.monthlyRent = client.monthlyRent
   // history.depositAmount = client.depositAmount;
   history.daysCount = daysCount;
   if (isTempToPermanent && transferredReceived > 0) {
@@ -952,6 +981,7 @@ const recalculateRentHistory = async (
       nextHistory.month,
       nextHistory.year
     );
+    
     const nextCalculation = calculateRentHistory({
       monthlyRent: nextHistory.monthlyRent,
       depositAmount: nextHistory.depositAmount,
@@ -981,7 +1011,7 @@ const recalculateRentHistory = async (
     previousHistory = nextHistory;
   }
 
-   await updateClientLatestRent(previousHistory);
+  await updateClientLatestRent(previousHistory);
 
   return history;
 };
