@@ -1256,7 +1256,7 @@ exports.getClients = async (req, res) => {
             bedCode: permanent.bedId?.bedCode,
             roomNo: permanent.bedId?.roomNo,
             bedNo: permanent.bedId?.bedNo,
-
+            clientDoj: permanent?.clientDoj,
             monthlyRent: permanent.monthlyRent,
             depositAmount: permanent.depositAmount,
           }

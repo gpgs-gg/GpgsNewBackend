@@ -1643,13 +1643,13 @@ const exportTicketsPDF = async (req, res) => {
         }),
       );
 
-return Math.max(34, Math.ceil(maxTextHeight + textPadding + 4));
+return Math.max(44, Math.ceil(maxTextHeight + textPadding + 4));
     };
 
     const drawHeader = () => {
-      const headerHeight = 50;
+      const headerHeight = 60;
 
-      doc.font("Helvetica-Bold").fontSize(16).fillColor("#111827");
+      doc.font("Helvetica-Bold").fontSize(20).fillColor("#111827");
 
       doc.text("Tickets Report", {
         align: "center",
@@ -1657,8 +1657,8 @@ return Math.max(34, Math.ceil(maxTextHeight + textPadding + 4));
 
       doc.moveDown(0.5);
 
-      doc.font("Helvetica").fontSize(8).fillColor("#374151");
-
+      doc.font("Helvetica").fontSize(12).fillColor("#374151");
+      
       doc.text(
         `Generated: ${new Date().toLocaleDateString("en-IN", {
           timeZone: "Asia/Kolkata",

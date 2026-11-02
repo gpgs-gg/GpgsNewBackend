@@ -1,5 +1,4 @@
 const Property = require("../models/property.model");
-
 const HousekeepingRecord = require("../models/housekeepingRecord.model");
 const OptionsData = require("../models/options.model");
 const asyncHandler = require("../middleware/asyncHandler");
@@ -15,14 +14,21 @@ const fetchHousekeepingData = asyncHandler(async (req, res) => {
       categoryKey: "housekeepingnotification",
     }).lean(),
 
-    Property.find({ status: "Active" }, { propertyCode: 1 })
+    Property.find(
+      { status: "Active" },
+      {
+        propertyCode: 1,
+        propertyLocation: 1,
+        location: 1,
+        locationName: 1,
+        city: 1,
+      },
+    )
       .sort({ propertyCode: 1 })
       .lean(),
 
-    HousekeepingRecord.find()
-      .select("propertyId activityId history")
-      .populate("history.updatedBy", "name")
-      .lean(),
+    // Fetch existing housekeeping records
+    HousekeepingRecord.find({}).lean(),
   ]);
 
   // 2. Validate master data
@@ -88,6 +94,12 @@ const fetchHousekeepingData = asyncHandler(async (req, res) => {
     ...properties.map((property) => ({
       title: property.propertyCode,
       propertyId: property._id,
+      location:
+        property.propertyLocation ||
+        property.location ||
+        property.locationName ||
+        property.city ||
+        "",
     })),
   ];
 
@@ -148,10 +160,6 @@ const fetchHousekeepingData = asyncHandler(async (req, res) => {
     data,
   });
 });
-
-
-
-
 
 const updateHousekeepingData = asyncHandler(async (req, res) => {
   const { updates } = req.body;
@@ -221,91 +229,7 @@ const updateHousekeepingData = asyncHandler(async (req, res) => {
     message: "Housekeeping updated successfully.",
   });
 });
-// const updateHousekeepingData = asyncHandler(async (req, res) => {
-//   const { updates } = req.body;
 
-//   //console.log("Payload:", JSON.stringify(req.body, null, 2));
-//   // console.log("User:", req.user);
-//   if (!updates?.length) {
-//     return res.status(400).json({
-//       success: false,
-//       message: "Updates are required",
-//     });
-//   }
-//   const activities = await HousekeepingActivity.find({
-//     isActive: true,
-//   }).sort({ displayOrder: 1 });
-
-//   const properties = await Property.find({}, { propertyCode: 1 });
-
-//   // Property Map
-//   const propertyMap = new Map();
-//   properties.forEach((p) => {
-//     propertyMap.set(p.propertyCode, p);
-//   });
-
-//   const operations = [];
-
-//   for (const update of updates) {
-//     const activity = activities[update.rowIndex];
-//     console.log("Activity:", activity);
-//     if (!activity) continue;
-
-//     for (const column of update.columns) {
-//       const property = propertyMap.get(column.columnName);
-//       console.log("Property:", property);
-//       console.log("Column:", column);
-
-//       if (!property) continue;
-
-//       operations.push({
-//         updateOne: {
-//           filter: {
-//             propertyId: property._id,
-//             activityId: activity._id,
-//           },
-//           update: {
-//             $push: {
-//               history: {
-//                 $each: [
-//                   {
-//                     completedDate: new Date(column.value),
-//                     completedAt: new Date(),
-//                     updatedBy: req.user?._id || null,
-//                     updatedByName: column.name || req.user?.name || "unknown",
-//                     remarks: "",
-//                     attachments: [],
-//                   },
-//                 ],
-//                 $position: 0,
-//                 $slice: 40,
-//               },
-//             },
-//           },
-//           upsert: true,
-//         },
-//       });
-//     }
-//   }
-
-//   console.log("Operations:", JSON.stringify(operations, null, 2));
-//   if (operations.length) {
-//     //console.log("Operations:", JSON.stringify(operations, null, 2));
-//     const result = await HousekeepingRecord.bulkWrite(operations);
-
-//     console.log(result);
-//     const docs = await HousekeepingRecord.find().populate(
-//       "activityId propertyId",
-//     );
-
-//     console.log(JSON.stringify(docs, null, 2));
-//   }
-
-//   res.status(200).json({
-//     success: true,
-//     message: "Housekeeping updated successfully.",
-//   });
-// });
 function parseDate(value) {
   const [day, month, year] = value.split(" ");
 
