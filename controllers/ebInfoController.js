@@ -4,7 +4,7 @@ const uploadFile = require("../services/uploadFile");
 const Property = require("../models/property.model");
 const EBMonthly = require("../models/ebInfo.model");
 const { convertStringFormatDateTime } = require("../utils/dateFormatter");
-
+const PropertySequence = require("../models/propertySequence.model");
 
 const creaetElectricityBillData = asyncHandler(async (req, res) => {
     const { propertyId,
@@ -150,10 +150,12 @@ const creaetElectricityBillData = asyncHandler(async (req, res) => {
     });
 });
 
+
+
 const getElectricityBillData = asyncHandler(async (req, res) => {
     const page = Math.max(Number(req.query.page) || 1, 1);
-    const requestedLimit = Number(req.query.limit) || 10;
-    const limit = Math.min(Math.max(requestedLimit, 1), 10);
+    const requestedLimit = Number(req.query.limit) || 20;
+    const limit = Math.min(Math.max(requestedLimit, 1), 20);
     const skip = (page - 1) * limit;
 
     const {
@@ -184,9 +186,39 @@ const getElectricityBillData = asyncHandler(async (req, res) => {
         propertyQuery["utility.ebStartCycle"] = EBCycle.trim();
     }
 
-    const properties = await Property.find(propertyQuery)
-        .sort({ createdAt: -1 })
-        .lean();
+let properties = await Property.find(propertyQuery)
+    .sort({ createdAt: -1 })
+    .lean();
+
+// Get Property Sequence
+const propertyCodes = properties.map(
+    (property) => property.propertyCode
+);
+
+const propertySequences = await PropertySequence.find({
+    propertyCode: { $in: propertyCodes },
+})
+    .select("propertyCode sequence")
+    .lean();
+
+// Create sequence map
+const sequenceMap = new Map(
+    propertySequences.map((item) => [
+        item.propertyCode,
+        item.sequence,
+    ])
+);
+
+// Sort properties according to sequence
+properties.sort((a, b) => {
+    const sequenceA =
+        sequenceMap.get(a.propertyCode) ?? Infinity;
+
+    const sequenceB =
+        sequenceMap.get(b.propertyCode) ?? Infinity;
+
+    return sequenceA - sequenceB;
+});
 
     if (!properties.length) {
         return res.status(200).json({
@@ -303,6 +335,9 @@ const getElectricityBillData = asyncHandler(async (req, res) => {
         data,
     });
 });
+
+
+
 
 const getSingleElectricityBillData = asyncHandler(async (req, res) => {
     const { id } = req.params;
