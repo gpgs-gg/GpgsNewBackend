@@ -50,6 +50,10 @@ const propertyExpenseSchema = new mongoose.Schema(
       maxlength: 2000,
       default: "",
     },
+    newSetUp: {
+      type: Boolean,
+      default: false,
+    },
     workLogs: [
       {
         message: String,

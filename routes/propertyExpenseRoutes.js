@@ -1,9 +1,7 @@
 const express = require("express");
 const router = express.Router();
 
-const controller = require(
-  "../controllers/propertyExpenseController"
-);
+const controller = require("../controllers/propertyExpenseController");
 
 // IMPORTANT:
 // Import your existing JWT/authentication middleware here.
@@ -15,10 +13,15 @@ const { verifyJWT } = require("../middleware/verifyJWT");
 // middleware to POST/PUT/DELETE.
 
 router.get("/summary", controller.getExpenseSummary);
-router.get("/",verifyJWT, controller.getExpenses);
+router.get("/", verifyJWT, controller.getExpenses);
 router.post("/", verifyJWT, controller.createExpense);
-router.put("/:id",verifyJWT ,controller.updateExpense);
+router.put("/:id", verifyJWT, controller.updateExpense);
 router.delete("/:id", controller.deleteExpense);
-router.get("/propertyExpense/:propertyId",verifyJWT,controller.getExpensesByPropertyId);
+router.get(
+  "/propertyExpense/:propertyId",
+  verifyJWT,
+  controller.getPropertyExpensesWithBankTransactions,
+);
+// router.get("/propertyExpense/:propertyId",verifyJWT,controller.getExpensesByPropertyId);
 
 module.exports = router;

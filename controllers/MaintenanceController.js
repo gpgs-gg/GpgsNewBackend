@@ -8,24 +8,18 @@ const asyncHandler = require("../middleware/asyncHandler");
 ====================================================== */
 
 const fetchMaintenanceData = asyncHandler(async (req, res) => {
-  // 1. Activities
-  // const activities = await MaintenanceActivity.find({
-  //   isActive: true,
-  // }).sort({
-  //   displayOrder: 1,
-  // });
-
-  // Fetch Maintenance Activities and Notifications from OptionsData
+  // 1. Fetch Maintenance Activities and Notifications
   const [master, notificationMaster] = await Promise.all([
     OptionsData.findOne({
-      categoryKey: "maintenanceactivities", // lowercase because schema stores lowercase
+      categoryKey: "maintenanceactivities",
     }),
+
     OptionsData.findOne({
       categoryKey: "maintenancenotification",
     }),
   ]);
 
-  // Build a map of notification values for quick lookup
+  // 2. Build notification map
   const notificationMap = {};
 
   notificationMaster?.items
@@ -34,10 +28,11 @@ const fetchMaintenanceData = asyncHandler(async (req, res) => {
       notificationMap[item.label.trim().toLowerCase()] =
         Number(item.value) || 0;
     });
-  // Build the activities array with frequency and notification values
+
+  // 3. Prepare activities
   const activities =
-    master.items
-      .filter((item) => item.isActive)
+    master?.items
+      ?.filter((item) => item.isActive)
       .sort((a, b) => a.displayOrder - b.displayOrder)
       .map((item) => ({
         activityId: item._id,
@@ -45,23 +40,27 @@ const fetchMaintenanceData = asyncHandler(async (req, res) => {
         frequency: Number(item.value),
         notifyBefore: notificationMap[item.label.trim().toLowerCase()] ?? 0,
       })) || [];
-  // 2. Properties
+
+  // 4. Fetch Properties with Location
   const properties = await Property.find(
     { status: "Active" },
     {
       propertyCode: 1,
+      propertyLocation: 1,
+      location: 1,
+      locationName: 1,
+      city: 1,
     },
   ).sort({
     propertyCode: 1,
   });
 
-  // 3. Records
-
+  // 5. Fetch Maintenance Records
   const records = await MaintenanceRecord.find()
     .populate("propertyId", "propertyCode")
     .populate("history.updatedBy", "name");
 
-  // 4. Headers
+  // 6. Build Headers with Location
   const headers = [
     "SrNo",
     "Activities",
@@ -70,10 +69,12 @@ const fetchMaintenanceData = asyncHandler(async (req, res) => {
     ...properties.map((p) => ({
       title: p.propertyCode,
       propertyId: p._id,
+      location:
+        p.propertyLocation || p.location || p.locationName || p.city || "",
     })),
   ];
 
-  // 5. Rows
+  // 7. Build Rows (Existing Functionality)
   const data = activities.map((activity, index) => {
     const row = {
       SrNo: index + 1,
@@ -126,6 +127,126 @@ const fetchMaintenanceData = asyncHandler(async (req, res) => {
     data,
   });
 });
+
+// const fetchMaintenanceData = asyncHandler(async (req, res) => {
+//   // 1. Activities
+//   // const activities = await MaintenanceActivity.find({
+//   //   isActive: true,
+//   // }).sort({
+//   //   displayOrder: 1,
+//   // });
+
+//   // Fetch Maintenance Activities and Notifications from OptionsData
+//   const [master, notificationMaster] = await Promise.all([
+//     OptionsData.findOne({
+//       categoryKey: "maintenanceactivities", // lowercase because schema stores lowercase
+//     }),
+//     OptionsData.findOne({
+//       categoryKey: "maintenancenotification",
+//     }),
+//   ]);
+
+//   // Build a map of notification values for quick lookup
+//   const notificationMap = {};
+
+//   notificationMaster?.items
+//     ?.filter((item) => item.isActive)
+//     .forEach((item) => {
+//       notificationMap[item.label.trim().toLowerCase()] =
+//         Number(item.value) || 0;
+//     });
+//   // Build the activities array with frequency and notification values
+//   const activities =
+//     master.items
+//       .filter((item) => item.isActive)
+//       .sort((a, b) => a.displayOrder - b.displayOrder)
+//       .map((item) => ({
+//         activityId: item._id,
+//         activityName: item.label,
+//         frequency: Number(item.value),
+//         notifyBefore: notificationMap[item.label.trim().toLowerCase()] ?? 0,
+//       })) || [];
+//   // 2. Properties
+//   const properties = await Property.find(
+//     { status: "Active" },
+//     {
+//       propertyCode: 1,
+//     },
+//   ).sort({
+//     propertyCode: 1,
+//   });
+
+//   // 3. Records
+
+//   const records = await MaintenanceRecord.find()
+//     .populate("propertyId", "propertyCode")
+//     .populate("history.updatedBy", "name");
+
+//   // 4. Headers
+//   const headers = [
+//     "SrNo",
+//     "Activities",
+//     "Freq",
+//     "Notify",
+//     ...properties.map((p) => ({
+//       title: p.propertyCode,
+//       propertyId: p._id,
+//     })),
+//   ];
+
+//   // 5. Rows
+//   const data = activities.map((activity, index) => {
+//     const row = {
+//       SrNo: index + 1,
+//       activityId: activity.activityId,
+//       Activities: activity.activityName,
+//       Freq: activity.frequency,
+//       Notify: activity.notifyBefore,
+//     };
+
+//     properties.forEach((property) => {
+//       const record = records.find(
+//         (r) =>
+//           r.propertyId._id.toString() === property._id.toString() &&
+//           r.activityId.toString() === activity.activityId.toString(),
+//       );
+
+//       if (!record || record.history.length === 0) {
+//         row[property.propertyCode] = "NA";
+//         return;
+//       }
+
+//       const history = [...record.history]
+//         .sort((a, b) => new Date(b.completedAt) - new Date(a.completedAt))
+//         .map((h) => {
+//           const date = new Date(h.completedDate).toLocaleDateString("en-GB", {
+//             day: "2-digit",
+//             month: "short",
+//             year: "numeric",
+//           });
+
+//           const completedAt = new Date(h.completedAt).toLocaleString("en-IN", {
+//             hour12: false,
+//           });
+
+//           const updatedBy = h.updatedByName || h.updatedBy?.name || "Unknown";
+
+//           return `${date}_[${completedAt} - ${updatedBy}]`;
+//         });
+
+//       row[property.propertyCode] = history.join("$") + "$";
+//     });
+
+//     return row;
+//   });
+
+//   res.status(200).json({
+//     success: true,
+//     headers,
+//     total: data.length,
+//     data,
+//   });
+// });
 
 /* ======================================================
    UPDATE MAINTENANCE DATA

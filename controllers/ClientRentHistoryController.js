@@ -154,11 +154,12 @@ exports.getClientRentHistory = async (req, res) => {
 
 
 exports.getClientRentHistoryById = async (req, res) => {
+  
   try {
     const { id } = req.params;
 
     const history = await ClientRentHistory.findById(id)
-      .populate("clientId", "fullName callingNo clientDoj")
+      .populate("clientId", "fullName callingNo clientDoj isBookingCancelled")
       .populate("propertyId", "propertyCode")
       .populate("bedId", "bedNo roomNo");
 
@@ -203,7 +204,7 @@ exports.getClientRentHistoryByBookingId = async (req, res) => {
     const histories = await ClientRentHistory.find({
       clientId: { $in: clientIds },
     })
-      .populate("clientId", "fullName callingNo clientDoj stayType fnf")
+      .populate("clientId", "fullName callingNo clientDoj stayType fnf isBookingCancelled")
       .populate("propertyId", "propertyCode")
       .populate("bedId", "bedNo roomNo")
       .sort({

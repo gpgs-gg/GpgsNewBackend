@@ -1245,21 +1245,21 @@ exports.getClients = async (req, res) => {
 
         data.permanentBooking = permanent
           ? {
-            clientId: permanent._id,
+              clientId: permanent._id,
 
-            propertyId: permanent.propertyId?._id,
-            propertyCode: permanent.propertyId?.propertyCode,
-            propertyName: permanent.propertyId?.propertyName,
-            propertyLocation: permanent.propertyId?.propertyLocation,
+              propertyId: permanent.propertyId?._id,
+              propertyCode: permanent.propertyId?.propertyCode,
+              propertyName: permanent.propertyId?.propertyName,
+              propertyLocation: permanent.propertyId?.propertyLocation,
 
-            bedId: permanent.bedId?._id,
-            bedCode: permanent.bedId?.bedCode,
-            roomNo: permanent.bedId?.roomNo,
-            bedNo: permanent.bedId?.bedNo,
-            clientDoj: permanent?.clientDoj,
-            monthlyRent: permanent.monthlyRent,
-            depositAmount: permanent.depositAmount,
-          }
+              bedId: permanent.bedId?._id,
+              bedCode: permanent.bedId?.bedCode,
+              roomNo: permanent.bedId?.roomNo,
+              bedNo: permanent.bedId?.bedNo,
+              clientDoj: permanent?.clientDoj,
+              monthlyRent: permanent.monthlyRent,
+              depositAmount: permanent.depositAmount,
+            }
           : null;
       }
 
@@ -1672,6 +1672,20 @@ exports.updateClient = async (req, res) => {
       client.fnf = fnfData;
     }
 
+    // ============================================================
+    // CLEAR NOTICE DATES WHEN BOOKING IS CANCELLED
+    // Applies to both Temporary and Permanent bookings
+    // ============================================================
+
+    if (
+      client.isBookingCancelled === false &&
+      req.body.isBookingCancelled === "true"
+    ) {
+      req.body.noticeStartDate = null;
+      req.body.noticeLastDate = null;
+      req.body.clientVacatingDate = null;
+    }
+
     // Update Other Fields
     Object.keys(req.body).forEach((key) => {
       if (!key.endsWith("Existing") && key !== "fnf") {
@@ -1719,10 +1733,8 @@ exports.updateClient = async (req, res) => {
         "createdAt",
         "updatedAt",
         "__v",
-
         "createdByName",
         "updatedByName",
-
         "photoExisting",
         "aadhaarCardExisting",
         "panExisting",
@@ -1731,23 +1743,19 @@ exports.updateClient = async (req, res) => {
         "clientRentalAgreementExisting",
         "clientPoliceNOCExisting",
         "handoverAttachmentExisting",
-
         "temporaryPropertyId",
         "temporaryBedId",
         "temporaryClientDoj",
         "temporaryClientLastDate",
-
         // FNF is handled separately
       ],
     });
 
     // Add all automatically generated field-change logs.
     client.worklogs.push(...automaticWorkLogs);
-
     // ============================================================
     // MANUAL WORKLOG
     // ============================================================
-
     // newWorkLog is a manually entered note from the user.
     // Why: Keep manual notes separate from automatic field changes.
     const newWorkLog = String(req.body.newWorkLog || "").trim();
@@ -1760,38 +1768,55 @@ exports.updateClient = async (req, res) => {
         }),
       );
     }
-
     // Do not allow the frontend-only field to be saved as a Client field.
     delete req.body.newWorkLog;
     const session = await mongoose.startSession();
-
     try {
       await session.withTransaction(async () => {
         // ========================================================
         // SAVE CLIENT
         // ========================================================
-
         await client.save({ session });
-
         // ========================================================
         // UPDATE USER ACTIVE STATUS
         // ========================================================
-
         if (wasBookingCancelled !== client.isBookingCancelled) {
-          await User.findOneAndUpdate(
-            {
+          if (client.isBookingCancelled === true) {
+            const activeBooking = await Client.findOne({
               bookingId: client.bookingId,
-              role: "Client",
-            },
-            {
-              $set: {
-                isActive: !client.isBookingCancelled,
-              },
-            },
-            { session },
-          );
-        }
+              _id: { $ne: client._id },
+              isBookingCancelled: false,
+            }).session(session);
 
+            // Inactive only when NO active booking exists
+            await User.findOneAndUpdate(
+              {
+                bookingId: client.bookingId,
+                role: "Client",
+              },
+              {
+                $set: {
+                  isActive: !!activeBooking,
+                  ...(!activeBooking && { refreshToken: null }),
+                },
+              },
+              { session },
+            );
+          } else {
+            await User.findOneAndUpdate(
+              {
+                bookingId: client.bookingId,
+                role: "Client",
+              },
+              {
+                $set: {
+                  isActive: true,
+                },
+              },
+              { session },
+            );
+          }
+        }
         // ========================================================
         // DEACTIVATE USER ONLY WHEN NO OTHER ACTIVE STAY EXISTS
         // ========================================================
@@ -1829,7 +1854,6 @@ exports.updateClient = async (req, res) => {
         // SYNC CLIENT NAME & EMAIL WITH USER
         // ONLY WHEN LOGIN IS ENABLED
         // ========================================================
-
         if (
           client.loginEnabled === true &&
           ((req.body.emailId !== undefined && req.body.emailId !== oldEmail) ||
@@ -2023,16 +2047,16 @@ exports.getNoticeClients = async (req, res) => {
     const sortQuery =
       req.query.hasCvd === "true"
         ? {
-          clientVacatingDate: 1,
-          noticeLastDate: 1,
-          fullName: 1,
-          _id: 1,
-        }
+            clientVacatingDate: 1,
+            noticeLastDate: 1,
+            fullName: 1,
+            _id: 1,
+          }
         : {
-          noticeLastDate: 1,
-          fullName: 1,
-          _id: 1,
-        };
+            noticeLastDate: 1,
+            fullName: 1,
+            _id: 1,
+          };
     // ==========================================
     // BUILD FILTER QUERY
     // ==========================================
@@ -2910,9 +2934,7 @@ exports.generateSingleClientMonthlyRent = async (req, res) => {
 
       // const monthlyRent = Number(client.monthlyRent || 0);
       const monthlyRent = Number(
-        latestHistory?.monthlyRent ??
-        client.monthlyRent ??
-        0
+        latestHistory?.monthlyRent ?? client.monthlyRent ?? 0,
       );
 
       const depositAmount = Number(client.depositAmount || 0);
@@ -3189,9 +3211,7 @@ exports.generateMonthlyRent = async (req, res) => {
       // const monthlyRent = Number(client.monthlyRent || 0);
 
       const monthlyRent = Number(
-        latestHistory?.monthlyRent ??
-        client.monthlyRent ??
-        0
+        latestHistory?.monthlyRent ?? client.monthlyRent ?? 0,
       );
 
       const depositAmount = Number(client.depositAmount || 0);
