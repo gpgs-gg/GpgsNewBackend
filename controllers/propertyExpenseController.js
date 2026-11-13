@@ -75,8 +75,6 @@ const OptionsData = require("../models/options.model");
 // ];
 
 const expenseCategory = [
-  "Stationary",
-
   "Monthly Expense",
   "New Setup Expense",
   "Office Expense",
@@ -94,10 +92,8 @@ const expenseCategory = [
   "Shop1 Rent",
   "Pest Control",
   "Property Owner Rent",
-
-  "FNF",
+  // "FNF",
   "Owner Expense",
-
   "DMart",
   "Cash Box",
   "Medical Expense",
@@ -133,6 +129,9 @@ const expenseCategory = [
   "Wifi Recharge",
   "LPG Cylinder",
 ];
+
+
+
 const Property = require("../models/property.model");
 const { createWorkLog, generateWorkLogs } = require("../utils/worklog");
 
@@ -1117,6 +1116,7 @@ exports.getBankTransactionsByPropertyId = async (req, res) => {
     // AMOUNT RANGE
     // =========================================================
 
+    
     if (
       req.query.minAmount !== undefined ||
       req.query.maxAmount !== undefined
@@ -2144,7 +2144,6 @@ exports.getPropertyExpensesWithBankTransactions = async (req, res) => {
           valueDate: transaction.valueDate || null,
           category: transaction.expenseCategory || "-",
           amount: Number(transaction.withdrawal || 0),
-
           // Extra bank transaction fields
           withdrawal: Number(transaction.withdrawal || 0),
           narration: transaction.narration || "-",
@@ -2152,14 +2151,12 @@ exports.getPropertyExpensesWithBankTransactions = async (req, res) => {
           paymentMode: /upi/i.test(transaction.narration || "")
             ? "UPI"
             : "Bank",
-
           // userId: transaction.userId
           //   ? {
           //       _id: transaction.userId,
           //       fullName: user?.fullName || "",
           //     }
           //   : null,
-
           propertyId: transaction.propertyId
             ? {
                 _id: transaction.propertyId._id,

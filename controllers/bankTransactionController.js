@@ -965,7 +965,7 @@ exports.getAllTransactions = async (req, res) => {
     // ---------------------------------------------------------
     // Basic filters
     // ---------------------------------------------------------
- 
+
     // Expense Code filter
 
     if (req.query.expenseCode) {
@@ -1464,16 +1464,16 @@ exports.getAllTransactions = async (req, res) => {
 
         userId: transaction.userId
           ? {
-              _id: transaction.userId,
-              fullName: user?.fullName || "",
-            }
+            _id: transaction.userId,
+            fullName: user?.fullName || "",
+          }
           : null,
 
         propertyId: transaction.propertyId
           ? {
-              _id: transaction.propertyId,
-              propertyCode: property?.propertyCode || "",
-            }
+            _id: transaction.propertyId,
+            propertyCode: property?.propertyCode || "",
+          }
           : null,
 
         expenseCode: transaction.expenseCode
@@ -2089,6 +2089,7 @@ exports.getClientsByPropertyId = async (req, res) => {
         $match: {
           propertyId: new mongoose.Types.ObjectId(propertyId),
           isBookingCancelled: false,
+          "fnf.status": { $ne: "F&F Closed" },
         },
       },
 

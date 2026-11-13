@@ -111,7 +111,6 @@ exports.getClientRentHistory = async (req, res) => {
       // Numeric search
       if (!isNaN(keyword)) {
         const number = Number(keyword);
-
         searchConditions.push(
           { year: number },
           { month: number },
@@ -121,13 +120,12 @@ exports.getClientRentHistory = async (req, res) => {
           { monthlyRent: number }
         );
       }
-
       filter.$or = searchConditions;
     }
 
     const rentHistory = await ClientRentHistory.find(filter)
       .populate("clientId", "fullName callingNo clientDoj")
-      .populate("propertyId", "propertyCode")
+      .populate("propertyId","propertyCode utility.ebStartCycle utility.ebEndCycle")
       .populate("bedId", "bedNo roomNo")
       .sort({
         year: -1,
@@ -152,9 +150,8 @@ exports.getClientRentHistory = async (req, res) => {
   }
 };
 
-
 exports.getClientRentHistoryById = async (req, res) => {
-  
+
   try {
     const { id } = req.params;
 
@@ -483,7 +480,7 @@ exports.updateClientRentHistory = async (req, res) => {
 
     if (paymentComments?.trim()) {
       history.paymentComments.push({
-        comment:`${updatedByName} : ${paymentComments.trim()}`,
+        comment: `${updatedByName} : ${paymentComments.trim()}`,
         date: new Date(),
       });
     }
@@ -601,14 +598,14 @@ exports.updateClientRentHistory = async (req, res) => {
       futureHistory.previousDue = previousDue;
 
       await futureHistory.save();
-        // Ye latest history ko track karega
-  latestHistory = futureHistory;
+      // Ye latest history ko track karega
+      latestHistory = futureHistory;
       previousDue = Number(
         futureHistory.currentDue || 0
       );
     }
     // ⭐ FINAL LATEST RENT SNAPSHOT
-await updateClientLatestRent(latestHistory);
+    await updateClientLatestRent(latestHistory);
     return res.status(200).json({
       success: true,
       message: "Rent history updated successfully",
@@ -998,11 +995,11 @@ exports.exportClientRentData = async (req, res) => {
         return Number.isNaN(date.getTime())
           ? "-"
           : date.toLocaleDateString("en-IN", {
-              day: "2-digit",
-              month: "short",
-              year: "numeric",
-              timeZone: "Asia/Kolkata",
-            });
+            day: "2-digit",
+            month: "short",
+            year: "numeric",
+            timeZone: "Asia/Kolkata",
+          });
       }
 
       if (typeof value === "number") {
@@ -1016,50 +1013,50 @@ exports.exportClientRentData = async (req, res) => {
       return String(value);
     };
 
-for (const record of records) {
-  // Start a new page when the current page has insufficient space
-  if (doc.y + rowHeight > doc.page.height - doc.page.margins.bottom) {
-    doc.addPage();
-    drawHeader();
-  }
+    for (const record of records) {
+      // Start a new page when the current page has insufficient space
+      if (doc.y + rowHeight > doc.page.height - doc.page.margins.bottom) {
+        doc.addPage();
+        drawHeader();
+      }
 
-  const startX = doc.page.margins.left;
-  const startY = doc.y;
+      const startX = doc.page.margins.left;
+      const startY = doc.y;
 
-  // Alternate row backgrounds for readability
-  if (rowIndex % 2 === 0) {
-    doc.save();
-    doc.rect(startX, startY, pageWidth, rowHeight).fill("#f9fafb");
-    doc.restore();
-  }
+      // Alternate row backgrounds for readability
+      if (rowIndex % 2 === 0) {
+        doc.save();
+        doc.rect(startX, startY, pageWidth, rowHeight).fill("#f9fafb");
+        doc.restore();
+      }
 
-  doc.font("Helvetica").fontSize(6.5).fillColor("#111827");
+      doc.font("Helvetica").fontSize(6.5).fillColor("#111827");
 
-  exportColumns.forEach((column, index) => {
-  const rawValue =
-    column === "propertyCode"
-      ? record.propertyId?.propertyCode
-      : record[column];
+      exportColumns.forEach((column, index) => {
+        const rawValue =
+          column === "propertyCode"
+            ? record.propertyId?.propertyCode
+            : record[column];
 
-  const value = formatValue(column, rawValue);
+        const value = formatValue(column, rawValue);
 
-    doc.text(value, startX + index * columnWidth + 2, startY + 5, {
-      width: columnWidth - 4,
-      height: rowHeight - 8,
-      ellipsis: true,
-    });
-  });
+        doc.text(value, startX + index * columnWidth + 2, startY + 5, {
+          width: columnWidth - 4,
+          height: rowHeight - 8,
+          ellipsis: true,
+        });
+      });
 
-  doc
-    .moveTo(startX, startY + rowHeight)
-    .lineTo(startX + pageWidth, startY + rowHeight)
-    .lineWidth(0.3)
-    .strokeColor("#d1d5db")
-    .stroke();
+      doc
+        .moveTo(startX, startY + rowHeight)
+        .lineTo(startX + pageWidth, startY + rowHeight)
+        .lineWidth(0.3)
+        .strokeColor("#d1d5db")
+        .stroke();
 
-  doc.y = startY + rowHeight;
-  rowIndex++;
-}
+      doc.y = startY + rowHeight;
+      rowIndex++;
+    }
 
     // Show a message when no matching records exist
     if (rowIndex === 0) {

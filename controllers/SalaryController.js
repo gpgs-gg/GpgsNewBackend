@@ -415,6 +415,7 @@ const getSalaries = asyncHandler(async (req, res) => {
     employeeId = "",
     month = "",
     year = "",
+    department=""
   } = req.query;
 
   // ==========================================================
@@ -480,6 +481,11 @@ const getSalaries = asyncHandler(async (req, res) => {
     employeeFilter.employeeId = employeeId.trim();
   }
 
+
+// DEPARTMENT FILTER
+if (department?.trim()) {
+  employeeFilter.department = department.trim();
+}
   // ==========================================================
   // SEARCH
   // ==========================================================

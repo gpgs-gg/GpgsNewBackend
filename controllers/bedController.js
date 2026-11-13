@@ -339,6 +339,7 @@ exports.createBed = async (req, res) => {
 // Get All
 exports.getBeds = async (req, res) => {
   try {
+    const { sortByAlphanumeric } = req.query;
     // Pagination
     const page = Math.max(parseInt(req.query.page) || 1, 1);
     const limit = Math.max(parseInt(req.query.limit) || 10, 1);
@@ -523,14 +524,65 @@ exports.getBeds = async (req, res) => {
         );
       }
     }
-    // ================= Count =================
+// ================= Count =================
     const totalRecords = await Bed.countDocuments(query);
-    // ================= Data =================
-    const beds = await Bed.find(query)
-      .populate("propertyId", "propertyCode propertyLocation bedCount")
-      .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(limit);
+
+    let beds;
+
+    if (sortByAlphanumeric === "true") {
+      // Fetch ALL matching beds before pagination
+      beds = await Bed.find(query)
+        .populate("propertyId", "propertyCode propertyLocation bedCount")
+        .lean();
+
+
+      // Property Code sorting
+      beds.sort((a, b) => {
+        const codeA = String(a.propertyId?.propertyCode || "")
+          .trim()
+          .toUpperCase();
+
+        const codeB = String(b.propertyId?.propertyCode || "")
+          .trim()
+          .toUpperCase();
+
+        // Alphabetic starting characters before numeric starting characters
+        const firstA = codeA.charAt(0);
+        const firstB = codeB.charAt(0);
+
+        const isLetterA = /^[A-Z]$/.test(firstA);
+        const isLetterB = /^[A-Z]$/.test(firstB);
+
+        if (isLetterA !== isLetterB) {
+          return isLetterA ? -1 : 1;
+        }
+
+        // First character comparison
+        const firstCharComparison = firstA.localeCompare(firstB);
+
+        if (firstCharComparison !== 0) {
+          return firstCharComparison;
+        }
+
+        // Full property code comparison (A2 before A10)
+        return codeA.localeCompare(codeB, "en", {
+          numeric: true,
+          sensitivity: "base",
+        });
+      });
+
+    
+
+      // Pagination AFTER sorting
+      beds = beds.slice(skip, skip + limit);
+    } else {
+      beds = await Bed.find(query)
+        .populate("propertyId", "propertyCode propertyLocation bedCount")
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean();
+    }
     return res.status(200).json({
       success: true,
       page,

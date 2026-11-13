@@ -30,43 +30,58 @@ const getAllEBCalculations = async (req, res) => {
     }
 };
 
-
 // ======================================================
 // GET EB CALCULATION BY ID
 // ======================================================
 const getEBCalculationById = async (req, res) => {
-    try {
-        const { id } = req.params;
+  try {
+    const { id } = req.params;
 
-        if (!mongoose.Types.ObjectId.isValid(id)) {
-            return res.status(400).json({
-                success: false,
-                message: "Invalid EB Calculation ID",
-            });
-        }
-
-        const data = await EBCalculation.findById(id).lean();
-
-        if (!data) {
-            return res.status(404).json({
-                success: false,
-                message: "EB Calculation not found",
-            });
-        }
-
-        return res.status(200).json({
-            success: true,
-            data,
-        });
-    } catch (error) {
-        console.error("GET EB CALCULATION BY ID ERROR:", error);
-
-        return res.status(500).json({
-            success: false,
-            message: "Failed to fetch EB calculation",
-            error: error.message,
-        });
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid Client ID",
+      });
     }
+
+    // STEP 1: Client ID se Property ID nikalo
+    const client = await Client.findById(id)
+      .select("propertyId")
+      .lean();
+
+    if (!client) {
+      return res.status(404).json({
+        success: false,
+        message: "Client not found",
+      });
+    }
+
+    if (!client.propertyId) {
+      return res.status(404).json({
+        success: false,
+        message: "Property not found for this client",
+      });
+    }
+
+    // STEP 2: Property ID se EB Calculation filter karo
+    const data = await EBCalculation.find({
+      PropertyId: client.propertyId.toString(),
+    }).lean();
+
+    return res.status(200).json({
+      success: true,
+      data,
+    });
+
+  } catch (error) {
+    console.error("GET EB CALCULATION ERROR:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch EB calculation",
+      error: error.message,
+    });
+  }
 };
 
 

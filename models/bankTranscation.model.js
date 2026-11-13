@@ -145,6 +145,18 @@ bankTransactionSchema.index({
   withdrawal: 1,
   deposit: 1,
 });
+// Optimized duplicate checking
+bankTransactionSchema.index(
+  {
+    date: 1,
+    narration: 1,
+    valueDate: 1,
+    chqNo: 1,
+  },
+  {
+    name: "bank_transaction_duplicate_check",
+  }
+);
 
 // Search
 bankTransactionSchema.index({

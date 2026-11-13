@@ -1,6 +1,6 @@
 
 
-  // fast code there is not added IA , RF ,total this is fast ...............
+// fast code there is not added IA , RF ,total this is fast ...............
 
 // const Client = require("../models/client.model");
 // const Bed = require("../models/bed.model");
@@ -367,6 +367,8 @@ exports.getAllAvailableBeds = async (req, res) => {
       depositAmountMax,
       hasCvd,
       sortByRent,
+      sortByAlphanumeric,
+      sortByRedFlag,
     } = req.query;
 
     const propertyLocation =
@@ -526,8 +528,11 @@ exports.getAllAvailableBeds = async (req, res) => {
     // 🔥 Dono queries parallel me chal rahi hain
     let totalRecords;
     let beds;
-
-    if (hasCvd === "true") {
+    const needsInMemorySorting =
+      hasCvd === "true" ||
+      sortByAlphanumeric === "true" ||
+      sortByRedFlag === "true";
+    if (needsInMemorySorting) {
       // CVD sorting needs ALL matching beds before pagination
       [totalRecords, beds] = await Promise.all([
         Bed.countDocuments(query),
@@ -548,7 +553,6 @@ exports.getAllAvailableBeds = async (req, res) => {
           .lean(),
       ]);
     }
-
     // ================= 💨 STEP 3: Get clients for these beds =================
     // ================= ALL MATCHING BED IDS =================
     const allMatchingBeds = await Bed.find(query)
@@ -567,7 +571,6 @@ exports.getAllAvailableBeds = async (req, res) => {
           {
             bedId: { $in: bedIds }
           },
-
           // Transfer ke baad old bed par historical client
           {
             "bedHistory.bedId": { $in: bedIds }
@@ -580,9 +583,7 @@ exports.getAllAvailableBeds = async (req, res) => {
         .lean();
     }
     // ================= 💨 STEP 3.1: Map for O(1) lookup =================
-
     let allClients = [];
-
     if (allBedIds.length > 0) {
       allClients = await Client.find({
         $or: [
@@ -599,22 +600,17 @@ exports.getAllAvailableBeds = async (req, res) => {
         )
         .lean();
     }
-
     // ================= 💨 STEP 4: Map for O(1) lookup =================
-
     const clientMap = new Map();
-
     clients.forEach(c => {
       // Current bed client
       if (c.bedId) {
         clientMap.set(String(c.bedId), c);
       }
-
       // Old bed from bedHistory
       if (Array.isArray(c.bedHistory)) {
         c.bedHistory.forEach(history => {
           if (!history.bedId) return;
-
           // Old bed ka historical record
           if (
             history.clientVacatingDate ||
@@ -624,22 +620,17 @@ exports.getAllAvailableBeds = async (req, res) => {
           ) {
             clientMap.set(String(history.bedId), {
               ...c,
-
               // Old bed ki dates
               noticeStartDate:
                 history.noticeStartDate || c.noticeStartDate,
-
               noticeLastDate:
                 history.noticeLastDate || c.noticeLastDate,
-
               clientVacatingDate:
                 history.clientVacatingDate ||
                 history.toDate ||
                 c.clientVacatingDate,
-
               clientDoj:
                 history.fromDate || c.clientDoj,
-
               bedId: history.bedId,
             });
           }
@@ -648,18 +639,14 @@ exports.getAllAvailableBeds = async (req, res) => {
     });
 
     // ================= ALL CLIENT MAP =================
-
     const allClientMap = new Map();
-
     allClients.forEach((c) => {
       if (c.bedId) {
         allClientMap.set(String(c.bedId), c);
       }
-
       if (Array.isArray(c.bedHistory)) {
         c.bedHistory.forEach((history) => {
           if (!history.bedId) return;
-
           if (
             history.clientVacatingDate ||
             history.noticeStartDate ||
@@ -668,21 +655,16 @@ exports.getAllAvailableBeds = async (req, res) => {
           ) {
             allClientMap.set(String(history.bedId), {
               ...c,
-
               noticeStartDate:
                 history.noticeStartDate || c.noticeStartDate,
-
               noticeLastDate:
                 history.noticeLastDate || c.noticeLastDate,
-
               clientVacatingDate:
                 history.clientVacatingDate ||
                 history.toDate ||
                 c.clientVacatingDate,
-
               clientDoj:
                 history.fromDate || c.clientDoj,
-
               bedId: history.bedId,
             });
           }
@@ -759,36 +741,150 @@ exports.getAllAvailableBeds = async (req, res) => {
       };
     });
 
+// ================= STEP 6: CUSTOM SORTING =================
 
-    // ================= 💨 STEP 6: CVD sorting (Sirf 10-20 records pe) =================
-    if (hasCvd === "true") {
+    // Alphanumeric property code sorting (A-Z, numeric-aware)
+    if (sortByAlphanumeric === "true") {
       data.sort((a, b) => {
-        const aDate = a.client?.clientVacatingDate ? new Date(a.client.clientVacatingDate) : null;
-        const bDate = b.client?.clientVacatingDate ? new Date(b.client.clientVacatingDate) : null;
+        const codeA = a.propertyId?.propertyCode || "";
+        const codeB = b.propertyId?.propertyCode || "";
+
+        // Primary sorting: Property Code A-Z
+        const codeComparison = String(codeA).localeCompare(
+          String(codeB),
+          undefined,
+          {
+            numeric: true,
+            sensitivity: "base",
+          },
+        );
+
+        if (codeComparison !== 0) {
+          return codeComparison;
+        }
+
+        // Secondary sorting: CVD date
+        if (hasCvd === "true") {
+          const dateA = a.client?.clientVacatingDate
+            ? new Date(a.client.clientVacatingDate).getTime()
+            : null;
+
+          const dateB = b.client?.clientVacatingDate
+            ? new Date(b.client.clientVacatingDate).getTime()
+            : null;
+
+          if (dateA === null && dateB !== null) return -1;
+          if (dateA !== null && dateB === null) return 1;
+
+          if (dateA !== null && dateB !== null && dateA !== dateB) {
+            return dateA - dateB;
+          }
+        }
+
+        // Final sorting: Rent (Low to High)
+        if (sortByRent === "true") {
+          return (a.monthlyRent || 0) - (b.monthlyRent || 0);
+        }
+
+        return 0;
+      });
+    } else if (hasCvd === "true") {
+      // Existing CVD sorting when alphanumeric sorting is disabled
+      data.sort((a, b) => {
+        const aDate = a.client?.clientVacatingDate
+          ? new Date(a.client.clientVacatingDate)
+          : null;
+
+        const bDate = b.client?.clientVacatingDate
+          ? new Date(b.client.clientVacatingDate)
+          : null;
 
         if (aDate === null && bDate !== null) return -1;
         if (aDate !== null && bDate === null) return 1;
+
         if (aDate === null && bDate === null) {
           if (sortByRent === "true") {
-            return a.monthlyRent - b.monthlyRent;
+            return (a.monthlyRent || 0) - (b.monthlyRent || 0);
           }
           return 0;
         }
 
         const dateDiff = aDate - bDate;
+
         if (dateDiff !== 0) return dateDiff;
 
         if (sortByRent === "true") {
-          return a.monthlyRent - b.monthlyRent;
+          return (a.monthlyRent || 0) - (b.monthlyRent || 0);
         }
+
+        return 0;
+      });
+    }
+    // ================= RED FLAG SORTING =================
+
+    // ================= RED FLAG SORTING =================
+
+    if (sortByRedFlag === "true") {
+      const getNoticeLastDate = (item) => {
+        const nld = item?.client?.noticeLastDate;
+
+        if (!nld) return null;
+
+        const date = new Date(nld);
+
+        if (Number.isNaN(date.getTime())) return null;
+
+        date.setHours(0, 0, 0, 0);
+        return date.getTime();
+      };
+
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
+      const todayTime = today.getTime();
+      const fifteenDays = 15 * 24 * 60 * 60 * 1000;
+
+      const isRedFlag = (item) => {
+        const nldTime = getNoticeLastDate(item);
+
+        // NLD missing = Red Flag
+        if (nldTime === null) return true;
+
+        const diffDays = nldTime - todayTime;
+
+        return diffDays <= fifteenDays;
+      };
+
+      data.sort((a, b) => {
+        const aRedFlag = isRedFlag(a);
+        const bRedFlag = isRedFlag(b);
+
+        // 1. Red Flag First
+        if (aRedFlag && !bRedFlag) return -1;
+        if (!aRedFlag && bRedFlag) return 1;
+
+        // 2. Sort by Notice Last Date (earliest first)
+        const aDate = getNoticeLastDate(a);
+        const bDate = getNoticeLastDate(b);
+
+        // Missing NLD first within Red Flag group
+        if (aDate === null && bDate !== null) return -1;
+        if (aDate !== null && bDate === null) return 1;
+
+        if (aDate !== null && bDate !== null) {
+          return aDate - bDate;
+        }
+
         return 0;
       });
     }
 
-    // Apply pagination AFTER CVD sorting
-    if (hasCvd === "true") {
+    // Apply pagination AFTER custom sorting
+    if (needsInMemorySorting) {
       data = data.slice(skip, skip + limit);
     }
+
+
     return res.status(200).json({
       success: true,
       page,

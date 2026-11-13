@@ -274,16 +274,13 @@ const generateMonthlyRent = async () => {
   // 20th ko next month's rent history generate hogi
   if (today.getDate() >= 20) {
     month++;
-
     if (month > 12) {
       month = 1;
       year++;
     }
   }
-
   // Client filtering ke liye bhi next month ki 1st date use hogi
   let todayFilterDate;
-
   if (today.getDate() >= 20) {
     const filterDate = new Date(today.getFullYear(), today.getMonth() + 1, 1);
     todayFilterDate = `${filterDate.getFullYear()}-${String(
@@ -296,25 +293,19 @@ const generateMonthlyRent = async () => {
   }
 
   //   const today = new Date();
-
   // let month = today.getMonth() + 1;
   // let year = today.getFullYear();
-
   // let todayFilterDate;
-
   // // 22nd ya uske baad → next month ka rent
   // if (today.getDate() >= 22) {
   //   month++;
-
   //   if (month > 12) {
   //     month = 1;
   //     year++;
   //   }
-
   //   // jis month ka rent generate ho raha hai,
   //   // us month ki 1st date
   //   const filterDate = new Date(year, month - 1, 1);
-
   //   todayFilterDate = filterDate
   //     .toISOString()
   //     .split("T")[0];
@@ -322,12 +313,11 @@ const generateMonthlyRent = async () => {
   //   todayFilterDate =
   //     today.toISOString().split("T")[0];
   // }
-
   // console.log("today:", today);
   // console.log("month:", month, "year:", year);
   // console.log("todayFilterDate:", todayFilterDate);
-
   // const todayFilterDate = new Date().toISOString().split("T")[0];
+
   const clients = await Client.find({
     isBookingCancelled: false,
     $or: [
@@ -415,34 +405,25 @@ const generateMonthlyRent = async () => {
       },
     },
   ]);
-
   const dueMap = new Map();
   const latestHistoryMap = new Map();
-
   previousHistory.forEach((item) => {
     const clientId = String(item._id);
-
     dueMap.set(clientId, item.currentDue || 0);
-
     latestHistoryMap.set(clientId, {
       month: item.latestMonth,
       year: item.latestYear,
       monthlyRent: item.monthlyRent,
     });
   });
-
   for (const client of clients) {
     if (!client.bedId) continue;
     // Latest Rent History validation
-
     const key = `${client._id}_${client.bedId._id}`;
-
-
     if (existingHistorySet.has(key)) {
       alreadyGeneratedCount++;
       continue;
     }
-
     const latestHistory = latestHistoryMap.get(String(client._id));
     if (latestHistory) {
       const latestValue = latestHistory.year * 12 + latestHistory.month;
@@ -456,26 +437,16 @@ const generateMonthlyRent = async () => {
         continue;
       }
     }
-
-
-
-
     const previousDue = dueMap.get(String(client._id)) || 0;
-
     // const monthlyRent = Number(client.monthlyRent || 0);
-
     const monthlyRent = Number(
       latestHistory?.monthlyRent ??
       client.monthlyRent ??
       0
     );
-
-
     const bookingType = client.bookingType;
     const depositAmount = Number(client.depositAmount || 0);
     const processingFees = Number(client.processingFees || 0);
-
-
     const parkingCharges = Number(client.parkingCharges || 0);
     const noticeLastDate = client.noticeLastDate
       ? new Date(client.noticeLastDate)

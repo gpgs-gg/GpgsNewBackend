@@ -51,6 +51,9 @@ exports.getAllRNRClients = async (req, res) => {
     }
     // ================= Filters =================
     if (req.query.rentStatus) query.rentStatus = req.query.rentStatus;
+    if (req.query.fnfStatus?.trim()) {
+      query["fnf.status"] = req.query.fnfStatus.trim();
+    }
     if (req.query.propertyId?.trim()) {
       if (!mongoose.Types.ObjectId.isValid(req.query.propertyId)) {
         return res.status(400).json({
