@@ -751,20 +751,48 @@ const recalculateRentHistory = async (
       `Rent history not found for this client in ${monthNames[month - 1]}/${year}.`
     );
   }
-  // DOJ isi billing month ka hai?
-  const isDOJInBillingMonth =
-    dojDate.getMonth() + 1 === month &&
-    dojDate.getFullYear() === year;
 
-  // 👇 DOJ change hone par hamesha client ka latest DOJ use karo
-  let startDate;
+  // DOJ isi billing month ka hai?  old code 13/11/26
+  // const isDOJInBillingMonth =
+  //   dojDate.getMonth() + 1 === month &&
+  //   dojDate.getFullYear() === year;
 
-  if (isDOJInBillingMonth) {
-    startDate = new Date(client.clientDoj);
-  } else {
-    startDate = new Date(year, month - 1, 1);
-  }
+  // // 👇 DOJ change hone par hamesha client ka latest DOJ use karo
+  // let startDate;
 
+  // if (isDOJInBillingMonth) {
+  //   startDate = new Date(client.clientDoj);
+  // } else {
+  //   startDate = new Date(year, month - 1, 1);
+  // }
+
+  // Current bed ki actual joining date check karo
+  
+const currentBedHistory = client.bedHistory
+  ?.filter(
+    (h) =>
+      String(h.bedId) === String(client.bedId?._id) &&
+      new Date(h.fromDate).getMonth() + 1 === month &&
+      new Date(h.fromDate).getFullYear() === year
+  )
+  .sort(
+    (a, b) => new Date(b.fromDate) - new Date(a.fromDate)
+  )[0];
+
+let startDate;
+
+if (currentBedHistory?.fromDate) {
+  startDate = new Date(currentBedHistory.fromDate);
+} else if (
+  dojDate.getMonth() + 1 === month &&
+  dojDate.getFullYear() === year
+) {
+  startDate = new Date(client.clientDoj);
+} else {
+  startDate = new Date(year, month - 1, 1);
+}
+
+startDate.setHours(0, 0, 0, 0);
 
   let lastDate = null;
 

@@ -525,18 +525,105 @@ exports.getBeds = async (req, res) => {
       }
     }
 // ================= Count =================
+    // const totalRecords = await Bed.countDocuments(query);
+
+    // let beds;
+
+    // if (sortByAlphanumeric === "true") {
+    //   // Fetch ALL matching beds before pagination
+    //   beds = await Bed.find(query)
+    //     .populate("propertyId", "propertyCode propertyLocation bedCount")
+    //     .lean();
+
+
+    //   // Property Code sorting
+    //   beds.sort((a, b) => {
+    //     const codeA = String(a.propertyId?.propertyCode || "")
+    //       .trim()
+    //       .toUpperCase();
+
+    //     const codeB = String(b.propertyId?.propertyCode || "")
+    //       .trim()
+    //       .toUpperCase();
+
+    //     // Alphabetic starting characters before numeric starting characters
+    //     const firstA = codeA.charAt(0);
+    //     const firstB = codeB.charAt(0);
+
+    //     const isLetterA = /^[A-Z]$/.test(firstA);
+    //     const isLetterB = /^[A-Z]$/.test(firstB);
+
+    //     if (isLetterA !== isLetterB) {
+    //       return isLetterA ? -1 : 1;
+    //     }
+
+    //     // First character comparison
+    //     const firstCharComparison = firstA.localeCompare(firstB);
+
+    //     if (firstCharComparison !== 0) {
+    //       return firstCharComparison;
+    //     }
+
+    //     // Full property code comparison (A2 before A10)
+    //     return codeA.localeCompare(codeB, "en", {
+    //       numeric: true,
+    //       sensitivity: "base",
+    //     });
+    //   });
+
+    
+
+    //   // Pagination AFTER sorting
+    //   beds = beds.slice(skip, skip + limit);
+    // } else {
+    //   beds = await Bed.find(query)
+    //     .populate("propertyId", "propertyCode propertyLocation bedCount")
+    //     .sort({ createdAt: -1 })
+    //     .skip(skip)
+    //     .limit(limit)
+    //     .lean();
+    // }
+
+// ================= Count =================
     const totalRecords = await Bed.countDocuments(query);
 
     let beds;
 
-    if (sortByAlphanumeric === "true") {
-      // Fetch ALL matching beds before pagination
+    // Property filter applied: sort by Bed No ascending
+    // Property filter applied: Numeric Bed No sorting
+    if (req.query.propertyId) {
       beds = await Bed.find(query)
         .populate("propertyId", "propertyCode propertyLocation bedCount")
         .lean();
 
+      // Numeric sorting: Bed No first, Room No second
+      beds.sort((a, b) => {
+        const bedA = Number(a.bedNo);
+        const bedB = Number(b.bedNo);
 
-      // Property Code sorting
+        if (bedA !== bedB) {
+          return bedA - bedB;
+        }
+
+        const roomA = Number(a.roomNo);
+        const roomB = Number(b.roomNo);
+
+        if (roomA !== roomB) {
+          return roomA - roomB;
+        }
+
+        return String(a._id).localeCompare(String(b._id));
+      });
+
+      // Apply pagination AFTER sorting
+      beds = beds.slice(skip, skip + limit);
+    }
+    // Existing alphanumeric property sorting
+    else if (sortByAlphanumeric === "true") {
+      beds = await Bed.find(query)
+        .populate("propertyId", "propertyCode propertyLocation bedCount")
+        .lean();
+
       beds.sort((a, b) => {
         const codeA = String(a.propertyId?.propertyCode || "")
           .trim()
@@ -546,7 +633,6 @@ exports.getBeds = async (req, res) => {
           .trim()
           .toUpperCase();
 
-        // Alphabetic starting characters before numeric starting characters
         const firstA = codeA.charAt(0);
         const firstB = codeB.charAt(0);
 
@@ -557,23 +643,18 @@ exports.getBeds = async (req, res) => {
           return isLetterA ? -1 : 1;
         }
 
-        // First character comparison
         const firstCharComparison = firstA.localeCompare(firstB);
 
         if (firstCharComparison !== 0) {
           return firstCharComparison;
         }
 
-        // Full property code comparison (A2 before A10)
         return codeA.localeCompare(codeB, "en", {
           numeric: true,
           sensitivity: "base",
         });
       });
 
-    
-
-      // Pagination AFTER sorting
       beds = beds.slice(skip, skip + limit);
     } else {
       beds = await Bed.find(query)
@@ -583,6 +664,9 @@ exports.getBeds = async (req, res) => {
         .limit(limit)
         .lean();
     }
+
+
+
     return res.status(200).json({
       success: true,
       page,
