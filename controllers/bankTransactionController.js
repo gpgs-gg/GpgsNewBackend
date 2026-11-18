@@ -986,6 +986,20 @@ exports.getAllTransactions = async (req, res) => {
         ? new mongoose.Types.ObjectId(pid)
         : pid;
     }
+
+// ---------------------------------------------------------
+    // Expense Type
+    // ---------------------------------------------------------
+
+    if (req.query.expenseType?.trim()) {
+      const expenseType = req.query.expenseType.trim();
+
+      query.expenseType = {
+        $regex: `^${expenseType.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`,
+        $options: "i",
+      };
+    }
+
     if (req.query.source) {
       query.source = req.query.source;
     }

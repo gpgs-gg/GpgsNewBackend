@@ -76,7 +76,7 @@ const bankTransactionSchema = new mongoose.Schema(
       default: "",
       index: true,
     },
-expenseType: {
+    expenseType: {
       type: String,
       default: "",
       trim: true,

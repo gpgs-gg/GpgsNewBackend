@@ -525,6 +525,7 @@ exports.getAllBookings = async (req, res) => {
 
         { bedId: { $in: bedIds } },
         { temporaryBedId: { $in: bedIds } },
+        { bookingAmount: Number(searchText) },
       ];
     }
 

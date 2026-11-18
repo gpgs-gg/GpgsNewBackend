@@ -10,129 +10,9 @@ const {
 const OptionsData = require("../models/options.model");
 
 
-//  const expenseCategory = [
-//   "Petrol",
-//   "Snacks",
-//   "EB",
-//   "Stationary",
-//   "2 Wheeler Repair",
-//   "Salary",
-//   "Monthly Expense",
-//   "New Setup Expense",
-//   "Office Expense",
-//   "Asset Expense",
-//   "Inventory Expense",
-//   "Client Rent",
-//   "Marketing Expenses",
-//   "Household Items",
-//   "Bank Srvc Charges",
-//   "HR Expenses",
-//   "2 Wheeler Insurance",
-//   "Festival Expenses",
-//   "KK Self",
-//   "Other Expenses",
-//   "Shop1 Rent",
-//   "Pest Control",
-//   "Property Owner Rent",
-//   "New Booking",
-//   "FNF",
-//   "Owner Expense",
-//   "Approx EB Refund",
-//   "DMart",
-//   "Cash Box",
-//   "Medical Expense",
-//   "Mahanagar Gas",
-//   "GPGS Expenses Fund",
-//   "AV209&210Satara_HS Booking",
-//   "GPMS",
-//   "GPGS - New Plywoods",
-//   "GPGS - New LED Patti",
-//   "GPGS - New LED Bulbs",
-//   "GPGS - Buttons 6A",
-//   "GPGS - Buttons 16A",
-//   "Maintenance",
-//   "PUC",
-//   "Office Expenses",
-//   "Insurance",
-//   "HouseKeeping Material",
-//   "Marketing",
-//   "Stamp Papers",
-//   "Revenue Stamps",
-//   "Social Work",
-//   "GPGS - Exhaust Fans",
-//   "GPGS - Ceiling Fans",
-//   "Inventory",
-//   "Assets",
-//   "Domain charges",
-//   "Plastic Net",
-//   "Pegion Net",
-//   "Birds Net",
-//   "EMI TataACE 5449",
-//   "EMI RH10ALONL21",
-//   "Key",
-//   "Wifi Recharge",
-//   "LPG Cylinder",
-// ];
-
-const expenseCategory = [
-  "Monthly Expense",
-  "New Setup Expense",
-  "Office Expense",
-  "Asset Expense",
-  "Inventory Expense",
-
-  "Marketing Expenses",
-  "Household Items",
-  "Bank Srvc Charges",
-  "HR Expenses",
-
-  "Festival Expenses",
-  "KK Self",
-  "Other Expenses",
-  "Shop1 Rent",
-  "Pest Control",
-  "Property Owner Rent",
-  // "FNF",
-  "Owner Expense",
-  "DMart",
-  "Cash Box",
-  "Medical Expense",
-  "Mahanagar Gas",
-  "GPGS Expenses Fund",
-  "AV209&210Satara_HS Booking",
-  "GPMS",
-  "GPGS - New Plywoods",
-  "GPGS - New LED Patti",
-  "GPGS - New LED Bulbs",
-  "GPGS - Buttons 6A",
-  "GPGS - Buttons 16A",
-  "Maintenance",
-  "PUC",
-  "Office Expenses",
-  "Insurance",
-  "HouseKeeping Material",
-  "Marketing",
-  "Stamp Papers",
-  "Revenue Stamps",
-  "Social Work",
-  "GPGS - Exhaust Fans",
-  "GPGS - Ceiling Fans",
-  "Inventory",
-  "Assets",
-  "Domain charges",
-  "Plastic Net",
-  "Pegion Net",
-  "Birds Net",
-  "EMI TataACE 5449",
-  "EMI RH10ALONL21",
-  "Key",
-  "Wifi Recharge",
-  "LPG Cylinder",
-];
-
-
 
 const Property = require("../models/property.model");
+
 const { createWorkLog, generateWorkLogs } = require("../utils/worklog");
 
 const PAYMENT_MODES = ["Cash", "Bank", "UPI", "Cheque", "Other"];
@@ -202,17 +82,17 @@ const buildFilters = (query) => {
 };
 
 const validateBody = (body) => {
-const {
-  propertyId,
-  expenseDate,
-  category,
-  amount,
-  paymentMode,
-  comment,
-  description,
-  receiptUrl,
-  expenseType,
-} = body;
+  const {
+    propertyId,
+    expenseDate,
+    category,
+    amount,
+    paymentMode,
+    comment,
+    description,
+    receiptUrl,
+    expenseType,
+  } = body;
 
   if (!propertyId || !isValidId(propertyId)) {
     return "Please select a valid property";
@@ -311,8 +191,6 @@ exports.getExpenses = async (req, res) => {
   }
 };
 
-
-
 exports.createExpense = async (req, res) => {
   try {
     const validationError = validateBody(req.body);
@@ -372,7 +250,6 @@ exports.createExpense = async (req, res) => {
     });
   }
 };
-
 
 exports.updateExpense = async (req, res) => {
   try {
@@ -1001,7 +878,6 @@ exports.getBankTransactionsByPropertyId = async (req, res) => {
     // AMOUNT RANGE
     // =========================================================
 
-    
     if (
       req.query.minAmount !== undefined ||
       req.query.maxAmount !== undefined
@@ -1450,6 +1326,27 @@ exports.getBankTransactionsByPropertyId = async (req, res) => {
 
 exports.getPropertyExpensesWithBankTransactions = async (req, res) => {
   try {
+    // Get all Expense Types
+    const expenseTypeOptions = await OptionsData.findOne({
+      categoryKey: "expensetype",
+    }).lean();
+
+    const allExpenseTypes = (expenseTypeOptions?.items || [])
+      .map((item) => item.value || item.label)
+      .filter(Boolean);
+
+    // Get Allowed Property Expense Types
+    const propertyExpenseTypeOptions = await OptionsData.findOne({
+      categoryKey: "propertyexpensetypes",
+    }).lean();
+
+    const allowedExpenseTypes = (propertyExpenseTypeOptions?.items || [])
+      .map((item) => item.value || item.label)
+      .filter(Boolean);
+
+    // Console Logs
+    // console.log("All Expense Types:", allExpenseTypes);
+    // console.log("Allowed Property Expense Types:", allowedExpenseTypes);
     const { propertyId } = req.params;
 
     // =========================================================
@@ -1582,18 +1479,12 @@ exports.getPropertyExpensesWithBankTransactions = async (req, res) => {
     // BANK TRANSACTION QUERY
     // =========================================================
 
+    // BANK TRANSACTION QUERY
     const bankQuery = {
       propertyId: propertyObjectId,
-
-      // Retain your existing bank transaction category restriction.
-      expenseCategory: {
-        $in: expenseCategory.map(
-          (category) =>
-            new RegExp(
-              `^${category.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`,
-              "i",
-            ),
-        ),
+      withdrawal: { $gt: 0 },
+      expenseType: {
+        $in: allowedExpenseTypes,
       },
     };
 
@@ -1686,18 +1577,6 @@ exports.getPropertyExpensesWithBankTransactions = async (req, res) => {
           .trim()
           .replace(/[.*+?^${}()|[\]\\]/g, "\\$&"),
         $options: "i",
-      };
-    }
-
-    // EXPENSE CATEGORY
-    if (expenseType) {
-      bankQuery.expenseCategory = {
-        $in: [
-          new RegExp(
-            `^${expenseType.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`,
-            "i",
-          ),
-        ],
       };
     }
 
