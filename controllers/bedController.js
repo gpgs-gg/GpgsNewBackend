@@ -589,7 +589,7 @@ exports.getBeds = async (req, res) => {
 
     let beds;
 
-    // Property filter applied: sort by Bed No ascending
+// Property filter applied: sort by Bed No ascending
     // Property filter applied: Numeric Bed No sorting
     if (req.query.propertyId) {
       beds = await Bed.find(query)
@@ -664,7 +664,6 @@ exports.getBeds = async (req, res) => {
         .limit(limit)
         .lean();
     }
-
 
 
     return res.status(200).json({

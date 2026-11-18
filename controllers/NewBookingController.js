@@ -769,26 +769,24 @@ exports.updateBooking = async (req, res) => {
         }),
       );
     }
+// ============================================================
+    // PAYMENT VERIFICATION WORKLOG
+    // Only when loginEnabled changes from false to true
+    // ============================================================
+
+    if (booking.loginEnabled === false && updateData.loginEnabled === true) {
+      workLogs.push(
+        createWorkLog({
+          message: "Payment verification Changed From Pending to Verified",
+          createdBy: user,
+        }),
+      );
+    }
     // ============================================================
     // UPDATE BOOKING
     // ============================================================
     Object.assign(booking, updateData);
     booking.workLogs = workLogs;
-    if (booking.loginEnabled === false) {
-      booking.workLogs = booking.workLogs || [];
-      booking.workLogs.push(
-        createWorkLog({
-          message: `Payment verification Changed From Pending to Verified"`,
-          createdBy:
-            req.body.user ||
-            req.body.updatedByName ||
-            req.user?.name ||
-            "system",
-        }),
-      );
-    }
-
-    await booking.save();
 
     const updatedBooking = await booking.save();
 

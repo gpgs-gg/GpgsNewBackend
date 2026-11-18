@@ -75,22 +75,26 @@ const getAllTickets = asyncHandler(async (req, res) => {
     return value;
   };
 
-  if (req.query.search) {
-    query.$or = [
-      { ticketId: { $regex: req.query.search, $options: "i" } },
-      { title: { $regex: req.query.search, $options: "i" } },
-      { description: { $regex: req.query.search, $options: "i" } },
-      {
-        "propertyId.propertyCode": { $regex: req.query.search, $options: "i" },
-      },
-      {
-        "propertyId.propertyLocation": {
-          $regex: req.query.search,
-          $options: "i",
-        },
-      },
-    ];
-  }
+ if (req.query.search?.trim()) {
+   const searchRegex = {
+     $regex: req.query.search.trim(),
+     $options: "i",
+   };
+
+   query.$or = [
+     { ticketId: searchRegex },
+     { title: searchRegex },
+     { description: searchRegex },
+
+     // Created By search
+     { createdBy: searchRegex },
+     { createdByName: searchRegex },
+
+     // Property search
+     { "propertyId.propertyCode": searchRegex },
+     { "propertyId.propertyLocation": searchRegex },
+   ];
+ }
   if (req.query.createdBy) {
     const createdBy = getFilterValue(req.query.createdBy);
 

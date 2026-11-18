@@ -85,6 +85,7 @@ exports.getAllRNRClients = async (req, res) => {
     const sortField = req.query.sortBy || "createdAt";
     const sortOrder = req.query.sortOrder === "asc" ? 1 : -1;
     const sort = { [sortField]: sortOrder };
+    const sortByCurrentDues = req.query.sortByCurrentDues === "true";
 
     // ================= Total Current Due =================
 
@@ -139,16 +140,19 @@ exports.getAllRNRClients = async (req, res) => {
           },
         },
 
-        {
-          $sort: {
-            propertySequence: 1,
-            [sortField]: sortOrder,
-            _id: 1,
-          },
-        },
-
-        { $skip: skip },
-        { $limit: limit },
+     {
+          $sort: sortByCurrentDues
+            ? {
+                "latestRentHistory.currentDue": -1,
+                propertySequence: 1,
+                _id: 1,
+              }
+            : {
+                propertySequence: 1,
+                [sortField]: sortOrder,
+                _id: 1,
+              },
+        },  
 
         {
           $lookup: {
@@ -165,7 +169,39 @@ exports.getAllRNRClients = async (req, res) => {
             preserveNullAndEmptyArrays: true,
           },
         },
-
+{
+          $addFields: {
+            bedNoNumeric: {
+              $convert: {
+                input: "$bed.bedNo",
+                to: "double",
+                onError: 999999999,
+                onNull: 999999999,
+              },
+            },
+          },
+        },
+      {
+          $sort: req.query.propertyId?.trim()
+            ? {
+                bedNoNumeric: 1,
+                "bed.roomNo": 1,
+                _id: 1,
+              }
+            : sortByCurrentDues
+              ? {
+                  "latestRentHistory.currentDue": -1,
+                  propertySequence: 1,
+                  _id: 1,
+                }
+              : {
+                  propertySequence: 1,
+                  [sortField]: sortOrder,
+                  _id: 1,
+                },
+        },
+        { $skip: skip },
+        { $limit: limit },
         {
           $addFields: {
             propertyId: {

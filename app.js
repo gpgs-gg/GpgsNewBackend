@@ -39,6 +39,7 @@ const propertySequenceRoutes = require("./routes/propertySequenceRoutes");
 const RnrRoutes = require("./routes/RnrRoutes");
 const attendanceRequestRoutes = require("./routes/attendanceRequestRoutes");
 const propertyExpenseRoutes = require("./routes/propertyExpenseRoutes");
+const HeroSectionRoutes = require("./routes/websiteSettingsRoutes.js")
 
 const ApiError = require("./utils/ApiError");
 const cors = require("cors");
@@ -134,6 +135,7 @@ app.use("/api", propertySequenceRoutes);
 app.use("/api", RnrRoutes);
 app.use("/api/attendance-requests", attendanceRequestRoutes);
 app.use("/api/property-expenses", propertyExpenseRoutes);
+app.use("/api/website-settings", HeroSectionRoutes);
 app.use((req, res, next) => {
   next(new ApiError(404, `Route Not Found - ${req.originalUrl}`));
 });

@@ -50,9 +50,11 @@ const propertyExpenseSchema = new mongoose.Schema(
       maxlength: 2000,
       default: "",
     },
-    newSetUp: {
-      type: Boolean,
-      default: false,
+  expenseType: {
+      type: String,
+      enum: ["New Set Up", "Owner Expense", "Monthly Expense"],
+      default: "",
+      trim: true,
     },
     workLogs: [
       {

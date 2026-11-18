@@ -202,17 +202,17 @@ const buildFilters = (query) => {
 };
 
 const validateBody = (body) => {
-  const {
-    propertyId,
-    expenseDate,
-    category,
-    amount,
-    paymentMode,
-    comment,
-    description,
-    receiptUrl,
-    newSetUp,
-  } = body;
+const {
+  propertyId,
+  expenseDate,
+  category,
+  amount,
+  paymentMode,
+  comment,
+  description,
+  receiptUrl,
+  expenseType,
+} = body;
 
   if (!propertyId || !isValidId(propertyId)) {
     return "Please select a valid property";
@@ -311,59 +311,7 @@ exports.getExpenses = async (req, res) => {
   }
 };
 
-// POST /api/property-expenses
-// exports.createExpense = async (req, res) => {
-//   try {
-//     console.log("Authenticated user:", req.user);
-//     console.log("User ID (_id):", req.user?._id);
-//     console.log("User ID (id):", req.user?.id);
-//     const validationError = validateBody(req.body);
 
-//     if (validationError) {
-//       return res.status(400).json({
-//         success: false,
-//         message: validationError,
-//       });
-//     }
-
-//     const property = await getProperty(req.body.propertyId);
-
-//     if (!property) {
-//       return res.status(404).json({
-//         success: false,
-//         message: "Property not found",
-//       });
-//     }
-
-//  const expense = await PropertyExpense.create({
-//   propertyId: property._id,
-//   propertyCodeSnapshot: property.propertyCode || "",
-//   expenseDate: new Date(`${req.body.expenseDate}T00:00:00.000Z`),
-//   category: req.body.category,
-//   amount: Number(req.body.amount),
-//   paymentMode: req.body.paymentMode || "Bank",
-//   description: req.body.description || "",
-//   receiptUrl: req.body.receiptUrl || "",
-
-//   // Store the logged-in user's name
-//   createdBy: req.user?.name || null,
-
-//   // Keep the user ID for updatedBy
-//   updatedBy: req.user?._id || req.user?.id || null,
-// });
-
-//     return res.status(201).json({
-//       success: true,
-//       message: "Expense added successfully",
-//       data: expense,
-//     });
-//   } catch (error) {
-//     return res.status(error.statusCode || 500).json({
-//       success: false,
-//       message: error.message || "Failed to add expense",
-//     });
-//   }
-// };
 
 exports.createExpense = async (req, res) => {
   try {
@@ -400,7 +348,7 @@ exports.createExpense = async (req, res) => {
       paymentMode: req.body.paymentMode || "Bank",
       description: req.body.description || "",
       comment: req.body.comment || "",
-      newSetUp: req.body.newSetUp ?? false,
+      expenseType: req.body.expenseType,
       createdBy: user,
       updatedBy: req.user?._id || req.user?.id || null,
 
@@ -425,69 +373,6 @@ exports.createExpense = async (req, res) => {
   }
 };
 
-// PUT /api/property-expenses/:id
-// exports.updateExpense = async (req, res) => {
-//   try {
-//     if (!isValidId(req.params.id)) {
-//       return res.status(400).json({
-//         success: false,
-//         message: "Invalid expense ID",
-//       });
-//     }
-
-//     const validationError = validateBody(req.body);
-
-//     if (validationError) {
-//       return res.status(400).json({
-//         success: false,
-//         message: validationError,
-//       });
-//     }
-
-//     const property = await getProperty(req.body.propertyId);
-
-//     if (!property) {
-//       return res.status(404).json({
-//         success: false,
-//         message: "Property not found",
-//       });
-//     }
-
-//     const expense = await PropertyExpense.findByIdAndUpdate(
-//       req.params.id,
-//       {
-//         propertyId: property._id,
-//         propertyCodeSnapshot: property.propertyCode || "",
-//         expenseDate: new Date(`${req.body.expenseDate}T00:00:00.000Z`),
-//         category: req.body.category,
-//         amount: Number(req.body.amount),
-//         paymentMode: req.body.paymentMode || "Bank",
-//         description: req.body.description || "",
-//         receiptUrl: req.body.receiptUrl || "",
-//         updatedBy: req.user?._id || null,
-//       },
-//       { new: true, runValidators: true },
-//     );
-
-//     if (!expense) {
-//       return res.status(404).json({
-//         success: false,
-//         message: "Expense not found",
-//       });
-//     }
-
-//     return res.json({
-//       success: true,
-//       message: "Expense updated successfully",
-//       data: expense,
-//     });
-//   } catch (error) {
-//     return res.status(error.statusCode || 500).json({
-//       success: false,
-//       message: error.message || "Failed to update expense",
-//     });
-//   }
-// };
 
 exports.updateExpense = async (req, res) => {
   try {
@@ -540,7 +425,7 @@ exports.updateExpense = async (req, res) => {
       paymentMode: req.body.paymentMode || "Bank",
       description: req.body.description || "",
       comment: req.body.comment || "",
-      newSetUp: req.body.newSetUp ?? false,
+      expenseType: req.body.expenseType,
     };
 
     // Generate worklogs for changed fields only.

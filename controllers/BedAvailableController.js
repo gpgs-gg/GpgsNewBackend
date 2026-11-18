@@ -742,6 +742,28 @@ exports.getAllAvailableBeds = async (req, res) => {
     });
 
 // ================= STEP 6: CUSTOM SORTING =================
+    // ================= NUMERIC BED SORTING =================
+
+    // Property filter applied: Bed No ASC, Room No ASC
+    if (propertyId) {
+      data.sort((a, b) => {
+        const bedA = Number(a.bedNo);
+        const bedB = Number(b.bedNo);
+
+        if (bedA !== bedB) {
+          return bedA - bedB;
+        }
+
+        const roomA = Number(a.roomNo);
+        const roomB = Number(b.roomNo);
+
+        if (roomA !== roomB) {
+          return roomA - roomB;
+        }
+
+        return String(a._id).localeCompare(String(b._id));
+      });
+    }
 
     // Alphanumeric property code sorting (A-Z, numeric-aware)
     if (sortByAlphanumeric === "true") {

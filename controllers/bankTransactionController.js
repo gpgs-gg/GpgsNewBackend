@@ -1362,6 +1362,7 @@ exports.getAllTransactions = async (req, res) => {
         // Status & Expense
         status: 1,
         expenseCategory: 1,
+        expenseType: 1,
         expenseCode: 1,
 
         // Work Logs
@@ -1711,7 +1712,9 @@ exports.updateTransaction = async (req, res) => {
     if (req.body.expenseCategory !== undefined) {
       updates.expenseCategory = req.body.expenseCategory;
     }
-
+if (req.body.expenseType !== undefined) {
+      updates.expenseType = String(req.body.expenseType).trim();
+    }
     if (req.body.status !== undefined) {
       updates.status = req.body.status;
     }
@@ -1731,6 +1734,7 @@ exports.updateTransaction = async (req, res) => {
     const fields = [
       { key: "status", label: "Status" },
       { key: "expenseCategory", label: "Expense Category" },
+      { key: "expenseType", label: "Expense Type" },
       { key: "isMapped", label: "Mapped" },
     ];
 

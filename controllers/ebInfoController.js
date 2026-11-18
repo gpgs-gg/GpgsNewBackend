@@ -182,9 +182,7 @@ const getElectricityBillData = asyncHandler(async (req, res) => {
         propertyQuery.propertyCode = propertyCode.trim();
     }
 
-    if (EBCycle?.trim()) {
-        propertyQuery["utility.ebStartCycle"] = EBCycle.trim();
-    }
+
 
 let properties = await Property.find(propertyQuery)
     .sort({ createdAt: -1 })
@@ -243,7 +241,9 @@ properties.sort((a, b) => {
         billingMonth,
         propertyId: { $in: propertyIds },
     };
-
+if (EBCycle?.trim()) {
+  monthlyQuery.EBCycle = EBCycle.trim();
+}
     if (status?.trim()) {
         monthlyQuery.status = status.trim();
     }
@@ -272,7 +272,7 @@ properties.sort((a, b) => {
     let filteredProperties = properties;
 
     const hasMonthlyFilters =
-        status || ebPaidStatus || assignee || reviewer;
+        status || ebPaidStatus|| EBCycle || assignee || reviewer;
 
     if (hasMonthlyFilters) {
         filteredProperties = properties.filter((property) =>

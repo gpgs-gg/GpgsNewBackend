@@ -206,6 +206,21 @@ exports.createClientFromBooking = async (req, res) => {
           },
         },
       );
+      // PAYMENT VERIFICATION WORKLOG
+      if (booking.loginEnabled === false) {
+        booking.workLogs = booking.workLogs || [];
+
+        booking.workLogs.push(
+          createWorkLog({
+            message: "Payment verification Changed From Pending to Verified",
+            createdBy:
+              req.body.updatedByName ||
+              req.body.createdByName ||
+              req.user?.name ||
+              "system",
+          }),
+        );
+      }
       booking.loginEnabled = true;
       booking.isCancelled = false;
       booking.cancelledDate = null;
@@ -355,6 +370,22 @@ exports.createClientFromBooking = async (req, res) => {
     // booking.status = "Booked";
     // booking.isCancelled = false;
     // booking.cancelledDate = null;
+
+    // PAYMENT VERIFICATION WORKLOG
+      if (booking.loginEnabled === false) {
+        booking.workLogs = booking.workLogs || [];
+
+        booking.workLogs.push(
+          createWorkLog({
+            message: "Payment verification Changed From Pending to Verified",
+            createdBy:
+              req.body.updatedByName ||
+              req.body.createdByName ||
+              req.user?.name ||
+              "system",
+          }),
+        );
+      }
 
     await booking.save();
 
@@ -1159,18 +1190,54 @@ exports.getClients = async (req, res) => {
     const totalRecords = await Client.countDocuments(query);
 
     // ================= Data =================
+// ==========================================
+// DATA FETCH + PROPERTY-WISE BED NO SORTING
+// ==========================================
 
-    const clients = await Client.find(query)
-      .populate("propertyId", "propertyCode propertyName propertyLocation")
-      .populate(
-        "bedId",
-        "bedCode roomNo bedNo monthlyRent depositAmount freeEbAsPerBed acRoom",
-      )
-      .populate("bedHistory.propertyId", "propertyCode propertyName")
-      .populate("bedHistory.bedId", "bedCode roomNo bedNo")
-      .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(limit);
+let clients;
+
+if (req.query.propertyId) {
+  // Fetch ALL matching clients of selected property
+  const allPropertyClients = await Client.find(query)
+    .populate("propertyId", "propertyCode propertyName propertyLocation")
+    .populate(
+      "bedId",
+      "bedCode roomNo bedNo monthlyRent depositAmount freeEbAsPerBed acRoom"
+    )
+    .populate("bedHistory.propertyId", "propertyCode propertyName")
+    .populate("bedHistory.bedId", "bedCode roomNo bedNo")
+    .sort({ createdAt: -1 });
+
+  // Sort complete property data by numeric Bed No
+  allPropertyClients.sort((a, b) => {
+    const bedNoA = Number(a.bedId?.bedNo);
+    const bedNoB = Number(b.bedId?.bedNo);
+
+    return (
+      (Number.isNaN(bedNoA) ? Infinity : bedNoA) -
+      (Number.isNaN(bedNoB) ? Infinity : bedNoB)
+    );
+  });
+
+  // Apply pagination AFTER sorting
+  clients = allPropertyClients.slice(skip, skip + limit);
+
+} else {
+  // Normal pagination and sorting for all other cases
+  clients = await Client.find(query)
+    .populate("propertyId", "propertyCode propertyName propertyLocation")
+    .populate(
+      "bedId",
+      "bedCode roomNo bedNo monthlyRent depositAmount freeEbAsPerBed acRoom"
+    )
+    .populate("bedHistory.propertyId", "propertyCode propertyName")
+    .populate("bedHistory.bedId", "bedCode roomNo bedNo")
+    .sort({ createdAt: -1 })
+    .skip(skip)
+    .limit(limit);
+}
+    // Pagination AFTER sorting
+    const paginatedClients = clients.slice(skip, skip + limit);
 
     // ==========================================
     // GET VACATION HISTORY FOR CURRENT CLIENTS
@@ -2047,12 +2114,16 @@ exports.getNoticeClients = async (req, res) => {
     const sortQuery =
       req.query.hasCvd === "true"
         ? {
+          propertyCode: 1,
+        bedNoSort: 1,
             clientVacatingDate: 1,
             noticeLastDate: 1,
             fullName: 1,
             _id: 1,
           }
         : {
+          propertyCode: 1,
+        bedNoSort: 1,
             noticeLastDate: 1,
             fullName: 1,
             _id: 1,
@@ -2331,6 +2402,15 @@ exports.getNoticeClients = async (req, res) => {
           bedId: "$bed._id",
           roomNo: "$bed.roomNo",
           bedNo: "$bed.bedNo",
+          // Numeric Bed Sorting
+          bedNoSort: {
+            $convert: {
+              input: "$bed.bedNo",
+              to: "double",
+              onError: 999999999,
+              onNull: 999999999,
+            },
+          },
 
           // ========================================
           // FNF
